@@ -2,9 +2,13 @@
 ## MASTER SPECIFICATION — BUILD ORDER
 ### v2.3 HARDENED • IMPLEMENTATION AUTHORITY • FULL BUILD CONTRACT
 
-**Revision:** 11 August 2026 
+**Revision:** 12 August 2026 (+ Implementation Baseline Addendum) 
 **Status:** Authoritative implementation specification 
 **Purpose:** Menjadi satu dokumen kerja yang cukup rinci untuk membangun SAKALA V2 dari proyek kosong sampai production release, termasuk UI/UX, design system, data, workflow, state, jadwal, validasi, testing, dan release.
+
+**Struktur dokumen:**
+- **Part I — Bagian 0–65:** spesifikasi teknis & UX detail (baseline asli v2.3 HARDENED).
+- **Part II — Bagian 66–129:** *Master Implementation Baseline (Final Recap)* — status proyek, aturan absolut terkonsolidasi, project root, engineering safety net (Pack/Diagnostic Toolchain, Error Handoff, Rollback), Phase Control, dan Phase 00 scope. Lihat Bagian 129 untuk hubungan Part I ↔ Part II.
 
 ---
 
@@ -2843,3 +2847,1549 @@ v2.3 memusatkan spesifikasi pada operasional akademik, pengelolaan data, penjadw
 **Target akhir:**
 
 > Developer dapat membaca dokumen ini dari atas ke bawah dan mengetahui apa yang harus dibangun, urutan pembangunannya, aturan perilakunya, state yang harus ditangani, cara validasinya, dan kondisi yang harus dipenuhi sebelum release.
+
+---
+
+# PART II — IMPLEMENTATION BASELINE ADDENDUM (v2.3 FINAL RECAP)
+
+> Bagian 66–92 di bawah ini adalah **SAKALA V2.3 — MASTER IMPLEMENTATION BASELINE (FINAL RECAP)**, digabungkan penuh ke dalam dokumen ini sebagai baseline resmi tambahan. Jika ada konflik redaksional antara Part I (Bagian 0–65) dan Part II, **Part I tetap authoritative untuk detail teknis**; Part II adalah lapisan **status, urutan eksekusi, dan safety-net engineering** yang mengikat cara dokumen ini dieksekusi.
+
+---
+
+# 66. BASELINE STATUS
+
+```text
+Specification: SAKALA V2.3
+Product: SAKALA V2 ENTERPRISE
+Implementation mode: Incremental / Pack-based
+Target: Zero-to-Production
+Current phase: PRE-PHASE 00 / READY
+```
+
+Belum mulai coding aplikasi pada saat baseline ini dikunci.
+
+Sumber utama tetap:
+
+```text
+SAKALA-V2-Master-Specification-BUILD-ORDER-v2.3.md
+```
+
+Dokumen tersebut adalah **AUTHORITATIVE IMPLEMENTATION SPECIFICATION / FULL BUILD CONTRACT**. Jika terjadi konflik, dokumen menang.
+
+---
+
+# 67. FILOSOFI UTAMA (RECAP)
+
+SAKALA harus terasa:
+
+```text
+Premium
+Modern
+Calm
+Fast
+Intelligent
+Precise
+Spatially coherent
+Operationally clear
+Desktop-native
+Quiet rather than decorative
+```
+
+SAKALA bukan:
+
+```text
+generic SaaS dashboard
+wall of cards
+wall of charts
+chatbot yang menyamar sebagai aplikasi
+mobile UI yang diperbesar
+UI futuristik berlebihan
+layar penuh dengan semua action sekaligus
+```
+
+Pipeline UX:
+
+```text
+DATA
+ ↓
+HIERARCHY
+ ↓
+SPATIAL CONTEXT
+ ↓
+VISUAL SIGNAL
+ ↓
+INTERACTION
+ ↓
+INSIGHT
+ ↓
+ACTION
+```
+
+Setiap workspace harus menjawab:
+
+```text
+1. Saya berada di mana?
+2. Data apa yang sedang dilihat?
+3. Context akademiknya apa?
+4. Status data bagaimana?
+5. Apa yang salah?
+6. Apa tindakan berikutnya?
+7. Apa dampak tindakan tersebut?
+```
+
+---
+
+# 68. ATURAN ABSOLUT (RECAP — MENGIKAT PENUH)
+
+Ini adalah aturan yang tidak boleh dilanggar, dalam bentuk konsolidasi:
+
+> **DESIGN = IMPLEMENTATION**
+
+> **ACTIVE ACADEMIC CONTEXT adalah satu-satunya active context.**
+
+> **SCHOOL PROFILE menyimpan DEFAULT context, bukan active context.**
+
+> **JADWAL CERDAS menghasilkan CANDIDATE.**
+
+> **JADWAL adalah OPERATIONAL SCHEDULE.**
+
+> **CANDIDATE tidak boleh mengubah COMMITTED SCHEDULE sebelum explicit commit.**
+
+> **BLOCKING CONFLICT wajib mencegah commit.**
+
+> **OPTIMIZATION harus explicit dan reviewable.**
+
+> **NO INFINITE LOADING.**
+
+> **NO SILENT MUTATION.**
+
+> **IMPORT/EXPORT tetap contextual.**
+
+> **Critical mutation harus traceable.**
+
+> **Responsive = transformation, bukan sekadar shrinking.**
+
+> **Correctness lebih penting daripada visual polish.**
+
+---
+
+# 69. BUILD ORDER (RECAP KONFIRMASI — TIDAK DIUBAH)
+
+```text
+01 Governance & Source of Truth
+02 Product / IA Contract
+03 Technical Foundation
+04 Design Tokens
+05 Application Shell
+06 Foundation Components
+07 Surface / Data / Form Systems
+08 State / Feedback / Recovery System
+09 Academic Context + Admin Profile
+10 Core Data
+11 Academic Core
+12 Schedule Model + Slot Template
+13 Schedule Domain & Validation Engine
+14 Jadwal Cerdas
+15 Jadwal Operational Workspace
+16 Dashboard
+17 Analytics
+18 History
+19 Notifications
+20 AI Assistant
+21 Import / Export / Template
+22 Authentication / Authorization / Sync
+23 Responsive
+24 Accessibility
+25 Performance
+26 Security
+27 Automated Testing
+28 Visual Regression
+29 Browser Precision QA
+30 Build Gate
+31 Release Candidate
+32 Production Hardening
+33 Production Release
+```
+
+**Dashboard tidak boleh dibangun dulu.**
+
+---
+
+# 70. IMPLEMENTATION MATRIX CONTRACT
+
+Sebelum coding, seluruh specification dipetakan ke tabel berikut (per requirement):
+
+| Kolom | Keterangan |
+|---|---|
+| ID | Identifier unik requirement |
+| Specification | Rujukan bagian di dokumen ini |
+| Build Phase | Nomor fase di Build Order (Bagian 69) |
+| Route | Route/URL terkait |
+| UI | Komponen visual terkait |
+| Component | Komponen kode terkait |
+| State | State layer terkait (Bagian 7) |
+| Database | Tabel/kolom terkait |
+| Domain | Entity/rule domain terkait |
+| Application | Use case terkait |
+| Engine | Engine terkait (conflict, jadwal cerdas, dst) |
+| AI | Keterlibatan AI (jika ada) |
+| Permission | Permission yang dibutuhkan |
+| Test | Test yang mencakup requirement ini |
+| Status | Belum / Sedang / Selesai / Diverifikasi |
+
+Tidak boleh ada requirement yang:
+
+```text
+terlupakan
+dianggap implicit
+diam-diam dihilangkan
+diganti dengan generic implementation
+```
+
+kecuali memang dinyatakan optional oleh specification.
+
+---
+
+# 71. PROJECT ROOT
+
+Prioritas:
+
+```text
+D:\SAKALA-V2
+```
+
+Fallback:
+
+```text
+C:\SAKALA-V2
+```
+
+Tidak menyebarkan project ke Desktop/Downloads/Documents.
+
+---
+
+# 72. REPOSITORY STRUCTURE (RECAP BASELINE)
+
+```text
+SAKALA-V2/
+│
+├── apps/
+│   ├── desktop/
+│   └── web/
+│
+├── packages/
+│   ├── ui/
+│   ├── design-tokens/
+│   ├── domain/
+│   ├── application/
+│   ├── data-access/
+│   ├── validation/
+│   └── config/
+│
+├── database/
+├── migrations/
+│
+├── docs/
+│   ├── specification/
+│   ├── architecture/
+│   ├── workflows/
+│   └── qa/
+│
+├── assets/
+│   ├── branding/
+│   ├── splash/
+│   └── icons/
+│
+├── tests/
+│   ├── unit/
+│   ├── component/
+│   ├── integration/
+│   ├── e2e/
+│   └── visual/
+│
+├── scripts/
+│
+└── reports/
+```
+
+Struktur boleh bertambah secara terkontrol, tetapi tidak boleh disederhanakan sembarangan.
+
+---
+
+# 73. ARCHITECTURE (RECAP)
+
+Layer resmi:
+
+```text
+Presentation
+ ↓
+Application
+ ↓
+Domain
+ ↓
+Data Access
+ ↓
+Database / External Service
+```
+
+**Presentation** menangani: routes, layouts, components, visual states, interaction, accessibility.
+
+**Application** menangani: use cases, commands, queries, orchestration, workflows, permission checks, transaction boundaries.
+
+**Domain** menangani: entities, value objects, invariants, schedule rules, conflict rules, state transitions.
+
+**Data Access** menangani: repositories, queries, persistence, synchronization, cache.
+
+Business logic tidak diletakkan di React component.
+
+---
+
+# 74. SOFTWARE BASELINE
+
+Minimum:
+
+```text
+Visual Studio Code
+Node.js LTS
+Git
+GitHub
+Supabase
+Vercel
+Chrome / modern browser
+```
+
+Sudah tersedia (akun eksisting dipakai, bukan bikin baru):
+
+```text
+GitHub
+Supabase
+Vercel
+```
+
+Tidak menambahkan secara default:
+
+```text
+Docker
+Kubernetes
+Redis
+separate PostgreSQL
+cloud provider tambahan
+```
+
+kecuali benar-benar diperlukan specification/technical requirement.
+
+---
+
+# 75. ENVIRONMENT (RECAP)
+
+Dipisahkan:
+
+```text
+development
+test
+staging
+production
+```
+
+Tidak menggunakan production database untuk testing. Configuration tidak boleh di-hardcode.
+
+---
+
+# 76. BRANDING & SPLASH (RECAP)
+
+Master Logo PNG transparent adalah **single source of truth**.
+
+Tidak boleh: redraw, recolor, distort, crop, replace.
+
+Splash state machine:
+
+```text
+BOOT
+ ↓
+ASSET READY
+ ↓
+SESSION CHECK
+ ↓
+PROFILE READY
+ ↓
+ACADEMIC CONTEXT READY
+ ↓
+CORE DATA READY
+ ↓
+SHELL READY
+ ↓
+READY
+```
+
+Failure path:
+
+```text
+FAILURE
+ ↓
+EXPLAIN
+ ↓
+RETRY
+ ↓
+SAFE EXIT
+```
+
+Tidak ada infinite spinner. Reduced motion harus menonaktifkan animasi glow/wire/node/logo/wordmark/exit.
+
+---
+
+# 77. ACTIVE ACADEMIC CONTEXT (RECAP)
+
+Salah satu fondasi terpenting. Semua academic query/mutation menggunakan `academicContextId` — **tidak** menggunakan text label untuk menentukan context.
+
+Switch context:
+
+```text
+Current Context
+ ↓
+Check Unsaved Changes
+ ↓
+Check Pending Operation
+ ↓
+Confirm if needed
+ ↓
+Load New Context
+ ↓
+Clear Invalid Workspace State
+ ↓
+Refresh Dependent Data
+```
+
+Juga wajib: cancel old query, prevent stale response, reset invalid filters, preserve valid filters, local loading, local error.
+
+---
+
+# 78. SCHOOL PROFILE (RECAP)
+
+School Profile menyimpan **DEFAULT context** — tidak otomatis menjadi active context.
+
+Fields: Nama, Jabatan, Nama Sekolah, Tahun Pelajaran, Semester.
+
+Save flow:
+
+```text
+Validate
+ ↓
+Persist
+ ↓
+Update Cache
+ ↓
+Success
+```
+
+---
+
+# 79. DESIGN SYSTEM (RECAP)
+
+Token groups: Color, Typography, Spacing, Radius, Border, Shadow, Elevation, Motion, Breakpoint, Density, Icon, Z-index, Focus, Opacity.
+
+Density: `Comfortable`, `Compact`. Compact wajib tersedia untuk: schedule, table, dense admin workspace.
+
+Form control height: `36px Compact`, `44px Default`, `48px Large`.
+
+---
+
+# 80. APPLICATION SHELL (RECAP)
+
+```text
+HEADER / CONTEXT BAR
++
+SIDEBAR
++
+WORKSPACE
+```
+
+Header:
+
+```text
+LEFT   → Brand + navigation
+CENTER → Global Search / Command Palette
+RIGHT  → Connection + notification + profile
+```
+
+Sidebar: `Expanded 220–248px`, `Collapsed 64–72px`.
+
+Command Palette: `Cmd/Ctrl + K` — mencakup route search, entity search, actions, recent actions, navigation.
+
+---
+
+# 81. FOUNDATION COMPONENTS (RECAP — DAFTAR LENGKAP WAJIB)
+
+Wajib dibangun reusable:
+
+```text
+Button
+Input
+Select
+Search
+Checkbox
+Radio
+Switch
+Badge
+Tooltip
+Popover
+Context Menu
+Dialog
+Sheet
+Toast
+Skeleton
+Spinner
+Progress
+Tabs
+Segmented Control
+Date Picker
+Calendar
+Data Table
+Pagination
+Empty State
+Error State
+```
+
+Setiap component memiliki contract: anatomy, props, variants, sizes, states, keyboard, focus, loading, disabled, error, responsive, accessibility, motion.
+
+> **Catatan status implementasi (Fase 1 SAKALA V2 saat ini):** baru Button, Input, Modal (≈Dialog), Card, Badge, Empty State, Error State, Skeleton yang dibangun. Select, Search (sebagai komponen reusable terpisah), Checkbox, Radio, Switch, Tooltip, Popover, Context Menu, Sheet, Toast, Spinner, Progress, Tabs, Segmented Control, Date Picker, Calendar, Data Table (generik/reusable), Pagination **belum dibangun** — menyusul di Step 06 lanjutan sebelum masuk ke core yang membutuhkannya (mis. Data Table generik sebelum Jadwal Operational Workspace, Date Picker/Calendar sebelum Akademik Core).
+
+---
+
+# 82. CORE DATA (RECAP)
+
+Urutan:
+
+```text
+Guru
+ ↓
+Mata Pelajaran
+ ↓
+Kelas
+ ↓
+Ruangan
+```
+
+Semua harus context-aware dan memiliki lifecycle aktif/inaktif. Inactive entity tidak boleh digunakan untuk committed schedule baru. Historical data tetap readable.
+
+---
+
+# 83. ACADEMIC CORE (RECAP)
+
+Temporal hierarchy:
+
+```text
+Tahun Ajaran
+ ↓
+Semester
+ ↓
+Periode Akademik
+ ↓
+Minggu
+ ↓
+Hari
+ ↓
+Jam Pelajaran
+ ↓
+Slot Jadwal
+```
+
+Break bukan teaching period. School days configurable.
+
+---
+
+# 84. SCHEDULE MODEL (RECAP)
+
+Schedule Model = **konfigurasi**, bukan timetable. Memiliki: model name, start time, standard duration, maximum periods/day, active days, holidays, academic context, rombel usage, status.
+
+Room mode: `Required`, `Optional`, `Not Used` — tidak boleh diinfer otomatis.
+
+---
+
+# 85. SCHEDULE DOMAIN (RECAP)
+
+Minimum schedule assignment:
+
+```text
+scheduleId
+academicContextId
+classId
+subjectId
+teacherId
+roomId
+day
+periodStart
+periodEnd
+activityType
+status
+source
+versionId
+createdAt
+updatedAt
+```
+
+Source: `manual`, `generated`, `imported`, `ai_assisted`.
+
+Status: `draft`, `candidate`, `committed`, `archived`, `cancelled`.
+
+Committed schedule berada di schedule version.
+
+---
+
+# 86. CONFLICT ENGINE (RECAP)
+
+Minimum conflict type:
+
+```text
+TEACHER_OVERLAP
+CLASS_OVERLAP
+ROOM_OVERLAP
+FIXED_SLOT
+INVALID_PERIOD
+INACTIVE_ENTITY
+JP_MISMATCH
+MISSING_REQUIRED_FIELD
+CONTEXT_MISMATCH
+```
+
+Severity: `Error`, `Warning`, `Info`. Error blocking → commit harus dicegah.
+
+Conflict muncul di: slot, row, summary, validation panel. Click conflict → affected entity/slot.
+
+---
+
+# 87. JADWAL CERDAS (RECAP)
+
+Pipeline:
+
+```text
+Load Context
+ ↓
+Select Scope
+ ↓
+Load Constraints
+ ↓
+Normalize
+ ↓
+Generate Candidate
+ ↓
+Validate
+ ↓
+Conflict Detection
+ ↓
+Candidate Review
+ ↓
+Optional Optimization
+ ↓
+Final Validation
+ ↓
+Commit
+ ↓
+Create Version
+ ↓
+Audit
+```
+
+Candidate tidak boleh overwrite committed schedule.
+
+Optimization flow:
+
+```text
+Current Candidate
+ ↓
+Expected Changes
+ ↓
+Affected Classes
+ ↓
+Affected Teachers
+ ↓
+Affected Rooms
+ ↓
+Known Conflicts
+ ↓
+User chooses: KEEP CURRENT atau APPLY OPTIMIZATION
+```
+
+---
+
+# 88. OPERATIONAL JADWAL (RECAP)
+
+Views: Per Kelas, Per Guru, Per Ruangan, Harian, Mingguan.
+
+Weekly desktop columns: `Monday`–`Saturday`.
+
+Cell menampilkan: Subject, Teacher, Room, Activity, Status.
+
+States: `Empty`, `Occupied`, `Fixed Activity`, `Conflict`, `Incomplete`, `Complete`, `Loading`, `Error`.
+
+---
+
+# 89. TARGET JP (RECAP)
+
+Harus menampilkan per subject: target, scheduled, difference, completion %, state, action.
+
+State: `Belum Mulai`, `Belum Lengkap`, `Lengkap`, `Melebihi Target`.
+
+Click → affected schedule.
+
+---
+
+# 90. DASHBOARD (RECAP)
+
+Baru dibuat setelah fondasi data/domain stabil.
+
+Hierarchy:
+
+```text
+Academic Context
+ ↓
+Greeting / Workspace
+ ↓
+Key Metrics
+ ↓
+Primary Schedule Insight
+ ↓
+Workload
+ ↓
+Heatmap
+ ↓
+Upcoming Agenda
+ ↓
+Recent Activity
+```
+
+Bukan editing surface utama. Harus menangani: first use, empty, incomplete, normal, conflict, loading, offline, error.
+
+---
+
+# 91. ANALYTICS / HISTORY / NOTIFICATIONS (RECAP)
+
+Analytics menjawab: *What happened? Why? What should I do?*
+
+History merekam: who, what, when, context, entity, before, after, source, reason.
+
+Notification kategori: `System`, `Schedule`, `Validation`, `Import`, `Sync`.
+
+Priority: `Info`, `Success`, `Warning`, `Critical`.
+
+---
+
+# 92. AI GOVERNANCE (RECAP)
+
+AI adalah **assistant**, bukan autonomous mutation engine.
+
+Allowed: explain, summarize, recommend, detect pattern, assist scheduling.
+
+Critical flow:
+
+```text
+AI Suggestion
+ ↓
+Preview
+ ↓
+Validation
+ ↓
+User Confirmation
+ ↓
+Commit
+```
+
+Tidak boleh: AI → silent database mutation.
+
+---
+
+# 93. IMPORT / EXPORT (RECAP)
+
+Import:
+
+```text
+Select Core
+ ↓
+Template
+ ↓
+Upload
+ ↓
+Parse
+ ↓
+Map
+ ↓
+Preview
+ ↓
+Validate
+ ↓
+Errors
+ ↓
+Confirm
+ ↓
+Commit
+ ↓
+Summary
+```
+
+Export:
+
+```text
+Filter
+ ↓
+Columns
+ ↓
+Format
+ ↓
+Generate
+ ↓
+Download
+```
+
+Tetap context-aware.
+
+---
+
+# 94. AUTH / SYNC (RECAP)
+
+Minimum: login, session, logout, permissions, authorization, expiry, retry, connection state.
+
+Action permissions: `view`, `create`, `edit`, `delete`, `import`, `export`, `generate`, `optimize`, `commit`.
+
+Connection state: `Online`, `Connecting`, `Offline`, `Syncing`, `Sync Error`.
+
+Tidak boleh mengklaim *synced* jika sebenarnya hanya *queued*.
+
+---
+
+# 95. QUALITY (RECAP)
+
+Responsive priority: `Desktop Chrome` → `Laptop` → `Tablet` → `Mobile`. Breakpoints specification tetap digunakan (lihat Bagian 43).
+
+Accessibility: keyboard, focus, semantic, ARIA, contrast, screen reader, touch target, reduced motion, no color-only meaning.
+
+Performance: stable keys, memoized cells, selective updates, virtualization bila perlu.
+
+Security: authentication, authorization, validation, sanitized errors, data access control, audit critical mutation.
+
+---
+
+# 96. TESTING (RECAP)
+
+Urutan:
+
+```text
+Unit
+ ↓
+Component
+ ↓
+Integration
+ ↓
+Workflow
+ ↓
+E2E
+ ↓
+Visual
+```
+
+Critical workflow semuanya harus tercakup.
+
+---
+
+# 97. RACE CONDITION PROTECTION (RECAP)
+
+Wajib melindungi stale request:
+
+```text
+Context A
+ ↓
+Switch B
+ ↓
+A returns
+```
+
+Response A tidak boleh menimpa B. Digunakan sesuai kebutuhan: `requestId`, `contextId`, abort/cancel, version check.
+
+---
+
+# 98. DOUBLE SUBMISSION PROTECTION (RECAP)
+
+Mutation lifecycle:
+
+```text
+Idle
+ ↓
+Submitting
+ ↓
+Success / Error
+```
+
+Tidak boleh duplicate request.
+
+---
+
+# 99. UNSAVED CHANGES PROTECTION (RECAP)
+
+Jika tidak ada perubahan → leave langsung. Jika ada perubahan → confirm.
+
+Berlaku untuk: route change, browser close, context switch, entity switch.
+
+---
+
+# 100. OPTIMISTIC UI POLICY (RECAP)
+
+Hanya untuk low-risk deterministic rollback.
+
+Tidak boleh optimistic untuk: schedule commit, bulk import, destructive delete, context switch, optimization.
+
+---
+
+# 101. DATA INTEGRITY (RECAP)
+
+Setiap mutation memiliki: Precondition, Mutation, Postcondition, Side Effects, Audit Event.
+
+Schedule commit harus:
+
+```text
+Candidate valid
+ ↓
+Persist schedule + version
+ ↓
+Readable committed schedule
+ ↓
+Recalculate metrics/conflicts
+ ↓
+History
+ ↓
+Notification jika diperlukan
+```
+
+---
+
+# 102. VERSIONING (RECAP)
+
+Schedule version mendukung: Create, View, Compare, Activate, Archive, Restore.
+
+History tidak boleh ditimpa.
+
+---
+
+# 103. ZIP IMPLEMENTATION SYSTEM *(baru)*
+
+Setiap milestone dikirim sebagai:
+
+```text
+SAKALA-V2-PACK-XX.zip
+```
+
+Patch ZIP hanya berisi file yang diperlukan (bukan seluruh project). Jika perlu baseline penuh, dikirim sebagai:
+
+```text
+FULL BASELINE
+```
+
+---
+
+# 104. SAKALA BUILD & DIAGNOSTIC TOOLCHAIN *(baru)*
+
+Tujuan: **tidak perlu mengirim seluruh project ketika terjadi error.**
+
+Workflow normal:
+
+```text
+PACK
+ ↓
+PRE-FLIGHT
+ ↓
+APPLY
+ ↓
+DOCTOR
+ ↓
+AUDIT
+ ↓
+BUILD
+ ↓
+TEST
+ ↓
+PASS
+```
+
+Workflow saat error:
+
+```text
+ERROR
+ ↓
+CAPTURE
+ ↓
+CLASSIFY
+ ↓
+ROOT CAUSE
+ ↓
+MINIMAL SOURCE SNAPSHOT
+ ↓
+AI HANDOFF
+ ↓
+FIX PATCH
+ ↓
+BACKUP
+ ↓
+APPLY FIX
+ ↓
+VERIFY
+ ↓
+REGRESSION CHECK
+ ↓
+PASS
+```
+
+---
+
+# 105. SELF-DIAGNOSING PACK *(baru)*
+
+Setiap ZIP bukan hanya source — melainkan paket diagnostik mandiri:
+
+```text
+SAKALA-V2-PACK-XX.zip
+│
+├── PACK-MANIFEST.json
+├── PATCH-NOTES.md
+├── README-PACK.md
+│
+├── source/
+├── database/
+├── scripts/
+├── audit/
+├── fixes/
+├── docs/
+└── reports/
+```
+
+---
+
+# 106. PACK-MANIFEST *(baru)*
+
+Setiap pack membawa informasi berikut di `PACK-MANIFEST.json`, sehingga script tidak perlu menebak apa yang diperlukan:
+
+```text
+packId
+phase
+version
+requiredNode
+packageManager
+dependencies
+devDependencies
+environmentVariables
+migrations
+scripts
+audits
+tests
+build
+rollback
+verification
+```
+
+---
+
+# 107. COMMAND SYSTEM *(baru)*
+
+User tidak perlu menghafal command. Command utama:
+
+```text
+Apply     .\scripts\SAKALA-APPLY.ps1
+Doctor    .\scripts\SAKALA-DOCTOR.ps1
+Audit     .\scripts\SAKALA-AUDIT.ps1
+Fix       .\scripts\SAKALA-FIX.ps1
+Verify    .\scripts\SAKALA-VERIFY.ps1
+Rollback  .\scripts\SAKALA-ROLLBACK.ps1
+```
+
+---
+
+# 108. CONTEXT-AWARE AUDIT *(baru)*
+
+Audit tidak menjalankan semua pemeriksaan setiap saat — audit mengikuti pack yang sedang diterapkan.
+
+Contoh pemetaan:
+
+```text
+Pack 00              → Environment / Git / Node / Workspace / Build
+Pack Design           → Tokens / UI / exports / build
+Pack Schedule Domain  → Entities / invariants / tests
+Pack Conflict         → Teacher / class / room / fixed slot / JP
+Pack Auth             → Auth / permission / RLS / security
+```
+
+Ini menghemat waktu dan limit.
+
+---
+
+# 109. ERROR REPORT *(baru)*
+
+Jika error ditemukan, disimpan di:
+
+```text
+reports/latest/errors/ERROR-001/
+```
+
+Berisi:
+
+```text
+ERROR.md
+STACKTRACE.txt
+COMMAND.txt
+ENVIRONMENT.txt
+SOURCE-SNAPSHOT.txt
+affected-files.txt
+dependency-context.txt
+FIX.md
+```
+
+Hanya source yang relevan yang dikumpulkan.
+
+---
+
+# 110. ERROR ROOT-CAUSE DEDUPLICATION *(baru)*
+
+Jika 47 error berasal dari 1 penyebab:
+
+```text
+47 errors
+ ↓
+Root Cause Analysis
+ ↓
+1 PRIMARY ERROR
+ ↓
+47 affected locations
+```
+
+AI fokus ke akar masalah — ini salah satu mekanisme utama penghematan limit.
+
+---
+
+# 111. SAFE FIX ENGINE *(baru)*
+
+Fix script tidak boleh blind replacement. Sebelum patch:
+
+```text
+Target exists?
+ ↓
+Expected content/version?
+ ↓
+Hash/context match?
+ ↓
+YES → Backup → Patch
+NO  → Abort safely
+```
+
+Tidak boleh merusak source jika baseline sudah berubah.
+
+---
+
+# 112. AUTOMATIC FIX VERIFICATION *(baru)*
+
+Setelah patch:
+
+```text
+Patch
+ ↓
+Formatter
+ ↓
+Typecheck
+ ↓
+Target test
+ ↓
+Related test
+ ↓
+Build
+ ↓
+Audit
+```
+
+Hasil harus membuktikan fix, bukan sekadar diasumsikan.
+
+---
+
+# 113. REGRESSION DETECTION *(baru)*
+
+Contoh laporan:
+
+```text
+Resolved:  ERROR-001
+New:       ERROR-017
+Unchanged: ERROR-004
+```
+
+System tidak akan menyatakan success jika fix menghasilkan regression baru.
+
+---
+
+# 114. BACKUP & ROLLBACK *(baru)*
+
+Sebelum fix:
+
+```text
+Current
+ ↓
+Backup
+ ↓
+Apply
+ ↓
+Verify
+```
+
+Jika gagal: `ROLLBACK`.
+
+---
+
+# 115. AI HANDOFF *(baru)*
+
+Setiap failure menghasilkan `reports/latest/AI-HANDOFF.md`, berisi hanya informasi yang diperlukan:
+
+```text
+phase
+pack
+execution ID
+status
+root cause
+errors
+affected files
+relevant source
+environment
+dependencies
+failed command
+expected result
+actual result
+fix recommendation
+files to modify
+verification commands
+```
+
+Sehingga workflow AI menjadi:
+
+> Baca `reports/latest/AI-HANDOFF.md`, perbaiki error yang dilaporkan, dan jangan membaca seluruh project kecuali diperlukan.
+
+---
+
+# 116. SUCCESS / FAILURE REPORT *(baru)*
+
+Report tidak hanya dibuat saat gagal — setiap execution menghasilkan report.
+
+Contoh PASS:
+
+```text
+Environment ........ PASS
+Dependencies ....... PASS
+TypeScript ......... PASS
+Tests .............. PASS
+Build .............. PASS
+Audit .............. PASS
+
+Errors: 0
+Warnings: 0
+
+STATUS: HEALTHY
+```
+
+Contoh FAIL:
+
+```text
+Environment ........ PASS
+Dependencies ....... PASS
+TypeScript ......... FAIL
+Tests .............. SKIPPED
+Build .............. SKIPPED
+
+Blocking Errors: 1
+
+STATUS: FAILED
+```
+
+---
+
+# 117. EXIT CODE *(baru)*
+
+Toolchain memiliki machine-readable exit code:
+
+```text
+0 = PASS
+1 = WARNING
+2 = BLOCKING ERROR
+3 = ENVIRONMENT ERROR
+4 = PATCH ERROR
+5 = VERIFICATION ERROR
+6 = ROLLBACK
+```
+
+---
+
+# 118. GIT COMMIT STRUCTURE (RECAP)
+
+Git dipakai sejak awal. Commit terstruktur mengikuti fase:
+
+```text
+01-governance
+02-foundation
+03-design-tokens
+04-shell
+05-components
+06-data
+07-academic
+08-schedule-domain
+09-conflict-engine
+10-jadwal-cerdas
+11-jadwal
+12-dashboard
+13-analytics
+14-history
+15-notification
+16-ai
+17-import-export
+18-auth
+19-responsive
+20-accessibility
+21-testing
+22-qa
+23-release
+```
+
+Tidak giant unrelated commit.
+
+---
+
+# 119. SUPABASE (RECAP)
+
+Digunakan sebagai backend database/auth sesuai kebutuhan. Wajib: migrations, PostgreSQL schema, indexes, constraints, relations, RLS, authentication, audit, migration history.
+
+Tidak mengandalkan production schema yang hanya dibuat manual melalui dashboard (semua perubahan skema harus lewat migration file, bukan klik manual tanpa jejak).
+
+---
+
+# 120. VERCEL (RECAP)
+
+Workflow:
+
+```text
+GitHub
+ ↓
+Vercel
+ ↓
+SAKALA
+```
+
+Environment: `Development`, `Preview`, `Production`. Secrets tidak masuk Git.
+
+---
+
+# 121. DEFINITION OF DONE (RECAP)
+
+Feature baru tidak dianggap selesai hanya karena tampil. Harus menangani sesuai kebutuhan: UI, Interaction, State, Data, Validation, Error, Loading, Empty, Permission, Responsive, Accessibility, Testing, Audit.
+
+---
+
+# 122. PHASE CONTROL *(baru)*
+
+Setelah setiap phase: **STOP**, lalu terbitkan **PHASE REPORT** berisi:
+
+```text
+Completed
+Files Created
+Files Modified
+Database Changes
+Tests
+Visual QA
+Specification Requirements Covered
+Remaining Requirements
+Known Issues
+ZIP
+Next Phase
+```
+
+Kemudian menunggu instruksi eksplisit: `CONTINUE PHASE XX`.
+
+---
+
+# 123. PHASE 00 — SCOPE *(baru)*
+
+Phase 00 hanya mencakup:
+
+```text
+Local project folder
+ ↓
+Repository
+ ↓
+Git
+ ↓
+GitHub
+ ↓
+Workspace
+ ↓
+TypeScript
+ ↓
+Environment
+ ↓
+Architecture directories
+ ↓
+Docs
+ ↓
+Scripts
+ ↓
+Tests
+ ↓
+README
+ ↓
+Build verification
+ ↓
+Diagnostic Toolchain foundation
+```
+
+Tidak membangun: ❌ Dashboard, ❌ Jadwal, ❌ Jadwal Cerdas, ❌ AI, ❌ Full database, ❌ Advanced UI.
+
+Target: **clean, reproducible, buildable SAKALA foundation.**
+
+---
+
+# 124. PHASE 00 — FOUNDATION CAPABILITIES *(baru)*
+
+Phase 00 bukan hanya membuat folder project, tetapi menghasilkan kapabilitas:
+
+```text
+SAKALA-V2/
+│
+├── architecture
+├── workspace
+├── TypeScript
+├── environment
+├── Git
+├── docs
+├── tests
+├── scripts
+├── reports
+└── diagnostic toolchain
+```
+
+Sehingga mulai Pack 00, sudah tersedia kemampuan: `APPLY`, `AUDIT`, `DOCTOR`, `REPORT`, `FIX`, `VERIFY`, `ROLLBACK`.
+
+---
+
+# 125. RELEASE GATES (RECAP)
+
+```text
+Gate A — Foundation
+Gate B — Data
+Gate C — Schedule
+Gate D — Experience
+Gate E — Quality
+Gate F — Release
+```
+
+Gate F mencakup: production build, migrations, backup, monitoring, rollback plan, release notes.
+
+---
+
+# 126. FINAL SPECIFICATION AUDIT (RECAP)
+
+Sebelum production: **SAKALA V2.3 FINAL SPECIFICATION AUDIT**, dengan format tabel:
+
+| Requirement | Implemented | Tested | Verified | Location | Evidence |
+|---|---|---|---|---|---|
+
+Tidak boleh ada unexplained:
+
+```text
+TODO
+FIXME
+placeholder
+fake functionality
+dead button
+missing route
+missing database operation
+missing permission
+missing validation
+missing error/loading state
+missing responsive
+missing accessibility
+undocumented workaround
+```
+
+---
+
+# 127. FINAL WORKFLOW — DUAL TRACK *(baru)*
+
+Project berjalan dengan dua jalur bersamaan, disinkronkan pada setiap milestone:
+
+**PRODUCT BUILD**
+
+```text
+SPEC
+ ↓
+ARCHITECTURE
+ ↓
+FOUNDATION
+ ↓
+DATA
+ ↓
+DOMAIN
+ ↓
+SCHEDULE
+ ↓
+EXPERIENCE
+ ↓
+QUALITY
+ ↓
+RELEASE
+```
+
+**ENGINEERING SAFETY NET**
+
+```text
+PACK
+ ↓
+PRE-FLIGHT
+ ↓
+APPLY
+ ↓
+AUDIT
+ ↓
+DOCTOR
+ ↓
+REPORT
+ ↓
+FIX
+ ↓
+VERIFY
+ ↓
+REGRESSION
+ ↓
+ROLLBACK / PASS
+```
+
+---
+
+# 128. BASELINE STATUS TRACKER
+
+| Area | Status |
+|---|---|
+| Master Specification | ✅ Locked |
+| Build Order | ✅ Locked |
+| Product Architecture | ✅ Locked |
+| Technical Architecture | ✅ Baseline |
+| Design System Direction | ✅ Locked |
+| Schedule Architecture | ✅ Locked |
+| Conflict Engine | ✅ Locked |
+| AI Governance | ✅ Locked |
+| ZIP Pack System | ✅ Locked |
+| Incremental Implementation | ✅ Locked |
+| Diagnostic Toolchain | ✅ Added |
+| Self-Diagnosing Pack | ✅ Added |
+| Error Report | ✅ Added |
+| AI Handoff | ✅ Added |
+| Safe Fix Script | ✅ Added |
+| Verification | ✅ Added |
+| Regression Detection | ✅ Added |
+| Backup/Rollback | ✅ Added |
+| Limit-Efficient Workflow | ✅ Added |
+
+---
+
+# 129. DOCUMENT STATUS (v2.3 + ADDENDUM)
+
+**SAKALA V2.3 — HARDENED FULL BUILD CONTRACT + IMPLEMENTATION BASELINE ADDENDUM**
+
+Part I (Bagian 0–65) tetap menjadi rujukan teknis detail. Part II (Bagian 66–128) mengunci **status proyek, urutan eksekusi per-pack, dan safety-net engineering** (diagnostic toolchain, error handoff, rollback) sebagai lapisan operasional di atas Part I.
+
+**Target akhir tidak berubah:**
+
+> Developer dapat membaca dokumen ini dari atas ke bawah dan mengetahui apa yang harus dibangun, urutan pembangunannya, aturan perilakunya, state yang harus ditangani, cara validasinya, dan kondisi yang harus dipenuhi sebelum release — sekarang dilengkapi cara mendiagnosis dan memperbaiki masalah tanpa mengirim ulang seluruh project.

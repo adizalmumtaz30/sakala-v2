@@ -1,8 +1,22 @@
 "use client";
 
-import { Search, Bell, ChevronDown, Wifi } from "lucide-react";
+import Link from "next/link";
+import { Search, Bell, ChevronDown, Wifi, GraduationCap } from "lucide-react";
 
-export default function Header() {
+function initialsOf(nama: string): string {
+  const parts = nama.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
+
+export default function Header({
+  schoolProfileNama,
+  activeContextLabel,
+}: {
+  schoolProfileNama: string | null;
+  activeContextLabel: string | null;
+}) {
   return (
     <header
       className="sticky top-0 z-20 flex items-center gap-4 border-b border-border bg-surface/85 px-8 backdrop-blur"
@@ -15,6 +29,20 @@ export default function Header() {
         <kbd className="rounded-md border border-border bg-surface px-1.5 py-0.5 text-[10px] font-semibold text-ink-400">⌘K</kbd>
       </button>
 
+      {/* Bagian 8.2 / 77 — Active Academic Context, single source of truth, read-only
+          di sini, dikelola penuh (switch/tambah/hapus) di halaman /akademik. */}
+      <Link
+        href="/akademik"
+        className={`hidden items-center gap-1.5 rounded-xl border px-3 py-2 text-[12px] font-medium transition-colors md:flex ${
+          activeContextLabel
+            ? "border-border bg-surface text-ink-700 hover:border-brand-600/30"
+            : "border-amber/30 bg-amber-50 text-amber hover:border-amber/50"
+        }`}
+      >
+        <GraduationCap size={14} />
+        {activeContextLabel ?? "Konteks belum diatur"}
+      </Link>
+
       {/* RIGHT — Connection + notification + profile (Bagian 10.2) */}
       <div className="ml-auto flex items-center gap-5">
         <div className="hidden items-center gap-1.5 text-[12px] font-medium text-emerald md:flex">
@@ -25,12 +53,12 @@ export default function Header() {
           <Bell size={18} />
         </button>
 
-        <button className="flex items-center gap-2 rounded-xl py-1.5 pl-1.5 pr-2 hover:bg-surface-muted">
+        <Link href="/akademik" className="flex items-center gap-2 rounded-xl py-1.5 pl-1.5 pr-2 hover:bg-surface-muted">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-50 text-[12px] font-bold text-brand-700">
-            OP
+            {schoolProfileNama ? initialsOf(schoolProfileNama) : "?"}
           </div>
           <ChevronDown size={15} className="text-ink-400" />
-        </button>
+        </Link>
       </div>
     </header>
   );

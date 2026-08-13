@@ -69,12 +69,15 @@ git push -u origin main
    - Kalau belum ada, pakai **Legacy API Keys** → copy `anon` key untuk sementara.
 4. Copy juga **Project URL**-nya.
 5. Buka **SQL Editor** → tempel isi file `database/migrations/0001_core_data.sql`
-   dari ZIP ini → **Run**.
+   dari ZIP ini → **Run**. Lalu ulangi dengan
+   `database/migrations/0002_academic_context.sql` (urutannya wajib setelah
+   0001, karena 0002 memakai ulang fungsi `set_updated_at()` dari 0001).
 6. **PENTING** (kebijakan Supabase berubah 30 Mei 2026 — tabel baru tidak lagi
    otomatis ter-expose): buka **Table Editor**, pastikan tabel `guru`,
-   `mata_pelajaran`, `kelas`, `ruangan` sudah ter-expose ke Data API. Kalau
-   belum ada toggle-nya di situ, cek **Project Settings → Data API → Exposed
-   schemas** dan pastikan schema `public` termasuk.
+   `mata_pelajaran`, `kelas`, `ruangan`, `academic_context`, `school_profile`
+   sudah ter-expose ke Data API. Kalau belum ada toggle-nya di situ, cek
+   **Project Settings → Data API → Exposed schemas** dan pastikan schema
+   `public` termasuk.
 
 ---
 

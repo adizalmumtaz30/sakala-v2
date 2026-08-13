@@ -14,12 +14,13 @@ const pipeline = [
   { step: "06", label: "Foundation Components", done: true },
   { step: "07", label: "Surface / Data / Form Systems", done: true },
   { step: "08", label: "State / Feedback / Recovery System", done: true },
-  { step: "09", label: "Academic Context + Admin Profile", done: false },
+  { step: "09", label: "Academic Context + Admin Profile", done: true, href: "/akademik" },
   { step: "10", label: "Core Data — Guru", done: true, href: "/guru" },
-  { step: "10", label: "Core Data — Mata Pelajaran", done: false },
-  { step: "10", label: "Core Data — Kelas", done: false },
-  { step: "10", label: "Core Data — Ruangan", done: false },
-  { step: "11", label: "Akademik Core", done: false },
+  { step: "10", label: "Core Data — Mata Pelajaran", done: true, href: "/mata-pelajaran" },
+  { step: "10", label: "Core Data — Kelas", done: true, href: "/kelas" },
+  { step: "10", label: "Core Data — Ruangan", done: true, href: "/ruangan" },
+  { step: "11", label: "Akademik Core — Periode Akademik", done: true, href: "/akademik" },
+  { step: "11", label: "Akademik Core — Jam Pelajaran", done: true, href: "/akademik" },
   { step: "12–13", label: "Schedule Model + Validation Engine", done: false },
   { step: "14", label: "Jadwal Cerdas", done: false },
   { step: "15", label: "Jadwal Operational Workspace", done: false },
@@ -32,8 +33,8 @@ export default function HomePage() {
       <div>
         <h1 className="text-[20px] font-bold text-ink-900">Status Build — SAKALA V2</h1>
         <p className="text-[13px] text-ink-500">
-          Mengikuti Master Build Pipeline (Bagian 2). Dashboard baru dibangun setelah data,
-          state, dan komponen inti stabil.
+          Mengikuti Master Build Pipeline (Bagian 2/69). Dashboard baru dibangun setelah data,
+          state, dan komponen inti stabil. Status terkini: <strong>Phase 04 selesai</strong> — Akademik Core (Periode Akademik & Jam Pelajaran per konteks aktif).
         </p>
       </div>
 
