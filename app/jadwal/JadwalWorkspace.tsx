@@ -62,6 +62,18 @@ export default function JadwalWorkspace({
   ruanganList: Ruangan[];
   assignments: ScheduleAssignment[];
 }) {
+  if (!activeContext) {
+    return (
+      <div className="mx-auto max-w-3xl pt-10">
+        <EmptyState
+          title="Belum ada konteks akademik aktif"
+          description="Aktifkan satu konteks akademik dulu di halaman Akademik sebelum membuka Jadwal."
+        />
+      </div>
+    );
+  }
+  const context = activeContext;
+
   const activeModels = useMemo(() => scheduleModels.filter((m) => m.status === "aktif"), [scheduleModels]);
   const [selectedModelId, setSelectedModelId] = useState<string>(activeModels[0]?.id ?? "");
   const selectedModel = activeModels.find((m) => m.id === selectedModelId) ?? null;
@@ -149,22 +161,6 @@ export default function JadwalWorkspace({
 
   const [duplicateSource, setDuplicateSource] = useState<ScheduleAssignment | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-
-  if (!activeContext) {
-    return (
-      <div className="mx-auto max-w-3xl pt-10">
-        <EmptyState
-          title="Belum ada konteks akademik aktif"
-          description="Aktifkan satu konteks akademik dulu di halaman Akademik sebelum membuka Jadwal."
-        />
-      </div>
-    );
-  }
-  // Const terpisah (bukan sekadar pakai `activeContext` langsung) supaya TypeScript
-  // menyimpan tipe non-null-nya secara stabil ke dalam closure di bawah — narrowing
-  // dari early-return di atas tidak otomatis menembus closure yang dideklarasikan
-  // setelahnya. Pola sama seperti JadwalCerdasWorkspace.tsx (Phase 07).
-  const context = activeContext;
 
   function openAdd(day: HariSekolah, nomorUrut: number) {
     setAddTarget({ day, nomorUrut });

@@ -1,44 +1,69 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { Plus, Pencil, Trash2, Search } from "lucide-react";
-import type { Guru, StatusAktif } from "@/lib/domain/guru";
-import { createGuruAction, updateGuruAction, deleteGuruAction } from "./actions";
+import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { Plus, Pencil, Trash2, Search, ChevronDown, Upload } from "lucide-react";
+import type { Guru, GuruDraft, StatusAktif } from "@/lib/domain/guru";
+import {
+  createGuruAction,
+  updateGuruAction,
+  deleteGuruAction,
+  validateGuruImportAction,
+  commitGuruImportAction,
+} from "./actions";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Modal from "@/components/ui/Modal";
+import Avatar from "@/components/ui/Avatar";
 import { Card, Badge, EmptyState } from "@/components/ui/primitives";
+import ImportModal, { type ImportRowResult } from "@/components/import/ImportModal";
 
 export default function GuruWorkspace({ initialData }: { initialData: Guru[] }) {
+  const router = useRouter();
   const [data, setData] = useState<Guru[]>(initialData);
   const [query, setQuery] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState<Guru | null>(null);
+  const [showMore, setShowMore] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  // Sinkronkan state lokal ketika server component induk refresh (mis. setelah import).
+  useEffect(() => setData(initialData), [initialData]);
 
   const filtered = data.filter((g) => g.namaGuru.toLowerCase().includes(query.toLowerCase()));
 
   function openCreate() {
     setEditing(null);
     setFormError(null);
+    setShowMore(false);
     setModalOpen(true);
   }
 
   function openEdit(guru: Guru) {
     setEditing(guru);
     setFormError(null);
+    // Bagian 84: langsung buka Informasi Tambahan saat edit jika sudah pernah diisi.
+    setShowMore(Boolean(guru.nip || guru.nuptk || guru.email || guru.noTelepon));
     setModalOpen(true);
   }
 
   function handleSubmit(formData: FormData) {
-    const namaGuru = String(formData.get("namaGuru") ?? "");
-    const status = (formData.get("status") as StatusAktif) ?? "aktif";
+    const draft: GuruDraft = {
+      namaGuru: String(formData.get("namaGuru") ?? ""),
+      status: (formData.get("status") as StatusAktif) ?? "aktif",
+      nip: String(formData.get("nip") ?? "").trim() || undefined,
+      nuptk: String(formData.get("nuptk") ?? "").trim() || undefined,
+      email: String(formData.get("email") ?? "").trim() || undefined,
+      noTelepon: String(formData.get("noTelepon") ?? "").trim() || undefined,
+    };
 
     startTransition(async () => {
       const result = editing
-        ? await updateGuruAction(editing.id, namaGuru, status)
-        : await createGuruAction(namaGuru, status);
+        ? await updateGuruAction(editing.id, draft)
+        : await createGuruAction(draft);
 
       if (!result.ok) {
         setFormError(result.error);
@@ -62,16 +87,39 @@ export default function GuruWorkspace({ initialData }: { initialData: Guru[] }) 
     });
   }
 
+  async function handleValidateImport(rows: Record<string, string>[]): Promise<ImportRowResult[]> {
+    const result = await validateGuruImportAction(rows);
+    if (!result.ok) return [];
+    return result.data.map((r) => ({
+      rowNumber: r.rowNumber,
+      primaryLabel: r.namaGuru,
+      secondaryLabel: r.kodeGuru || undefined,
+      status: r.status,
+      issues: r.issues,
+    }));
+  }
+
+  async function handleCommitImport(rows: Record<string, string>[]) {
+    const result = await commitGuruImportAction(rows);
+    if (!result.ok) return { imported: 0, skipped: rows.length };
+    return result.data;
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-[20px] font-bold text-ink-900">Guru</h1>
-          <p className="text-[13px] text-ink-500">Data induk guru — dasar untuk penjadwalan dan beban mengajar.</p>
+          <p className="text-[13px] text-ink-500">Kelola data guru dan tenaga pendidik.</p>
         </div>
-        <Button onClick={openCreate}>
-          <Plus size={16} /> Tambah Guru
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={() => setImportOpen(true)}>
+            <Upload size={16} /> Import
+          </Button>
+          <Button onClick={openCreate}>
+            <Plus size={16} /> Tambah Guru
+          </Button>
+        </div>
       </div>
 
       <div className="flex items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-ink-400 sm:max-w-xs">
@@ -102,58 +150,67 @@ export default function GuruWorkspace({ initialData }: { initialData: Guru[] }) 
             }
           />
         ) : (
-          <table className="w-full text-left text-[13px]">
-            <thead>
-              <tr className="border-b border-border text-[11.5px] uppercase tracking-wide text-ink-400">
-                <th className="px-5 py-3 font-medium">Nama Guru</th>
-                <th className="px-5 py-3 font-medium">Status</th>
-                <th className="px-5 py-3 font-medium text-right">Aksi</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((guru) => (
-                <tr key={guru.id} className="border-b border-border last:border-0 hover:bg-surface-muted/60">
-                  <td className="px-5 py-3.5 font-medium text-ink-900">{guru.namaGuru}</td>
-                  <td className="px-5 py-3.5">
-                    <Badge tone={guru.status === "aktif" ? "success" : "neutral"}>
-                      {guru.status === "aktif" ? "Aktif" : "Nonaktif"}
-                    </Badge>
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center justify-end gap-1">
-                      <button
-                        onClick={() => openEdit(guru)}
-                        className="rounded-lg p-1.5 text-ink-400 hover:bg-surface hover:text-ink-900"
-                        aria-label="Edit"
-                      >
-                        <Pencil size={15} />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(guru.id)}
-                        className="rounded-lg p-1.5 text-ink-400 hover:bg-rose-50 hover:text-rose"
-                        aria-label="Hapus"
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <ul>
+            {filtered.map((guru) => (
+              <li
+                key={guru.id}
+                className="flex items-center gap-3.5 border-b border-border px-5 py-3.5 last:border-0 hover:bg-surface-muted/60"
+              >
+                <Avatar name={guru.namaGuru} />
+                <Link href={`/guru/${guru.id}`} className="min-w-0 flex-1">
+                  <p className="truncate text-[13.5px] font-medium text-ink-900">{guru.namaGuru}</p>
+                  <p className="text-[12px] text-ink-400">{guru.kodeGuru}</p>
+                </Link>
+                <Badge tone={guru.status === "aktif" ? "success" : "neutral"}>
+                  {guru.status === "aktif" ? "Aktif" : "Nonaktif"}
+                </Badge>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => openEdit(guru)}
+                    className="rounded-lg p-1.5 text-ink-400 hover:bg-surface hover:text-ink-900"
+                    aria-label="Edit"
+                  >
+                    <Pencil size={15} />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(guru.id)}
+                    className="rounded-lg p-1.5 text-ink-400 hover:bg-rose-50 hover:text-rose"
+                    aria-label="Hapus"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
         )}
       </Card>
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editing ? "Edit Guru" : "Tambah Guru"}>
         <form action={handleSubmit} className="flex flex-col gap-4">
+          {!editing && (
+            <p className="-mt-1 text-[12.5px] text-ink-500">
+              Tambahkan data guru. Informasi tambahan dapat dilengkapi kapan saja.
+            </p>
+          )}
+
           <Input
             name="namaGuru"
-            label="Nama Guru"
-            placeholder="cth. Ahmad Fauzi, S.Pd"
+            label="Nama Lengkap *"
+            placeholder="cth. Ahmad Fauzan"
             defaultValue={editing?.namaGuru}
             error={formError ?? undefined}
             required
+            autoFocus
           />
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[12.5px] font-medium text-ink-700">Kode Guru</label>
+            <div className="flex h-11 items-center rounded-xl border border-border bg-surface-muted px-3.5 text-[13.5px] text-ink-400">
+              {editing ? editing.kodeGuru : "Otomatis — dibuat setelah disimpan"}
+            </div>
+          </div>
+
           <div className="flex flex-col gap-1.5">
             <label className="text-[12.5px] font-medium text-ink-700">Status</label>
             <select
@@ -165,6 +222,41 @@ export default function GuruWorkspace({ initialData }: { initialData: Guru[] }) 
               <option value="nonaktif">Nonaktif</option>
             </select>
           </div>
+
+          <div className="border-t border-border pt-3.5">
+            <button
+              type="button"
+              onClick={() => setShowMore((v) => !v)}
+              className="flex w-full items-center justify-between text-[12.5px] font-medium text-ink-700"
+            >
+              Informasi Tambahan
+              <ChevronDown
+                size={16}
+                className={`text-ink-400 transition-transform duration-200 ${showMore ? "rotate-180" : ""}`}
+              />
+            </button>
+
+            {showMore && (
+              <div className="mt-3.5 flex flex-col gap-4">
+                <Input name="nip" label="NIP" placeholder="Opsional" defaultValue={editing?.nip} />
+                <Input name="nuptk" label="NUPTK" placeholder="Opsional" defaultValue={editing?.nuptk} />
+                <Input
+                  name="email"
+                  type="email"
+                  label="Email"
+                  placeholder="Opsional"
+                  defaultValue={editing?.email}
+                />
+                <Input
+                  name="noTelepon"
+                  label="Nomor Telepon"
+                  placeholder="Opsional"
+                  defaultValue={editing?.noTelepon}
+                />
+              </div>
+            )}
+          </div>
+
           <div className="mt-2 flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setModalOpen(false)}>
               Batal
@@ -175,6 +267,18 @@ export default function GuruWorkspace({ initialData }: { initialData: Guru[] }) 
           </div>
         </form>
       </Modal>
+
+      <ImportModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        title="Import Guru"
+        description="Unggah data guru dari file XLSX/CSV memakai Template SAKALA."
+        templateUrl="/guru/import/template"
+        templateFilename="Template_Guru_SAKALA_V2.3.xlsx"
+        onValidate={handleValidateImport}
+        onCommit={handleCommitImport}
+        onImported={() => router.refresh()}
+      />
     </div>
   );
 }

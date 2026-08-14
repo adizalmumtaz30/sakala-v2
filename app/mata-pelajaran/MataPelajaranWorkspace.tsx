@@ -1,25 +1,33 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { Plus, Pencil, Trash2, Search } from "lucide-react";
+import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Plus, Pencil, Trash2, Search, Upload } from "lucide-react";
 import type { MataPelajaran, StatusAktif } from "@/lib/domain/mata-pelajaran";
 import {
   createMataPelajaranAction,
   updateMataPelajaranAction,
   deleteMataPelajaranAction,
+  validateMapelImportAction,
+  commitMapelImportAction,
 } from "./actions";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Modal from "@/components/ui/Modal";
 import { Card, Badge, EmptyState } from "@/components/ui/primitives";
+import ImportModal, { type ImportRowResult } from "@/components/import/ImportModal";
 
 export default function MataPelajaranWorkspace({ initialData }: { initialData: MataPelajaran[] }) {
+  const router = useRouter();
   const [data, setData] = useState<MataPelajaran[]>(initialData);
   const [query, setQuery] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState<MataPelajaran | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  useEffect(() => setData(initialData), [initialData]);
 
   const filtered = data.filter(
     (m) =>
@@ -69,6 +77,24 @@ export default function MataPelajaranWorkspace({ initialData }: { initialData: M
     });
   }
 
+  async function handleValidateImport(rows: Record<string, string>[]): Promise<ImportRowResult[]> {
+    const result = await validateMapelImportAction(rows);
+    if (!result.ok) return [];
+    return result.data.map((r) => ({
+      rowNumber: r.rowNumber,
+      primaryLabel: r.nama,
+      secondaryLabel: r.kode || undefined,
+      status: r.status,
+      issues: r.issues,
+    }));
+  }
+
+  async function handleCommitImport(rows: Record<string, string>[]) {
+    const result = await commitMapelImportAction(rows);
+    if (!result.ok) return { imported: 0, skipped: rows.length };
+    return result.data;
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -76,9 +102,14 @@ export default function MataPelajaranWorkspace({ initialData }: { initialData: M
           <h1 className="text-[20px] font-bold text-ink-900">Mata Pelajaran</h1>
           <p className="text-[13px] text-ink-500">Data induk mata pelajaran & target JP per rombel.</p>
         </div>
-        <Button onClick={openCreate}>
-          <Plus size={16} /> Tambah Mata Pelajaran
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={() => setImportOpen(true)}>
+            <Upload size={16} /> Import
+          </Button>
+          <Button onClick={openCreate}>
+            <Plus size={16} /> Tambah Mata Pelajaran
+          </Button>
+        </div>
       </div>
 
       <div className="flex items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-ink-400 sm:max-w-xs">
@@ -172,6 +203,18 @@ export default function MataPelajaranWorkspace({ initialData }: { initialData: M
           </div>
         </form>
       </Modal>
+
+      <ImportModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        title="Import Mata Pelajaran"
+        description="Unggah data mata pelajaran dari file XLSX/CSV memakai Template SAKALA."
+        templateUrl="/mata-pelajaran/import/template"
+        templateFilename="Template_Mapel_SAKALA_V2.3.xlsx"
+        onValidate={handleValidateImport}
+        onCommit={handleCommitImport}
+        onImported={() => router.refresh()}
+      />
     </div>
   );
 }

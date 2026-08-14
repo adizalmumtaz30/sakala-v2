@@ -4,7 +4,7 @@ Dibangun mengikuti **Master Build Pipeline** (`docs/specification/MASTER-SPECIFI
 Bagian 2). **Mulai dari sini** → baca `SETUP.md` untuk setup dari nol
 (folder, GitHub, Supabase, Vercel).
 
-## Status (selesai s.d. Phase 08)
+## Status (selesai s.d. Phase 05)
 
 | Step | Cakupan |
 |---|---|
@@ -17,9 +17,6 @@ Bagian 2). **Mulai dari sini** → baca `SETUP.md` untuk setup dari nol
 | 10 | Core Data — **Guru, Mata Pelajaran, Kelas, Ruangan** (CRUD penuh untuk keempatnya, tersambung Supabase, layer Domain → Application → Data Access) |
 | 11 | **Akademik Core** (`/akademik`, tab baru) — **Periode Akademik** (rentang tanggal dalam satu konteks, cegah tumpang tindih) & **Jam Pelajaran** (slot waktu per hari, bedakan pembelajaran/istirahat, cegah bentrok nomor urut & waktu) — keduanya CRUD penuh, terikat ke konteks akademik aktif |
 | 12 | **Schedule Model + Slot Template** (`/akademik`, tab baru "Model Jadwal") — **Schedule Model** (konfigurasi: nama, waktu mulai, durasi standar, maks JP/hari, hari aktif, hari libur, room mode, penggunaan rombel, status), CRUD penuh per konteks aktif; **Slot Template** dikelola per model lewat "Kelola Slot" — menandai jenis slot (Belajar Mengajar/Upacara/Religi/Istirahat/Libur/Custom) untuk (hari, nomor urut) tertentu, divalidasi harus merujuk periode yang benar-benar terdaftar di Jam Pelajaran |
-| 13 | **Schedule Domain & Validation Engine** (backend murni, tidak ada UI baru) — entity Schedule Assignment + Schedule Version, Conflict Engine (`validateAssignmentCandidate`, 8 dari 9 tipe konflik aktif), use case `saveAssignmentDraft`/`commitAssignments` (satu-satunya jalur status jadi committed, batch atomic) |
-| 14 | **Jadwal Cerdas** (`/jadwal-cerdas`) — Generate (isi requirement manual per kelas+mapel+guru+ruangan+target JP, generate candidate lewat algoritma greedy round-robin, murni preview dulu) → Review & Commit (tabel candidate + badge konflik, hapus per baris, jalankan Optimasi untuk candidate yang bentrok, pilih baris lalu commit jadi Schedule Version baru) |
-| 15 | **Jadwal Operational Workspace** (`/jadwal`) — grid mingguan/harian (hari × jam pelajaran) untuk assignment berstatus **committed**; view Per Kelas/Per Guru/Per Ruangan; Tambah Jadwal langsung dari sel kosong eligible (Save Draft atau Simpan & Commit); Edit/Pindahkan (kembalikan ke draft → commit ulang → Schedule Version baru otomatis jadi histori perubahan); Hapus (committed diarsipkan, draft/candidate dihapus permanen); Duplikat (salin ke sel kosong lain) |
 
 ## Arsitektur
 
