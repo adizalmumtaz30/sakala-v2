@@ -68,14 +68,20 @@ git push -u origin main
      → copy **Publishable key** (`sb_publishable_...`).
    - Kalau belum ada, pakai **Legacy API Keys** → copy `anon` key untuk sementara.
 4. Copy juga **Project URL**-nya.
-5. Buka **SQL Editor** → tempel isi file `database/migrations/0001_core_data.sql`
-   dari ZIP ini → **Run**. Lalu ulangi dengan
-   `database/migrations/0002_academic_context.sql` (urutannya wajib setelah
-   0001, karena 0002 memakai ulang fungsi `set_updated_at()` dari 0001).
+5. Buka **SQL Editor** → jalankan file di `database/migrations/` **satu per
+   satu, sesuai urutan nomornya** (0001 → 0002 → 0003 → 0004 → 0005) — setiap
+   file memakai ulang fungsi/tabel dari file sebelumnya, jadi urutannya wajib:
+   - `0001_core_data.sql`
+   - `0002_academic_context.sql`
+   - `0003_academic_core.sql`
+   - `0004_schedule_model.sql`
+   - `0005_schedule_domain.sql`
 6. **PENTING** (kebijakan Supabase berubah 30 Mei 2026 — tabel baru tidak lagi
-   otomatis ter-expose): buka **Table Editor**, pastikan tabel `guru`,
-   `mata_pelajaran`, `kelas`, `ruangan`, `academic_context`, `school_profile`
-   sudah ter-expose ke Data API. Kalau belum ada toggle-nya di situ, cek
+   otomatis ter-expose): buka **Table Editor**, pastikan SEMUA tabel berikut
+   sudah ter-expose ke Data API: `guru`, `mata_pelajaran`, `kelas`, `ruangan`,
+   `academic_context`, `school_profile`, `periode_akademik`, `jam_pelajaran`,
+   `schedule_model`, `slot_template`, `schedule_version`,
+   `schedule_assignment`. Kalau belum ada toggle-nya di situ, cek
    **Project Settings → Data API → Exposed schemas** dan pastikan schema
    `public` termasuk.
 

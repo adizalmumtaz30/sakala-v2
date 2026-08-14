@@ -1,0 +1,797 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { Plus, X, Trash2, Copy, Pencil, Eye, AlertTriangle, CheckCircle2, Info, CalendarClock } from "lucide-react";
+import type { AcademicContext } from "@/lib/domain/academicContext";
+import { formatContextLabel } from "@/lib/domain/academicContext";
+import type { ScheduleModel } from "@/lib/domain/scheduleModel";
+import { formatModeRuangan } from "@/lib/domain/scheduleModel";
+import type { Guru } from "@/lib/domain/guru";
+import type { Kelas } from "@/lib/domain/kelas";
+import type { MataPelajaran } from "@/lib/domain/mata-pelajaran";
+import type { Ruangan } from "@/lib/domain/ruangan";
+import type { JamPelajaran, HariSekolah } from "@/lib/domain/jamPelajaran";
+import { formatHari, URUTAN_HARI } from "@/lib/domain/jamPelajaran";
+import type { SlotTemplate, JenisSlot } from "@/lib/domain/slotTemplate";
+import { formatJenisSlot } from "@/lib/domain/slotTemplate";
+import type { ScheduleAssignment, ScheduleAssignmentDraft } from "@/lib/domain/scheduleAssignment";
+import { buildJadwalGrid, isEligibleForAdd, cellKey, type GridCell, type JadwalViewBy, type JadwalRangeMode } from "@/lib/domain/jadwalGrid";
+import type { ScheduleConflict } from "@/lib/domain/conflict";
+import { validateAssignmentAction, addAssignmentAction, moveAssignmentAction, deleteAssignmentAction } from "./actions";
+import Button from "@/components/ui/Button";
+import Input from "@/components/ui/Input";
+import Modal from "@/components/ui/Modal";
+import { Badge, EmptyState } from "@/components/ui/primitives";
+
+const ACTIVITY_OPTIONS: JenisSlot[] = ["belajar_mengajar", "upacara", "religi", "istirahat", "libur", "custom"];
+
+interface FormState {
+  classId: string;
+  subjectId: string;
+  teacherId: string;
+  roomId: string;
+  activityType: JenisSlot;
+}
+
+const EMPTY_FORM: FormState = { classId: "", subjectId: "", teacherId: "", roomId: "", activityType: "belajar_mengajar" };
+
+function conflictTone(severity: ScheduleConflict["severity"]): "danger" | "warning" | "info" {
+  if (severity === "error") return "danger";
+  if (severity === "warning") return "warning";
+  return "info";
+}
+
+export default function JadwalWorkspace({
+  activeContext,
+  scheduleModels,
+  jamPelajaranList,
+  slotTemplatesByModel,
+  guruList,
+  kelasList,
+  mapelList,
+  ruanganList,
+  assignments,
+}: {
+  activeContext: AcademicContext | null;
+  scheduleModels: ScheduleModel[];
+  jamPelajaranList: JamPelajaran[];
+  slotTemplatesByModel: Record<string, SlotTemplate[]>;
+  guruList: Guru[];
+  kelasList: Kelas[];
+  mapelList: MataPelajaran[];
+  ruanganList: Ruangan[];
+  assignments: ScheduleAssignment[];
+}) {
+  const activeModels = useMemo(() => scheduleModels.filter((m) => m.status === "aktif"), [scheduleModels]);
+  const [selectedModelId, setSelectedModelId] = useState<string>(activeModels[0]?.id ?? "");
+  const selectedModel = activeModels.find((m) => m.id === selectedModelId) ?? null;
+
+  const [viewBy, setViewBy] = useState<JadwalViewBy>("kelas");
+  const [rangeMode, setRangeMode] = useState<JadwalRangeMode>("mingguan");
+
+  const guruMap = useMemo(() => new Map(guruList.map((g) => [g.id, g.namaGuru])), [guruList]);
+  const kelasMap = useMemo(() => new Map(kelasList.map((k) => [k.id, `${k.tingkat} ${k.namaRombel}`])), [kelasList]);
+  const mapelMap = useMemo(() => new Map(mapelList.map((m) => [m.id, m.nama])), [mapelList]);
+  const ruanganMap = useMemo(() => new Map(ruanganList.map((r) => [r.id, r.nama])), [ruanganList]);
+
+  const entityOptions = useMemo(() => {
+    if (viewBy === "kelas") return kelasList.map((k) => ({ id: k.id, label: `${k.tingkat} ${k.namaRombel}` }));
+    if (viewBy === "guru") return guruList.map((g) => ({ id: g.id, label: g.namaGuru }));
+    return ruanganList.map((r) => ({ id: r.id, label: r.nama }));
+  }, [viewBy, kelasList, guruList, ruanganList]);
+
+  const [selectedEntityId, setSelectedEntityId] = useState<string>(entityOptions[0]?.id ?? "");
+  const activeEntityId = entityOptions.some((o) => o.id === selectedEntityId) ? selectedEntityId : entityOptions[0]?.id ?? "";
+
+  function changeViewBy(next: JadwalViewBy) {
+    setViewBy(next);
+    const options = next === "kelas" ? kelasList.map((k) => k.id) : next === "guru" ? guruList.map((g) => g.id) : ruanganList.map((r) => r.id);
+    setSelectedEntityId(options[0] ?? "");
+  }
+
+  const activeDays = useMemo(
+    () => (selectedModel ? URUTAN_HARI.filter((d) => selectedModel.hariAktif.includes(d)) : []),
+    [selectedModel]
+  );
+  const [selectedDay, setSelectedDay] = useState<HariSekolah>(activeDays[0] ?? "senin");
+  const dayForHarian = activeDays.includes(selectedDay) ? selectedDay : activeDays[0] ?? "senin";
+  const gridDays = rangeMode === "mingguan" ? activeDays : activeDays.length > 0 ? [dayForHarian] : [];
+
+  const scopedAssignments = useMemo(
+    () =>
+      assignments.filter(
+        (a) =>
+          a.status === "committed" &&
+          a.scheduleModelId === selectedModelId &&
+          (viewBy === "kelas" ? a.classId === activeEntityId : viewBy === "guru" ? a.teacherId === activeEntityId : a.roomId === activeEntityId)
+      ),
+    [assignments, selectedModelId, viewBy, activeEntityId]
+  );
+
+  const slotTemplates = selectedModelId ? slotTemplatesByModel[selectedModelId] ?? [] : [];
+
+  const grid = useMemo(
+    () => buildJadwalGrid({ days: gridDays, jamPelajaranList, slotTemplates, assignments: scopedAssignments }),
+    [gridDays, jamPelajaranList, slotTemplates, scopedAssignments]
+  );
+
+  const cellsByKey = useMemo(() => {
+    const map = new Map<string, GridCell>();
+    grid.cells.forEach((c) => map.set(cellKey(c.day, c.nomorUrut), c));
+    return map;
+  }, [grid]);
+
+  // --- Modal / interaction state ---
+  const [addTarget, setAddTarget] = useState<{ day: HariSekolah; nomorUrut: number } | null>(null);
+  const [addForm, setAddForm] = useState<FormState>(EMPTY_FORM);
+  const [addConflicts, setAddConflicts] = useState<ScheduleConflict[] | null>(null);
+  const [addValidating, setAddValidating] = useState(false);
+  const [addSaving, setAddSaving] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+  const [addLabel, setAddLabel] = useState("");
+
+  const [detailAssignment, setDetailAssignment] = useState<ScheduleAssignment | null>(null);
+
+  const [editTarget, setEditTarget] = useState<ScheduleAssignment | null>(null);
+  const [editForm, setEditForm] = useState<FormState & { day: HariSekolah; nomorUrut: number }>({
+    ...EMPTY_FORM,
+    day: "senin",
+    nomorUrut: 1,
+  });
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editLabel, setEditLabel] = useState("");
+
+  const [deleteTarget, setDeleteTarget] = useState<ScheduleAssignment | null>(null);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const [duplicateSource, setDuplicateSource] = useState<ScheduleAssignment | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  if (!activeContext) {
+    return (
+      <div className="mx-auto max-w-3xl pt-10">
+        <EmptyState
+          title="Belum ada konteks akademik aktif"
+          description="Aktifkan satu konteks akademik dulu di halaman Akademik sebelum membuka Jadwal."
+        />
+      </div>
+    );
+  }
+  // Const terpisah (bukan sekadar pakai `activeContext` langsung) supaya TypeScript
+  // menyimpan tipe non-null-nya secara stabil ke dalam closure di bawah — narrowing
+  // dari early-return di atas tidak otomatis menembus closure yang dideklarasikan
+  // setelahnya. Pola sama seperti JadwalCerdasWorkspace.tsx (Phase 07).
+  const context = activeContext;
+
+  function openAdd(day: HariSekolah, nomorUrut: number) {
+    setAddTarget({ day, nomorUrut });
+    setAddConflicts(null);
+    setAddError(null);
+    setAddLabel("");
+    if (duplicateSource) {
+      setAddForm({
+        classId: duplicateSource.classId,
+        subjectId: duplicateSource.subjectId,
+        teacherId: duplicateSource.teacherId,
+        roomId: duplicateSource.roomId ?? "",
+        activityType: duplicateSource.activityType,
+      });
+    } else {
+      setAddForm({ ...EMPTY_FORM, activityType: "belajar_mengajar" });
+    }
+  }
+
+  function closeAdd() {
+    setAddTarget(null);
+    setDuplicateSource(null);
+  }
+
+  function handleCellClick(cell: GridCell) {
+    if (cell.state === "empty" && isEligibleForAdd(cell)) {
+      openAdd(cell.day, cell.nomorUrut);
+    } else if (cell.assignment) {
+      setDetailAssignment(cell.assignment);
+    }
+  }
+
+  function buildAddDraft(): ScheduleAssignmentDraft | null {
+    if (!addTarget || !selectedModel) return null;
+    return {
+      academicContextId: context.id,
+      scheduleModelId: selectedModel.id,
+      classId: addForm.classId,
+      subjectId: addForm.subjectId,
+      teacherId: addForm.teacherId,
+      roomId: addForm.roomId || null,
+      day: addTarget.day,
+      periodStart: addTarget.nomorUrut,
+      periodEnd: addTarget.nomorUrut,
+      activityType: addForm.activityType,
+      status: "draft",
+      source: "manual",
+      versionId: null,
+    };
+  }
+
+  async function runValidateAdd() {
+    const draft = buildAddDraft();
+    if (!draft) return;
+    setAddValidating(true);
+    setAddError(null);
+    const result = await validateAssignmentAction(draft);
+    setAddValidating(false);
+    if (!result.ok) {
+      setAddError(result.error);
+      setAddConflicts(null);
+      return;
+    }
+    setAddConflicts(result.data.conflicts);
+  }
+
+  async function runSaveAdd(commit: boolean) {
+    const draft = buildAddDraft();
+    if (!draft) return;
+    setAddSaving(true);
+    setAddError(null);
+    const result = await addAssignmentAction(draft, commit, addLabel || undefined);
+    setAddSaving(false);
+    if (!result.ok) {
+      setAddError(result.error);
+      return;
+    }
+    setToast(commit ? "Jadwal berhasil disimpan dan di-commit." : "Jadwal berhasil disimpan sebagai draft (lihat di Jadwal Cerdas → Review & Commit).");
+    closeAdd();
+  }
+
+  function openEdit(assignment: ScheduleAssignment) {
+    setDetailAssignment(null);
+    setEditTarget(assignment);
+    setEditForm({
+      classId: assignment.classId,
+      subjectId: assignment.subjectId,
+      teacherId: assignment.teacherId,
+      roomId: assignment.roomId ?? "",
+      activityType: assignment.activityType,
+      day: assignment.day,
+      nomorUrut: assignment.periodStart,
+    });
+    setEditError(null);
+    setEditLabel("");
+  }
+
+  async function runSaveEdit() {
+    if (!editTarget) return;
+    setEditSaving(true);
+    setEditError(null);
+    const result = await moveAssignmentAction(
+      editTarget.id,
+      {
+        day: editForm.day,
+        periodStart: editForm.nomorUrut,
+        periodEnd: editForm.nomorUrut,
+        roomId: editForm.roomId || null,
+        classId: editForm.classId,
+        subjectId: editForm.subjectId,
+        teacherId: editForm.teacherId,
+      },
+      editLabel || undefined
+    );
+    setEditSaving(false);
+    if (!result.ok) {
+      setEditError(result.error);
+      return;
+    }
+    setToast("Jadwal berhasil diperbarui dan tercatat sebagai versi baru.");
+    setEditTarget(null);
+  }
+
+  async function runDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteError(null);
+    const result = await deleteAssignmentAction(deleteTarget.id);
+    setDeleting(false);
+    if (!result.ok) {
+      setDeleteError(result.error);
+      return;
+    }
+    setToast(result.data.archived ? "Jadwal committed diarsipkan." : "Jadwal dihapus.");
+    setDeleteTarget(null);
+    setDetailAssignment(null);
+  }
+
+  const roomRequired = selectedModel?.modeRuangan === "wajib";
+  const roomDisabled = selectedModel?.modeRuangan === "tidak_dipakai";
+
+  if (activeModels.length === 0) {
+    return (
+      <div className="mx-auto max-w-3xl pt-10">
+        <EmptyState
+          title="Belum ada Schedule Model aktif"
+          description="Buat dan aktifkan Schedule Model dulu di step sebelumnya sebelum membuka Jadwal Operational Workspace."
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto flex max-w-6xl flex-col gap-5 pb-16 pt-6">
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-2 text-ink-400">
+          <CalendarClock size={16} />
+          <span className="text-[12.5px]">{formatContextLabel(context)}</span>
+        </div>
+        <h1 className="text-[20px] font-semibold text-ink-900">Jadwal</h1>
+        <p className="text-[13px] text-ink-500">Jadwal operasional/committed — Per Kelas, Per Guru, Per Ruangan, Harian, Mingguan.</p>
+      </div>
+
+      {toast && (
+        <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-[12.5px] text-emerald">
+          <span>{toast}</span>
+          <button onClick={() => setToast(null)} aria-label="Tutup">
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
+      {duplicateSource && (
+        <div className="flex items-center justify-between rounded-xl border border-brand-600/30 bg-brand-50 px-4 py-2.5 text-[12.5px] text-brand-700">
+          <span>
+            Mode duplikat aktif — klik sel kosong yang eligible untuk menempatkan salinan {mapelMap.get(duplicateSource.subjectId) ?? "jadwal"} (
+            {kelasMap.get(duplicateSource.classId) ?? "-"}).
+          </span>
+          <button onClick={() => setDuplicateSource(null)} className="font-medium underline">
+            Batal
+          </button>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-end gap-3 rounded-card border border-border bg-surface p-4">
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[12.5px] font-medium text-ink-700">Schedule Model</label>
+          <select
+            value={selectedModelId}
+            onChange={(e) => setSelectedModelId(e.target.value)}
+            className="h-11 rounded-xl border border-border bg-surface px-3 text-[13.5px] text-ink-900"
+          >
+            {activeModels.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.namaModel}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[12.5px] font-medium text-ink-700">Lihat per</label>
+          <div className="flex overflow-hidden rounded-xl border border-border">
+            {(["kelas", "guru", "ruangan"] as JadwalViewBy[]).map((v) => (
+              <button
+                key={v}
+                disabled={v === "ruangan" && roomDisabled}
+                onClick={() => changeViewBy(v)}
+                className={`h-11 px-3.5 text-[12.5px] font-medium capitalize transition-colors disabled:cursor-not-allowed disabled:text-ink-300 ${
+                  viewBy === v ? "bg-brand-600 text-white" : "bg-surface text-ink-700 hover:bg-surface-muted"
+                }`}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[12.5px] font-medium text-ink-700 capitalize">{viewBy}</label>
+          <select
+            value={activeEntityId}
+            onChange={(e) => setSelectedEntityId(e.target.value)}
+            className="h-11 min-w-[180px] rounded-xl border border-border bg-surface px-3 text-[13.5px] text-ink-900"
+          >
+            {entityOptions.length === 0 && <option value="">Belum ada data</option>}
+            {entityOptions.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[12.5px] font-medium text-ink-700">Tampilan</label>
+          <div className="flex overflow-hidden rounded-xl border border-border">
+            {(["mingguan", "harian"] as JadwalRangeMode[]).map((r) => (
+              <button
+                key={r}
+                onClick={() => setRangeMode(r)}
+                className={`h-11 px-3.5 text-[12.5px] font-medium capitalize transition-colors ${
+                  rangeMode === r ? "bg-brand-600 text-white" : "bg-surface text-ink-700 hover:bg-surface-muted"
+                }`}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {rangeMode === "harian" && (
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[12.5px] font-medium text-ink-700">Hari</label>
+            <select
+              value={dayForHarian}
+              onChange={(e) => setSelectedDay(e.target.value as HariSekolah)}
+              className="h-11 rounded-xl border border-border bg-surface px-3 text-[13.5px] text-ink-900"
+            >
+              {activeDays.map((d) => (
+                <option key={d} value={d}>
+                  {formatHari(d)}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {selectedModel && (
+          <span className="ml-auto text-[11.5px] text-ink-400">Mode ruangan: {formatModeRuangan(selectedModel.modeRuangan)}</span>
+        )}
+      </div>
+
+      {activeEntityId === "" ? (
+        <EmptyState title={`Belum ada data ${viewBy}`} description="Tambahkan datanya dulu di halaman master data terkait." />
+      ) : grid.rows.length === 0 ? (
+        <EmptyState title="Belum ada Jam Pelajaran" description="Susun Jam Pelajaran untuk konteks akademik ini dulu di halaman Akademik." />
+      ) : (
+        <div className="overflow-x-auto rounded-card border border-border bg-surface">
+          <table className="w-full border-collapse text-[12.5px]">
+            <thead>
+              <tr className="border-b border-border bg-surface-muted">
+                <th className="w-28 px-3 py-2.5 text-left font-medium text-ink-500">Jam</th>
+                {gridDays.map((d) => (
+                  <th key={d} className="px-3 py-2.5 text-left font-medium text-ink-500">
+                    {formatHari(d)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {grid.rows.map((row) => {
+                const refJam = gridDays.map((d) => cellsByKey.get(cellKey(d, row.nomorUrut))?.jamPelajaran).find((j) => j);
+                return (
+                  <tr key={row.nomorUrut} className="border-b border-border last:border-0">
+                    <td className="px-3 py-2 align-top">
+                      <div className="font-medium text-ink-900">Jam ke-{row.nomorUrut}</div>
+                      {refJam && (
+                        <div className="text-[11px] text-ink-400">
+                          {refJam.waktuMulai}–{refJam.waktuSelesai}
+                        </div>
+                      )}
+                    </td>
+                    {gridDays.map((d) => {
+                      const cell = cellsByKey.get(cellKey(d, row.nomorUrut));
+                      if (!cell) return <td key={d} className="px-3 py-2" />;
+                      return (
+                        <td key={d} className="px-2 py-1.5 align-top">
+                          <JadwalCell
+                            cell={cell}
+                            onClick={() => handleCellClick(cell)}
+                            entityLabel={
+                              cell.assignment
+                                ? viewBy === "kelas"
+                                  ? guruMap.get(cell.assignment.teacherId)
+                                  : kelasMap.get(cell.assignment.classId)
+                                : undefined
+                            }
+                            mapelLabel={cell.assignment ? mapelMap.get(cell.assignment.subjectId) : undefined}
+                            ruanganLabel={cell.assignment?.roomId ? ruanganMap.get(cell.assignment.roomId) : undefined}
+                          />
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* --- Add Schedule Modal (Bagian 26) --- */}
+      <Modal open={!!addTarget} onClose={closeAdd} title="Tambah Jadwal">
+        {addTarget && selectedModel && (
+          <div className="flex flex-col gap-3">
+            <p className="text-[12.5px] text-ink-500">
+              {formatHari(addTarget.day)}, Jam ke-{addTarget.nomorUrut}
+            </p>
+            <SelectField label="Kelas" value={addForm.classId} onChange={(v) => setAddForm((f) => ({ ...f, classId: v }))} options={kelasList.map((k) => ({ id: k.id, label: `${k.tingkat} ${k.namaRombel}` }))} />
+            <SelectField label="Mata Pelajaran" value={addForm.subjectId} onChange={(v) => setAddForm((f) => ({ ...f, subjectId: v }))} options={mapelList.map((m) => ({ id: m.id, label: m.nama }))} />
+            <SelectField label="Guru" value={addForm.teacherId} onChange={(v) => setAddForm((f) => ({ ...f, teacherId: v }))} options={guruList.map((g) => ({ id: g.id, label: g.namaGuru }))} />
+            {!roomDisabled && (
+              <SelectField
+                label={`Ruangan${roomRequired ? " (wajib)" : " (opsional)"}`}
+                value={addForm.roomId}
+                onChange={(v) => setAddForm((f) => ({ ...f, roomId: v }))}
+                options={ruanganList.map((r) => ({ id: r.id, label: r.nama }))}
+                allowEmpty={!roomRequired}
+              />
+            )}
+            <SelectField
+              label="Jenis Aktivitas"
+              value={addForm.activityType}
+              onChange={(v) => setAddForm((f) => ({ ...f, activityType: v as JenisSlot }))}
+              options={ACTIVITY_OPTIONS.map((a) => ({ id: a, label: formatJenisSlot({ jenisSlot: a, namaCustom: "Custom" }) }))}
+            />
+
+            {addConflicts && <ConflictList conflicts={addConflicts} />}
+            {addError && <p className="text-[12px] text-rose">{addError}</p>}
+
+            <Input label="Label Schedule Version (opsional)" value={addLabel} onChange={(e) => setAddLabel(e.target.value)} placeholder="mis. Tambahan manual — Agustus" />
+
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button variant="secondary" size="sm" loading={addValidating} onClick={runValidateAdd} disabled={!addForm.classId || !addForm.subjectId || !addForm.teacherId}>
+                Validasi
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                loading={addSaving}
+                disabled={!addConflicts || addConflicts.some((c) => c.blocking)}
+                onClick={() => runSaveAdd(false)}
+              >
+                Simpan Draft
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                loading={addSaving}
+                disabled={!addConflicts || addConflicts.some((c) => c.blocking)}
+                onClick={() => runSaveAdd(true)}
+              >
+                Simpan &amp; Commit
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* --- Detail / context menu (Bagian 25.5) --- */}
+      <Modal open={!!detailAssignment} onClose={() => setDetailAssignment(null)} title="Detail Jadwal">
+        {detailAssignment && (
+          <div className="flex flex-col gap-3">
+            <DetailRow label="Kelas" value={kelasMap.get(detailAssignment.classId) ?? "-"} />
+            <DetailRow label="Mata Pelajaran" value={mapelMap.get(detailAssignment.subjectId) ?? "-"} />
+            <DetailRow label="Guru" value={guruMap.get(detailAssignment.teacherId) ?? "-"} />
+            <DetailRow label="Ruangan" value={detailAssignment.roomId ? ruanganMap.get(detailAssignment.roomId) ?? "-" : "-"} />
+            <DetailRow label="Hari" value={formatHari(detailAssignment.day)} />
+            <DetailRow label="Jam" value={`Ke-${detailAssignment.periodStart}${detailAssignment.periodEnd !== detailAssignment.periodStart ? `–${detailAssignment.periodEnd}` : ""}`} />
+            <DetailRow label="Aktivitas" value={formatJenisSlot({ jenisSlot: detailAssignment.activityType, namaCustom: "Custom" })} />
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button variant="secondary" size="sm" onClick={() => openEdit(detailAssignment)}>
+                <Pencil size={14} /> Edit / Pindahkan
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setDuplicateSource(detailAssignment);
+                  setDetailAssignment(null);
+                }}
+              >
+                <Copy size={14} /> Duplikat
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={() => {
+                  setDeleteTarget(detailAssignment);
+                  setDetailAssignment(null);
+                }}
+              >
+                <Trash2 size={14} /> Hapus
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* --- Move/Edit Schedule Modal (Bagian 27) --- */}
+      <Modal open={!!editTarget} onClose={() => setEditTarget(null)} title="Edit / Pindahkan Jadwal">
+        {editTarget && (
+          <div className="flex flex-col gap-3">
+            <SelectField label="Kelas" value={editForm.classId} onChange={(v) => setEditForm((f) => ({ ...f, classId: v }))} options={kelasList.map((k) => ({ id: k.id, label: `${k.tingkat} ${k.namaRombel}` }))} />
+            <SelectField label="Mata Pelajaran" value={editForm.subjectId} onChange={(v) => setEditForm((f) => ({ ...f, subjectId: v }))} options={mapelList.map((m) => ({ id: m.id, label: m.nama }))} />
+            <SelectField label="Guru" value={editForm.teacherId} onChange={(v) => setEditForm((f) => ({ ...f, teacherId: v }))} options={guruList.map((g) => ({ id: g.id, label: g.namaGuru }))} />
+            {!roomDisabled && (
+              <SelectField
+                label={`Ruangan${roomRequired ? " (wajib)" : " (opsional)"}`}
+                value={editForm.roomId}
+                onChange={(v) => setEditForm((f) => ({ ...f, roomId: v }))}
+                options={ruanganList.map((r) => ({ id: r.id, label: r.nama }))}
+                allowEmpty={!roomRequired}
+              />
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              <SelectField label="Hari" value={editForm.day} onChange={(v) => setEditForm((f) => ({ ...f, day: v as HariSekolah }))} options={activeDays.map((d) => ({ id: d, label: formatHari(d) }))} />
+              <Input
+                label="Jam ke-"
+                type="number"
+                min={1}
+                value={editForm.nomorUrut}
+                onChange={(e) => setEditForm((f) => ({ ...f, nomorUrut: Number(e.target.value) || 1 }))}
+              />
+            </div>
+            {editError && <p className="text-[12px] text-rose">{editError}</p>}
+            <Input label="Label Schedule Version (opsional)" value={editLabel} onChange={(e) => setEditLabel(e.target.value)} placeholder="mis. Pindah karena bentrok ruangan" />
+            <p className="text-[11.5px] text-ink-400">Menyimpan akan langsung memvalidasi ulang dan membuat Schedule Version baru (histori perubahan).</p>
+            <div className="flex gap-2 pt-1">
+              <Button variant="primary" size="sm" loading={editSaving} onClick={runSaveEdit}>
+                Validasi &amp; Commit Perubahan
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* --- Delete Schedule (Bagian 28) --- */}
+      <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Hapus Jadwal">
+        {deleteTarget && (
+          <div className="flex flex-col gap-3">
+            <p className="text-[13px] text-ink-700">
+              {mapelMap.get(deleteTarget.subjectId)} — {kelasMap.get(deleteTarget.classId)} — {formatHari(deleteTarget.day)} jam ke-{deleteTarget.periodStart}
+            </p>
+            <p className="text-[12px] text-ink-500">
+              {deleteTarget.status === "committed"
+                ? "Jadwal ini sudah committed — akan diarsipkan (bukan dihapus permanen) supaya Schedule Version yang sudah tercatat tetap utuh."
+                : "Jadwal ini belum committed dan akan dihapus permanen."}
+            </p>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[12.5px] font-medium text-ink-700">Alasan (opsional)</label>
+              <textarea
+                value={deleteReason}
+                onChange={(e) => setDeleteReason(e.target.value)}
+                rows={2}
+                className="rounded-xl border border-border bg-surface px-3 py-2 text-[13px] text-ink-900 outline-none focus:border-brand-600/50"
+                placeholder="Catatan untuk diri sendiri, tidak tersimpan (History belum dibangun — step 18)"
+              />
+            </div>
+            {deleteError && <p className="text-[12px] text-rose">{deleteError}</p>}
+            <div className="flex gap-2 pt-1">
+              <Button variant="secondary" size="sm" onClick={() => setDeleteTarget(null)}>
+                Batal
+              </Button>
+              <Button variant="danger" size="sm" loading={deleting} onClick={runDelete}>
+                Konfirmasi Hapus
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+function SelectField({
+  label,
+  value,
+  onChange,
+  options,
+  allowEmpty,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: { id: string; label: string }[];
+  allowEmpty?: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className="text-[12.5px] font-medium text-ink-700">{label}</label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-11 rounded-xl border border-border bg-surface px-3 text-[13.5px] text-ink-900"
+      >
+        {allowEmpty && <option value="">— Tidak ada —</option>}
+        {!allowEmpty && !value && <option value="">Pilih...</option>}
+        {options.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between border-b border-border py-1.5 text-[13px] last:border-0">
+      <span className="text-ink-500">{label}</span>
+      <span className="font-medium text-ink-900">{value}</span>
+    </div>
+  );
+}
+
+function ConflictList({ conflicts }: { conflicts: ScheduleConflict[] }) {
+  if (conflicts.length === 0) {
+    return (
+      <div className="flex items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-2 text-[12.5px] text-emerald">
+        <CheckCircle2 size={14} /> Validasi berhasil, tidak ada konflik.
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-1.5">
+      {conflicts.map((c) => (
+        <div key={c.conflictId} className="flex items-start gap-1.5 rounded-xl bg-surface-muted px-3 py-2 text-[12px] text-ink-700">
+          <Badge tone={conflictTone(c.severity)}>{c.type}</Badge>
+          <span>{c.message}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function JadwalCell({
+  cell,
+  onClick,
+  entityLabel,
+  mapelLabel,
+  ruanganLabel,
+}: {
+  cell: GridCell;
+  onClick: () => void;
+  entityLabel?: string;
+  mapelLabel?: string;
+  ruanganLabel?: string;
+}) {
+  if (cell.state === "empty") {
+    if (!cell.jamPelajaran) {
+      return <div className="flex h-16 items-center justify-center text-[11px] text-ink-300">—</div>;
+    }
+    if (isEligibleForAdd(cell)) {
+      return (
+        <button
+          onClick={onClick}
+          className="flex h-16 w-full items-center justify-center gap-1 rounded-xl border border-dashed border-border text-[11.5px] text-ink-400 transition-colors hover:border-brand-600/40 hover:bg-brand-50 hover:text-brand-700"
+        >
+          <Plus size={13} /> Tambah Jadwal
+        </button>
+      );
+    }
+    return <div className="flex h-16 items-center justify-center text-[11px] text-ink-300">Nonaktif</div>;
+  }
+
+  if (cell.state === "fixed_activity") {
+    const label = cell.jamPelajaran?.jenis === "istirahat" ? "Istirahat" : cell.slotTemplate ? formatJenisSlot(cell.slotTemplate) : "Aktivitas Tetap";
+    return (
+      <div className="flex h-16 flex-col items-center justify-center gap-0.5 rounded-xl bg-surface-muted text-[11.5px] text-ink-500">
+        <Info size={13} />
+        {label}
+      </div>
+    );
+  }
+
+  const isConflict = cell.state === "conflict";
+
+  return (
+    <button
+      onClick={onClick}
+      className={`flex h-16 w-full flex-col justify-center gap-0.5 rounded-xl border px-2 py-1.5 text-left text-[11.5px] transition-colors ${
+        isConflict ? "border-rose bg-rose-50 hover:bg-rose-50/70" : "border-brand-600/20 bg-brand-50 hover:bg-brand-50/70"
+      }`}
+    >
+      <span className="truncate font-semibold text-ink-900">{mapelLabel ?? "-"}</span>
+      <span className="truncate text-ink-500">{entityLabel ?? "-"}</span>
+      {ruanganLabel && <span className="truncate text-ink-400">{ruanganLabel}</span>}
+      {isConflict ? (
+        <Badge tone="danger">
+          <AlertTriangle size={10} className="mr-0.5 inline" /> Konflik
+        </Badge>
+      ) : (
+        <Badge tone="success">Committed</Badge>
+      )}
+    </button>
+  );
+}

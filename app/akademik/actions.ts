@@ -14,6 +14,10 @@ import {
   type PeriodeAkademikDraft,
 } from "@/lib/domain/periodeAkademik";
 import { JamPelajaranValidationError, type JamPelajaran, type JamPelajaranDraft } from "@/lib/domain/jamPelajaran";
+import * as scheduleModelUseCases from "@/lib/application/scheduleModel.usecases";
+import * as slotTemplateUseCases from "@/lib/application/slotTemplate.usecases";
+import { ScheduleModelValidationError, type ScheduleModel, type ScheduleModelDraft } from "@/lib/domain/scheduleModel";
+import { SlotTemplateValidationError, type SlotTemplate, type SlotTemplateDraft } from "@/lib/domain/slotTemplate";
 
 export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -166,6 +170,90 @@ export async function deleteJamPelajaranAction(id: string): Promise<ActionResult
   }
 }
 
+// =========================================================
+// Bagian 20 / 84 — SCHEDULE MODEL
+// =========================================================
+
+export async function createScheduleModelAction(draft: ScheduleModelDraft): Promise<ActionResult<ScheduleModel>> {
+  try {
+    const supabase = await createClient();
+    const model = await scheduleModelUseCases.createScheduleModel(supabase, draft);
+    revalidatePath("/akademik");
+    return { ok: true, data: model };
+  } catch (err) {
+    return { ok: false, error: toScheduleModelMessage(err) };
+  }
+}
+
+export async function updateScheduleModelAction(id: string, draft: ScheduleModelDraft): Promise<ActionResult<ScheduleModel>> {
+  try {
+    const supabase = await createClient();
+    const model = await scheduleModelUseCases.updateScheduleModel(supabase, id, draft);
+    revalidatePath("/akademik");
+    return { ok: true, data: model };
+  } catch (err) {
+    return { ok: false, error: toScheduleModelMessage(err) };
+  }
+}
+
+export async function deleteScheduleModelAction(id: string): Promise<ActionResult<null>> {
+  try {
+    const supabase = await createClient();
+    await scheduleModelUseCases.deleteScheduleModel(supabase, id);
+    revalidatePath("/akademik");
+    return { ok: true, data: null };
+  } catch (err) {
+    return { ok: false, error: toScheduleModelMessage(err) };
+  }
+}
+
+// =========================================================
+// Bagian 20.2 — SLOT TEMPLATE
+// =========================================================
+
+export async function listSlotTemplateAction(scheduleModelId: string): Promise<ActionResult<SlotTemplate[]>> {
+  try {
+    const supabase = await createClient();
+    const list = await slotTemplateUseCases.listSlotTemplate(supabase, scheduleModelId);
+    return { ok: true, data: list };
+  } catch (err) {
+    return { ok: false, error: toSlotTemplateMessage(err) };
+  }
+}
+
+export async function createSlotTemplateAction(draft: SlotTemplateDraft): Promise<ActionResult<SlotTemplate>> {
+  try {
+    const supabase = await createClient();
+    const slot = await slotTemplateUseCases.createSlotTemplate(supabase, draft);
+    revalidatePath("/akademik");
+    return { ok: true, data: slot };
+  } catch (err) {
+    return { ok: false, error: toSlotTemplateMessage(err) };
+  }
+}
+
+export async function updateSlotTemplateAction(id: string, draft: SlotTemplateDraft): Promise<ActionResult<SlotTemplate>> {
+  try {
+    const supabase = await createClient();
+    const slot = await slotTemplateUseCases.updateSlotTemplate(supabase, id, draft);
+    revalidatePath("/akademik");
+    return { ok: true, data: slot };
+  } catch (err) {
+    return { ok: false, error: toSlotTemplateMessage(err) };
+  }
+}
+
+export async function deleteSlotTemplateAction(id: string): Promise<ActionResult<null>> {
+  try {
+    const supabase = await createClient();
+    await slotTemplateUseCases.deleteSlotTemplate(supabase, id);
+    revalidatePath("/akademik");
+    return { ok: true, data: null };
+  } catch (err) {
+    return { ok: false, error: toSlotTemplateMessage(err) };
+  }
+}
+
 function toContextMessage(err: unknown): string {
   if (err instanceof AcademicContextValidationError) return err.message;
   if (err instanceof Error) return err.message;
@@ -186,6 +274,18 @@ function toPeriodeMessage(err: unknown): string {
 
 function toJamMessage(err: unknown): string {
   if (err instanceof JamPelajaranValidationError) return err.message;
+  if (err instanceof Error) return err.message;
+  return "Terjadi kesalahan yang tidak diketahui.";
+}
+
+function toScheduleModelMessage(err: unknown): string {
+  if (err instanceof ScheduleModelValidationError) return err.message;
+  if (err instanceof Error) return err.message;
+  return "Terjadi kesalahan yang tidak diketahui.";
+}
+
+function toSlotTemplateMessage(err: unknown): string {
+  if (err instanceof SlotTemplateValidationError) return err.message;
   if (err instanceof Error) return err.message;
   return "Terjadi kesalahan yang tidak diketahui.";
 }

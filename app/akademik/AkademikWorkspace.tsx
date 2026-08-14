@@ -1,13 +1,28 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Plus, CheckCircle2, Trash2, Pencil, UserCog, GraduationCap, CalendarRange, Clock } from "lucide-react";
+import {
+  Plus,
+  CheckCircle2,
+  Trash2,
+  Pencil,
+  UserCog,
+  GraduationCap,
+  CalendarRange,
+  Clock,
+  CalendarClock,
+  ListChecks,
+} from "lucide-react";
 import type { AcademicContext, Semester } from "@/lib/domain/academicContext";
 import { formatContextLabel } from "@/lib/domain/academicContext";
 import type { SchoolProfile } from "@/lib/domain/schoolProfile";
 import type { PeriodeAkademik, PeriodeAkademikDraft, StatusAktif as PeriodeStatus } from "@/lib/domain/periodeAkademik";
 import type { HariSekolah, JamPelajaran, JamPelajaranDraft, JenisJamPelajaran } from "@/lib/domain/jamPelajaran";
 import { URUTAN_HARI, formatHari, calculateDurationMinutes } from "@/lib/domain/jamPelajaran";
+import type { ModeRuangan, PenggunaanRombel, ScheduleModel, ScheduleModelDraft } from "@/lib/domain/scheduleModel";
+import { formatModeRuangan, formatPenggunaanRombel } from "@/lib/domain/scheduleModel";
+import type { JenisSlot, SlotTemplate, SlotTemplateDraft } from "@/lib/domain/slotTemplate";
+import { formatJenisSlot } from "@/lib/domain/slotTemplate";
 import {
   createAcademicContextAction,
   setActiveAcademicContextAction,
@@ -19,24 +34,33 @@ import {
   createJamPelajaranAction,
   updateJamPelajaranAction,
   deleteJamPelajaranAction,
+  createScheduleModelAction,
+  updateScheduleModelAction,
+  deleteScheduleModelAction,
+  listSlotTemplateAction,
+  createSlotTemplateAction,
+  updateSlotTemplateAction,
+  deleteSlotTemplateAction,
 } from "./actions";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Modal from "@/components/ui/Modal";
 import { Card, Badge, EmptyState } from "@/components/ui/primitives";
 
-type Tab = "profil" | "periode" | "jam";
+type Tab = "profil" | "periode" | "jam" | "model";
 
 export default function AkademikWorkspace({
   initialProfile,
   initialContexts,
   initialPeriodeList,
   initialJamList,
+  initialScheduleModels,
 }: {
   initialProfile: SchoolProfile | null;
   initialContexts: AcademicContext[];
   initialPeriodeList: PeriodeAkademik[];
   initialJamList: JamPelajaran[];
+  initialScheduleModels: ScheduleModel[];
 }) {
   const [tab, setTab] = useState<Tab>("profil");
 
@@ -44,6 +68,7 @@ export default function AkademikWorkspace({
   const [contexts, setContexts] = useState<AcademicContext[]>(initialContexts);
   const [periodeList, setPeriodeList] = useState<PeriodeAkademik[]>(initialPeriodeList);
   const [jamList, setJamList] = useState<JamPelajaran[]>(initialJamList);
+  const [modelList, setModelList] = useState<ScheduleModel[]>(initialScheduleModels);
 
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
@@ -58,6 +83,18 @@ export default function AkademikWorkspace({
   const [jamModalOpen, setJamModalOpen] = useState(false);
   const [jamEditing, setJamEditing] = useState<JamPelajaran | null>(null);
   const [jamError, setJamError] = useState<string | null>(null);
+
+  const [modelModalOpen, setModelModalOpen] = useState(false);
+  const [modelEditing, setModelEditing] = useState<ScheduleModel | null>(null);
+  const [modelError, setModelError] = useState<string | null>(null);
+
+  // Slot Template dikelola per Schedule Model — dibuka lewat "Kelola Slot".
+  const [slotModel, setSlotModel] = useState<ScheduleModel | null>(null);
+  const [slotList, setSlotList] = useState<SlotTemplate[]>([]);
+  const [slotLoading, setSlotLoading] = useState(false);
+  const [slotFormOpen, setSlotFormOpen] = useState(false);
+  const [slotEditing, setSlotEditing] = useState<SlotTemplate | null>(null);
+  const [slotError, setSlotError] = useState<string | null>(null);
 
   const [isPending, startTransition] = useTransition();
 
@@ -245,6 +282,136 @@ export default function AkademikWorkspace({
     });
   }
 
+  // =========================================================
+  // Schedule Model (Bagian 20 / 84)
+  // =========================================================
+  function openCreateModel() {
+    setModelEditing(null);
+    setModelError(null);
+    setModelModalOpen(true);
+  }
+
+  function openEditModel(model: ScheduleModel) {
+    setModelEditing(model);
+    setModelError(null);
+    setModelModalOpen(true);
+  }
+
+  function handleSaveModel(formData: FormData) {
+    if (!activeContext) return;
+    const hariAktif = URUTAN_HARI.filter((h) => formData.get(`hariAktif_${h}`) === "on");
+    const hariLiburRaw = String(formData.get("hariLibur") ?? "");
+    const hariLibur = hariLiburRaw
+      .split(/[,\n]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const draft: ScheduleModelDraft = {
+      academicContextId: activeContext.id,
+      namaModel: String(formData.get("namaModel") ?? ""),
+      waktuMulai: String(formData.get("waktuMulai") ?? ""),
+      durasiStandarMenit: Number(formData.get("durasiStandarMenit") ?? 0),
+      maksJamPerHari: Number(formData.get("maksJamPerHari") ?? 0),
+      hariAktif,
+      hariLibur,
+      modeRuangan: (formData.get("modeRuangan") as ModeRuangan) ?? "opsional",
+      penggunaanRombel: (formData.get("penggunaanRombel") as PenggunaanRombel) ?? "seragam",
+      status: (formData.get("status") as PeriodeStatus) ?? "aktif",
+    };
+
+    startTransition(async () => {
+      const result = modelEditing
+        ? await updateScheduleModelAction(modelEditing.id, draft)
+        : await createScheduleModelAction(draft);
+
+      if (!result.ok) {
+        setModelError(result.error);
+        return;
+      }
+
+      setModelList((prev) => {
+        if (modelEditing) return prev.map((m) => (m.id === result.data.id ? result.data : m));
+        return [...prev, result.data].sort((a, b) => a.namaModel.localeCompare(b.namaModel));
+      });
+      setModelModalOpen(false);
+      setModelError(null);
+    });
+  }
+
+  function handleDeleteModel(model: ScheduleModel) {
+    if (!confirm(`Hapus Schedule Model "${model.namaModel}"? Slot Template di dalamnya ikut terhapus.`)) return;
+    startTransition(async () => {
+      const result = await deleteScheduleModelAction(model.id);
+      if (result.ok) setModelList((prev) => prev.filter((m) => m.id !== model.id));
+    });
+  }
+
+  // =========================================================
+  // Slot Template (Bagian 20.2) — dikelola per Schedule Model
+  // =========================================================
+  function openSlotManager(model: ScheduleModel) {
+    setSlotModel(model);
+    setSlotError(null);
+    setSlotLoading(true);
+    startTransition(async () => {
+      const result = await listSlotTemplateAction(model.id);
+      setSlotLoading(false);
+      if (result.ok) setSlotList(result.data);
+    });
+  }
+
+  function openCreateSlot() {
+    setSlotEditing(null);
+    setSlotError(null);
+    setSlotFormOpen(true);
+  }
+
+  function openEditSlot(slot: SlotTemplate) {
+    setSlotEditing(slot);
+    setSlotError(null);
+    setSlotFormOpen(true);
+  }
+
+  function handleSaveSlot(formData: FormData) {
+    if (!slotModel) return;
+    const jenisSlot = (formData.get("jenisSlot") as JenisSlot) ?? "belajar_mengajar";
+    const draft: SlotTemplateDraft = {
+      scheduleModelId: slotModel.id,
+      hari: (formData.get("hari") as HariSekolah) ?? "senin",
+      nomorUrut: Number(formData.get("nomorUrut") ?? 1),
+      jenisSlot,
+      namaCustom: jenisSlot === "custom" ? String(formData.get("namaCustom") ?? "") : null,
+    };
+
+    startTransition(async () => {
+      const result = slotEditing
+        ? await updateSlotTemplateAction(slotEditing.id, draft)
+        : await createSlotTemplateAction(draft);
+
+      if (!result.ok) {
+        setSlotError(result.error);
+        return;
+      }
+
+      setSlotList((prev) => {
+        const next = slotEditing ? prev.map((s) => (s.id === result.data.id ? result.data : s)) : [...prev, result.data];
+        return next.sort(
+          (a, b) => URUTAN_HARI.indexOf(a.hari) - URUTAN_HARI.indexOf(b.hari) || a.nomorUrut - b.nomorUrut
+        );
+      });
+      setSlotFormOpen(false);
+      setSlotError(null);
+    });
+  }
+
+  function handleDeleteSlot(slot: SlotTemplate) {
+    if (!confirm(`Hapus Slot Template "${formatJenisSlot(slot)}" (${formatHari(slot.hari)}, ke-${slot.nomorUrut})?`)) return;
+    startTransition(async () => {
+      const result = await deleteSlotTemplateAction(slot.id);
+      if (result.ok) setSlotList((prev) => prev.filter((s) => s.id !== slot.id));
+    });
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -263,6 +430,9 @@ export default function AkademikWorkspace({
         </TabButton>
         <TabButton active={tab === "jam"} onClick={() => setTab("jam")} icon={<Clock size={14} />}>
           Jam Pelajaran
+        </TabButton>
+        <TabButton active={tab === "model"} onClick={() => setTab("model")} icon={<CalendarClock size={14} />}>
+          Model Jadwal
         </TabButton>
       </div>
 
@@ -552,6 +722,99 @@ export default function AkademikWorkspace({
         </Card>
       )}
 
+      {tab === "model" && (
+        <Card className="p-0">
+          <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-3">
+            <div>
+              <p className="text-[14px] font-semibold text-ink-900">Model Jadwal (Schedule Model)</p>
+              <p className="text-[12.5px] text-ink-500">
+                {activeContext
+                  ? `Konfigurasi jadwal untuk konteks ${formatContextLabel(activeContext)} — bukan timetable, dasar untuk Jadwal Cerdas nanti.`
+                  : "Aktifkan satu konteks akademik dulu di tab Profil & Konteks."}
+              </p>
+            </div>
+            {activeContext && (
+              <Button size="sm" onClick={openCreateModel}>
+                <Plus size={14} /> Tambah Model
+              </Button>
+            )}
+          </div>
+
+          {!activeContext ? (
+            <EmptyState title="Belum ada konteks akademik aktif" description="Aktifkan konteks di tab Profil & Konteks terlebih dulu." />
+          ) : modelList.length === 0 ? (
+            <EmptyState
+              title="Belum ada Schedule Model"
+              description="Tambahkan model jadwal pertama untuk konteks ini."
+              action={
+                <Button size="sm" onClick={openCreateModel}>
+                  <Plus size={14} /> Tambah Model
+                </Button>
+              }
+            />
+          ) : (
+            <table className="w-full text-left text-[13px]">
+              <thead>
+                <tr className="border-b border-border text-[11.5px] uppercase tracking-wide text-ink-400">
+                  <th className="px-5 py-3 font-medium">Nama Model</th>
+                  <th className="px-5 py-3 font-medium">Mulai</th>
+                  <th className="px-5 py-3 font-medium">Durasi</th>
+                  <th className="px-5 py-3 font-medium">Maks JP/Hari</th>
+                  <th className="px-5 py-3 font-medium">Room Mode</th>
+                  <th className="px-5 py-3 font-medium">Status</th>
+                  <th className="px-5 py-3 font-medium text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody>
+                {modelList.map((model) => (
+                  <tr key={model.id} className="border-b border-border last:border-0 hover:bg-surface-muted/60">
+                    <td className="px-5 py-3.5 font-medium text-ink-900">{model.namaModel}</td>
+                    <td className="px-5 py-3.5 text-ink-700">{model.waktuMulai}</td>
+                    <td className="px-5 py-3.5 text-ink-500">{model.durasiStandarMenit} mnt</td>
+                    <td className="px-5 py-3.5 text-ink-500">{model.maksJamPerHari}</td>
+                    <td className="px-5 py-3.5">
+                      <Badge tone={model.modeRuangan === "wajib" ? "info" : model.modeRuangan === "opsional" ? "neutral" : "warning"}>
+                        {formatModeRuangan(model.modeRuangan)}
+                      </Badge>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <Badge tone={model.status === "aktif" ? "success" : "neutral"}>
+                        {model.status === "aktif" ? "Aktif" : "Nonaktif"}
+                      </Badge>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => openSlotManager(model)}
+                          className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-[12px] font-medium text-brand-600 hover:bg-brand-50"
+                        >
+                          <ListChecks size={14} /> Kelola Slot
+                        </button>
+                        <button
+                          onClick={() => openEditModel(model)}
+                          className="rounded-lg p-1.5 text-ink-400 hover:bg-brand-50 hover:text-brand-600"
+                          aria-label="Edit"
+                        >
+                          <Pencil size={15} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteModel(model)}
+                          disabled={isPending}
+                          className="rounded-lg p-1.5 text-ink-400 hover:bg-rose-50 hover:text-rose disabled:opacity-30"
+                          aria-label="Hapus"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Card>
+      )}
+
       {/* ================= Modal: Profil Admin ================= */}
       <Modal
         open={profileModalOpen}
@@ -682,7 +945,204 @@ export default function AkademikWorkspace({
           </div>
         </form>
       </Modal>
+
+      {/* ================= Modal: Schedule Model ================= */}
+      <Modal
+        open={modelModalOpen}
+        onClose={() => setModelModalOpen(false)}
+        title={modelEditing ? "Edit Schedule Model" : "Tambah Schedule Model"}
+      >
+        <form action={handleSaveModel} className="flex flex-col gap-4">
+          <Input name="namaModel" label="Nama Model" placeholder="cth. Model Reguler" defaultValue={modelEditing?.namaModel} required />
+          <div className="grid grid-cols-2 gap-3">
+            <Input name="waktuMulai" label="Waktu Mulai" type="time" defaultValue={modelEditing?.waktuMulai} required />
+            <Input
+              name="durasiStandarMenit"
+              label="Durasi Standar (menit)"
+              type="number"
+              min={1}
+              max={300}
+              defaultValue={modelEditing?.durasiStandarMenit ?? 45}
+              required
+            />
+          </div>
+          <Input
+            name="maksJamPerHari"
+            label="Maks Jam Pelajaran / Hari"
+            type="number"
+            min={1}
+            max={20}
+            defaultValue={modelEditing?.maksJamPerHari ?? 10}
+            required
+          />
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[12.5px] font-medium text-ink-700">Hari Aktif</label>
+            <div className="flex flex-wrap gap-3 rounded-xl border border-border bg-surface-muted/40 px-3.5 py-3">
+              {URUTAN_HARI.map((h) => (
+                <label key={h} className="flex items-center gap-1.5 text-[13px] text-ink-700">
+                  <input
+                    type="checkbox"
+                    name={`hariAktif_${h}`}
+                    defaultChecked={modelEditing ? modelEditing.hariAktif.includes(h) : h !== "minggu"}
+                  />
+                  {formatHari(h)}
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[12.5px] font-medium text-ink-700">Hari Libur</label>
+            <textarea
+              name="hariLibur"
+              placeholder="Pisahkan dengan koma atau baris baru, format YYYY-MM-DD, cth. 2026-08-17"
+              defaultValue={modelEditing?.hariLibur.join(", ")}
+              rows={2}
+              className="rounded-xl border border-border bg-surface px-3.5 py-2.5 text-[13px] text-ink-900 outline-none focus:border-brand-600/50 focus:ring-2 focus:ring-brand-600/15"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <SelectField name="modeRuangan" label="Room Mode" defaultValue={modelEditing?.modeRuangan ?? "opsional"}>
+              <option value="wajib">Wajib</option>
+              <option value="opsional">Opsional</option>
+              <option value="tidak_dipakai">Tidak Dipakai</option>
+            </SelectField>
+            <SelectField name="penggunaanRombel" label="Penggunaan Rombel" defaultValue={modelEditing?.penggunaanRombel ?? "seragam"}>
+              <option value="seragam">Seragam (semua rombel)</option>
+              <option value="per_rombel">Per Rombel</option>
+            </SelectField>
+          </div>
+          <SelectField name="status" label="Status" defaultValue={modelEditing?.status ?? "aktif"}>
+            <option value="aktif">Aktif</option>
+            <option value="nonaktif">Nonaktif</option>
+          </SelectField>
+          {modelError && <p className="text-[11.5px] text-rose">{modelError}</p>}
+          <div className="mt-2 flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => setModelModalOpen(false)}>
+              Batal
+            </Button>
+            <Button type="submit" loading={isPending}>
+              {modelEditing ? "Simpan Perubahan" : "Tambah Model"}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* ================= Modal: Kelola Slot Template ================= */}
+      <Modal
+        open={slotModel !== null}
+        onClose={() => {
+          setSlotModel(null);
+          setSlotList([]);
+        }}
+        title={slotModel ? `Slot Template — ${slotModel.namaModel}` : "Slot Template"}
+      >
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[12.5px] text-ink-500">
+              Slot selain "Belajar Mengajar" memblokir penempatan pengajaran biasa di jam tersebut.
+            </p>
+            <Button size="sm" onClick={openCreateSlot}>
+              <Plus size={14} /> Tambah Slot
+            </Button>
+          </div>
+
+          {slotLoading ? (
+            <p className="py-6 text-center text-[13px] text-ink-400">Memuat…</p>
+          ) : slotList.length === 0 ? (
+            <EmptyState title="Belum ada Slot Template" description="Semua jam mengikuti default Belajar Mengajar." />
+          ) : (
+            <div className="max-h-80 overflow-y-auto rounded-xl border border-border">
+              <table className="w-full text-left text-[13px]">
+                <thead>
+                  <tr className="border-b border-border text-[11.5px] uppercase tracking-wide text-ink-400">
+                    <th className="px-3 py-2 font-medium">Hari</th>
+                    <th className="px-3 py-2 font-medium">Ke</th>
+                    <th className="px-3 py-2 font-medium">Jenis</th>
+                    <th className="px-3 py-2 font-medium text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {slotList.map((slot) => (
+                    <tr key={slot.id} className="border-b border-border last:border-0 hover:bg-surface-muted/60">
+                      <td className="px-3 py-2.5 text-ink-700">{formatHari(slot.hari)}</td>
+                      <td className="px-3 py-2.5 text-ink-500">{slot.nomorUrut}</td>
+                      <td className="px-3 py-2.5">
+                        <Badge tone={slot.jenisSlot === "belajar_mengajar" ? "info" : "warning"}>{formatJenisSlot(slot)}</Badge>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => openEditSlot(slot)}
+                            className="rounded-lg p-1.5 text-ink-400 hover:bg-brand-50 hover:text-brand-600"
+                            aria-label="Edit"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteSlot(slot)}
+                            disabled={isPending}
+                            className="rounded-lg p-1.5 text-ink-400 hover:bg-rose-50 hover:text-rose disabled:opacity-30"
+                            aria-label="Hapus"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* ================= Modal: Form Slot Template ================= */}
+      <Modal open={slotFormOpen} onClose={() => setSlotFormOpen(false)} title={slotEditing ? "Edit Slot Template" : "Tambah Slot Template"}>
+        <form action={handleSaveSlot} className="flex flex-col gap-4">
+          <div className="grid grid-cols-2 gap-3">
+            <SelectField name="hari" label="Hari" defaultValue={slotEditing?.hari ?? "senin"}>
+              {URUTAN_HARI.map((h) => (
+                <option key={h} value={h}>
+                  {formatHari(h)}
+                </option>
+              ))}
+            </SelectField>
+            <Input name="nomorUrut" label="Jam Ke-" type="number" min={1} defaultValue={slotEditing?.nomorUrut ?? 1} required />
+          </div>
+          <p className="text-[11.5px] text-ink-400">Harus sesuai dengan slot yang sudah terdaftar di tab Jam Pelajaran.</p>
+          <SlotJenisField defaultValue={slotEditing?.jenisSlot ?? "belajar_mengajar"} defaultNamaCustom={slotEditing?.namaCustom ?? ""} />
+          {slotError && <p className="text-[11.5px] text-rose">{slotError}</p>}
+          <div className="mt-2 flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => setSlotFormOpen(false)}>
+              Batal
+            </Button>
+            <Button type="submit" loading={isPending}>
+              {slotEditing ? "Simpan Perubahan" : "Tambah Slot"}
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
+  );
+}
+
+function SlotJenisField({ defaultValue, defaultNamaCustom }: { defaultValue: JenisSlot; defaultNamaCustom: string }) {
+  const [jenis, setJenis] = useState<JenisSlot>(defaultValue);
+  return (
+    <>
+      <SelectField name="jenisSlot" label="Jenis Slot" defaultValue={defaultValue} onValueChange={(v) => setJenis(v as JenisSlot)}>
+        <option value="belajar_mengajar">Belajar Mengajar</option>
+        <option value="upacara">Upacara</option>
+        <option value="religi">Religi</option>
+        <option value="istirahat">Istirahat</option>
+        <option value="libur">Libur</option>
+        <option value="custom">Custom</option>
+      </SelectField>
+      {jenis === "custom" && (
+        <Input name="namaCustom" label="Nama Custom" placeholder="cth. Ekstrakurikuler" defaultValue={defaultNamaCustom} required />
+      )}
+    </>
   );
 }
 
@@ -723,11 +1183,13 @@ function SelectField({
   name,
   label,
   defaultValue,
+  onValueChange,
   children,
 }: {
   name: string;
   label: string;
   defaultValue: string;
+  onValueChange?: (value: string) => void;
   children: React.ReactNode;
 }) {
   return (
@@ -736,6 +1198,7 @@ function SelectField({
       <select
         name={name}
         defaultValue={defaultValue}
+        onChange={onValueChange ? (e) => onValueChange(e.target.value) : undefined}
         className="h-11 rounded-xl border border-border bg-surface px-3.5 text-[13.5px] text-ink-900 outline-none focus:border-brand-600/50 focus:ring-2 focus:ring-brand-600/15"
       >
         {children}
