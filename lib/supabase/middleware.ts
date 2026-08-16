@@ -32,14 +32,16 @@ export async function updateSession(request: NextRequest) {
 
   const isPublicPath = PUBLIC_PATHS.some((p) => request.nextUrl.pathname.startsWith(p));
 
-  if (!user && !isPublicPath) {
-    // Bagian 40: session expiry → redirect ke /login, bawa asal path supaya
-    // bisa balik lagi setelah login (Bagian 41: jangan pura-pura online).
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    url.searchParams.set("next", request.nextUrl.pathname);
-    return NextResponse.redirect(url);
-  }
+  // AUTH DINONAKTIFKAN SEMENTARA (permintaan eksplisit user) — gate redirect
+  // ke /login di-skip supaya semua route bisa diakses tanpa login. Untuk
+  // mengaktifkan lagi Bagian 40 (Authentication), un-comment blok di bawah.
+  //
+  // if (!user && !isPublicPath) {
+  //   const url = request.nextUrl.clone();
+  //   url.pathname = "/login";
+  //   url.searchParams.set("next", request.nextUrl.pathname);
+  //   return NextResponse.redirect(url);
+  // }
 
   if (user && request.nextUrl.pathname === "/login") {
     const url = request.nextUrl.clone();
