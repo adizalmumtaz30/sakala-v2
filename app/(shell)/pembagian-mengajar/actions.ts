@@ -134,7 +134,7 @@ export async function commitPembagianMengajarImportAction(
         skipped++;
         continue;
       }
-      await usecases.createPembagianMengajar(supabase, row.draft);
+      await usecases.createPembagianMengajar(supabase, row.draft, "import");
       imported++;
     }
 

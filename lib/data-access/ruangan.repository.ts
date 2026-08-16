@@ -29,6 +29,16 @@ export const ruanganRepository = {
     return (data as Row[]).map(rowToEntity);
   },
 
+  async findById(supabase: SupabaseClient, id: string): Promise<Ruangan | null> {
+    const { data, error } = await supabase
+      .from("ruangan")
+      .select("id, nama, kapasitas, tipe_ruangan, status")
+      .eq("id", id)
+      .maybeSingle();
+    if (error) throw error;
+    return data ? rowToEntity(data as Row) : null;
+  },
+
   async create(supabase: SupabaseClient, draft: RuanganDraft): Promise<Ruangan> {
     const { data, error } = await supabase
       .from("ruangan")

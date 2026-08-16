@@ -82,7 +82,7 @@ export async function commitGuruImportAction(
         skipped++;
         continue;
       }
-      await guruUseCases.createGuru(supabase, row.draft);
+      await guruUseCases.createGuru(supabase, row.draft, "import");
       imported++;
     }
 

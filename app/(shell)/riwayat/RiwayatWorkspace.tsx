@@ -107,9 +107,10 @@ export default function RiwayatWorkspace({
 
       <Card className="border-amber-200 bg-amber-50/60 !p-3.5">
         <p className="text-[12.5px] text-ink-600">
-          <strong className="text-ink-900">Cakupan saat ini:</strong> baru mencatat mutation Jadwal
-          (tambah, pindah, hapus, commit). Guru, Mata Pelajaran, Kelas, Ruangan, Pembagian Mengajar,
-          dan Import belum terhubung ke Riwayat — menyusul.
+          <strong className="text-ink-900">Cakupan saat ini:</strong> mencatat mutation Jadwal (tambah,
+          pindah, hapus, commit), serta Guru, Mata Pelajaran, Kelas, Ruangan, dan Pembagian Mengajar
+          (tambah, ubah, hapus — termasuk yang berasal dari Import). Modul lain di luar ini belum
+          terhubung ke Riwayat — menyusul.
         </p>
       </Card>
 

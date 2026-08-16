@@ -32,6 +32,16 @@ export const kelasRepository = {
     return (data as Row[]).map(rowToEntity);
   },
 
+  async findById(supabase: SupabaseClient, id: string): Promise<Kelas | null> {
+    const { data, error } = await supabase
+      .from("kelas")
+      .select("id, tingkat, nama_rombel, status, tahun_ajaran, semester")
+      .eq("id", id)
+      .maybeSingle();
+    if (error) throw error;
+    return data ? rowToEntity(data as Row) : null;
+  },
+
   async create(supabase: SupabaseClient, draft: KelasDraft): Promise<Kelas> {
     const { data, error } = await supabase
       .from("kelas")

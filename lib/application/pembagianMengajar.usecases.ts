@@ -10,6 +10,8 @@ import {
 } from "@/lib/domain/pembagianMengajar";
 import { pembagianMengajarRepository } from "@/lib/data-access/pembagianMengajar.repository";
 import { scheduleAssignmentRepository } from "@/lib/data-access/scheduleAssignment.repository";
+import { recordAuditEvent } from "@/lib/application/auditLog.usecases";
+import type { AuditSource } from "@/lib/domain/auditLog";
 
 const ASSIGNMENT_ACTIVE_STATUSES = new Set(["draft", "candidate", "committed"]);
 
@@ -73,11 +75,23 @@ async function assertNoDuplicateCombination(
 
 export async function createPembagianMengajar(
   supabase: SupabaseClient,
-  draft: PembagianMengajarDraft
+  draft: PembagianMengajarDraft,
+  source: AuditSource = "manual"
 ): Promise<PembagianMengajar> {
   validatePembagianMengajarDraft(draft);
   await assertNoDuplicateCombination(supabase, draft);
-  return pembagianMengajarRepository.create(supabase, draft);
+  const item = await pembagianMengajarRepository.create(supabase, draft);
+  await recordAuditEvent({
+    supabase,
+    academicContextId: item.academicContextId,
+    action: "create",
+    entityType: "pembagian_mengajar",
+    entityId: item.id,
+    entityLabel: null,
+    after: item,
+    source,
+  });
+  return item;
 }
 
 export async function updatePembagianMengajar(
@@ -87,7 +101,19 @@ export async function updatePembagianMengajar(
 ): Promise<PembagianMengajar> {
   validatePembagianMengajarDraft(draft);
   await assertNoDuplicateCombination(supabase, draft, id);
-  return pembagianMengajarRepository.update(supabase, id, draft);
+  const before = await pembagianMengajarRepository.findById(supabase, id);
+  const item = await pembagianMengajarRepository.update(supabase, id, draft);
+  await recordAuditEvent({
+    supabase,
+    academicContextId: item.academicContextId,
+    action: "edit",
+    entityType: "pembagian_mengajar",
+    entityId: id,
+    entityLabel: null,
+    before,
+    after: item,
+  });
+  return item;
 }
 
 export async function togglePembagianMengajarStatus(
@@ -95,7 +121,8 @@ export async function togglePembagianMengajarStatus(
   item: PembagianMengajar
 ): Promise<PembagianMengajar> {
   const nextStatus = item.status === "aktif" ? "nonaktif" : "aktif";
-  return pembagianMengajarRepository.update(supabase, item.id, {
+  // Lewat updatePembagianMengajar (bukan repository langsung) supaya toggle status ikut tercatat audit.
+  return updatePembagianMengajar(supabase, item.id, {
     academicContextId: item.academicContextId,
     guruId: item.guruId,
     mataPelajaranId: item.mataPelajaranId,
@@ -124,4 +151,13 @@ export async function deletePembagianMengajar(supabase: SupabaseClient, id: stri
   }
 
   await pembagianMengajarRepository.remove(supabase, id);
+  await recordAuditEvent({
+    supabase,
+    academicContextId: item.academicContextId,
+    action: "delete",
+    entityType: "pembagian_mengajar",
+    entityId: id,
+    entityLabel: null,
+    before: item,
+  });
 }

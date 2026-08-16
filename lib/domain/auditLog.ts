@@ -68,4 +68,9 @@ export const AUDIT_ACTION_LABEL: Record<AuditAction, string> = {
 export const AUDIT_ENTITY_LABEL: Record<string, string> = {
   schedule_assignment: "Jadwal",
   schedule_version: "Versi Jadwal",
+  guru: "Guru",
+  mata_pelajaran: "Mata Pelajaran",
+  kelas: "Kelas",
+  ruangan: "Ruangan",
+  pembagian_mengajar: "Pembagian Mengajar",
 };

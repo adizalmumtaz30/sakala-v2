@@ -81,7 +81,7 @@ export async function commitMapelImportAction(
         skipped++;
         continue;
       }
-      await usecases.createMataPelajaran(supabase, row.draft);
+      await usecases.createMataPelajaran(supabase, row.draft, "import");
       imported++;
     }
 
