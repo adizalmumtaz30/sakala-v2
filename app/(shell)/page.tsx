@@ -14,12 +14,17 @@ export default async function DashboardPage() {
     return (
       <div className="mx-auto flex max-w-4xl flex-col gap-6 pt-6">
         {/* Academic Context + Greeting (Bagian 31.1) */}
-        <div>
-          <p className="text-[12.5px] font-medium text-brand-600">
-            {summary.activeContext ? formatContextLabel(summary.activeContext) : "Belum ada konteks akademik aktif"}
-          </p>
-          <h1 className="text-[22px] font-bold text-ink-900">Selamat datang kembali</h1>
-          <p className="text-[13px] text-ink-500">Ringkasan kondisi {schoolName} saat ini.</p>
+        <div className="flex items-center gap-4">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl2 bg-brand-50 text-brand-600 shadow-soft">
+            <School size={22} strokeWidth={2.25} />
+          </div>
+          <div>
+            <p className="text-[12.5px] font-medium text-brand-600">
+              {summary.activeContext ? formatContextLabel(summary.activeContext) : "Belum ada konteks akademik aktif"}
+            </p>
+            <h1 className="text-[24px] font-bold tracking-tight text-ink-900">Selamat datang kembali</h1>
+            <p className="text-[13px] text-ink-500">Ringkasan kondisi {schoolName} saat ini.</p>
+          </div>
         </div>
 
         {!summary.activeContext ? (
@@ -63,30 +68,44 @@ export default async function DashboardPage() {
   }
 }
 
+const METRIC_TONE: Record<string, { chip: string; icon: string }> = {
+  brand: { chip: "bg-brand-50", icon: "text-brand-600" },
+  violet: { chip: "bg-violet-50", icon: "text-violet" },
+  cyan: { chip: "bg-cyan-50", icon: "text-cyan" },
+  amber: { chip: "bg-amber-50", icon: "text-amber" },
+  emerald: { chip: "bg-emerald-50", icon: "text-emerald" },
+};
+
 function KeyMetrics({ metrics }: { metrics: DashboardKeyMetrics }) {
-  const items: { label: string; value: number; href: string; icon: React.ReactNode }[] = [
-    { label: "Guru Aktif", value: metrics.totalGuruAktif, href: "/guru", icon: <Users size={16} /> },
-    { label: "Mata Pelajaran Aktif", value: metrics.totalMataPelajaranAktif, href: "/mata-pelajaran", icon: <BookOpen size={16} /> },
-    { label: "Kelas", value: metrics.totalKelas, href: "/kelas", icon: <School size={16} /> },
-    { label: "Ruangan", value: metrics.totalRuangan, href: "/ruangan", icon: <DoorOpen size={16} /> },
-    { label: "Pembagian Mengajar Aktif", value: metrics.totalPembagianMengajarAktif, href: "/pembagian-mengajar", icon: <ClipboardCheck size={16} /> },
-    { label: "Jadwal Committed", value: metrics.totalJadwalCommitted, href: "/jadwal", icon: <CalendarCheck2 size={16} /> },
+  const items: { label: string; value: number; href: string; icon: React.ReactNode; tone: keyof typeof METRIC_TONE }[] = [
+    { label: "Guru Aktif", value: metrics.totalGuruAktif, href: "/guru", icon: <Users size={17} />, tone: "brand" },
+    { label: "Mata Pelajaran Aktif", value: metrics.totalMataPelajaranAktif, href: "/mata-pelajaran", icon: <BookOpen size={17} />, tone: "violet" },
+    { label: "Kelas", value: metrics.totalKelas, href: "/kelas", icon: <School size={17} />, tone: "cyan" },
+    { label: "Ruangan", value: metrics.totalRuangan, href: "/ruangan", icon: <DoorOpen size={17} />, tone: "amber" },
+    { label: "Pembagian Mengajar Aktif", value: metrics.totalPembagianMengajarAktif, href: "/pembagian-mengajar", icon: <ClipboardCheck size={17} />, tone: "emerald" },
+    { label: "Jadwal Committed", value: metrics.totalJadwalCommitted, href: "/jadwal", icon: <CalendarCheck2 size={17} />, tone: "brand" },
   ];
 
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-      {items.map((item) => (
-        <Link
-          key={item.label}
-          href={item.href}
-          className="flex flex-col gap-2 rounded-card border border-border bg-surface p-4 transition-colors hover:border-brand-600/30 hover:bg-brand-50/40"
-        >
-          <span className="flex items-center gap-1.5 text-[11.5px] font-medium text-ink-500">
-            {item.icon} {item.label}
-          </span>
-          <span className="text-[22px] font-bold text-ink-900">{item.value}</span>
-        </Link>
-      ))}
+      {items.map((item) => {
+        const tone = METRIC_TONE[item.tone];
+        return (
+          <Link
+            key={item.label}
+            href={item.href}
+            className="group flex flex-col gap-3 rounded-card border border-border bg-surface p-4 shadow-soft transition-all hover:-translate-y-0.5 hover:border-brand-600/25 hover:shadow-float"
+          >
+            <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${tone.chip} ${tone.icon} transition-transform group-hover:scale-105`}>
+              {item.icon}
+            </span>
+            <div>
+              <span className="block text-[22px] font-bold leading-tight text-ink-900">{item.value}</span>
+              <span className="text-[11.5px] font-medium text-ink-500">{item.label}</span>
+            </div>
+          </Link>
+        );
+      })}
     </div>
   );
 }
@@ -109,11 +128,24 @@ function JpInsightCard({ insight }: { insight: DashboardJpInsight }) {
       ) : (
         <>
           <div className="mt-3 flex items-end gap-2">
-            <span className="text-[28px] font-bold text-ink-900">{insight.completionPercent}%</span>
+            <span
+              className={`text-[28px] font-bold ${
+                insight.completionPercent >= 100
+                  ? "text-emerald"
+                  : insight.completionPercent >= 50
+                    ? "text-ink-900"
+                    : "text-amber"
+              }`}
+            >
+              {insight.completionPercent}%
+            </span>
             <span className="pb-1 text-[12px] text-ink-400">dari {insight.totalKombinasi} kombinasi Guru+Mapel+Kelas</span>
           </div>
           <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-surface-muted">
-            <div className="h-full rounded-full bg-emerald transition-all" style={{ width: `${insight.completionPercent}%` }} />
+            <div
+              className={`h-full rounded-full transition-all ${insight.completionPercent >= 100 ? "bg-emerald" : "bg-brand-600"}`}
+              style={{ width: `${Math.min(insight.completionPercent, 100)}%` }}
+            />
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             {(Object.keys(insight.countByStatus) as (keyof typeof insight.countByStatus)[]).map((key) => (
@@ -141,14 +173,27 @@ function WorkloadCard({ entries }: { entries: DashboardWorkloadEntry[] }) {
       {entries.length === 0 ? (
         <p className="mt-3 text-[12.5px] text-ink-400">Belum ada jadwal committed untuk dihitung bebannya.</p>
       ) : (
-        <div className="mt-3 flex flex-col divide-y divide-border">
-          {entries.map((entry, i) => (
-            <div key={entry.guruId} className="flex items-center gap-3 py-2">
-              <span className="w-5 text-[11px] font-mono text-ink-300">{i + 1}</span>
-              <span className="flex-1 text-[13px] text-ink-900">{entry.namaGuru}</span>
-              <span className="text-[12.5px] font-medium text-ink-500">{entry.totalJamMengajar} JP/minggu</span>
-            </div>
-          ))}
+        <div className="mt-4 flex flex-col gap-3">
+          {(() => {
+            const max = Math.max(...entries.map((e) => e.totalJamMengajar), 1);
+            return entries.map((entry, i) => (
+              <div key={entry.guruId} className="flex items-center gap-3">
+                <span className="w-4 shrink-0 text-[11px] font-mono text-ink-300">{i + 1}</span>
+                <div className="flex-1">
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-[13px] text-ink-900">{entry.namaGuru}</span>
+                    <span className="text-[12px] font-medium text-ink-500">{entry.totalJamMengajar} JP/minggu</span>
+                  </div>
+                  <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-surface-muted">
+                    <div
+                      className="h-full rounded-full bg-brand-600/70 transition-all"
+                      style={{ width: `${Math.max((entry.totalJamMengajar / max) * 100, 4)}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            ));
+          })()}
         </div>
       )}
     </Card>
