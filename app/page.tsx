@@ -99,7 +99,7 @@ function JpInsightCard({ insight }: { insight: DashboardJpInsight }) {
     <Card>
       <div className="flex items-center justify-between">
         <h2 className="text-[14px] font-semibold text-ink-900">Kelengkapan Jadwal (Target JP)</h2>
-        <Link href="/pembagian-mengajar" className="flex items-center gap-1 text-[12px] font-medium text-brand-600 hover:text-brand-700">
+        <Link href="/pembagian-mengajar/target-jp" className="flex items-center gap-1 text-[12px] font-medium text-brand-600 hover:text-brand-700">
           Lihat detail <ArrowRight size={12} />
         </Link>
       </div>

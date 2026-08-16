@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Pencil, Trash2, Search, Upload } from "lucide-react";
+import Link from "next/link";
+import { Plus, Pencil, Trash2, Search, Upload, Target } from "lucide-react";
 import type { Guru } from "@/lib/domain/guru";
 import type { MataPelajaran } from "@/lib/domain/mata-pelajaran";
 import type { Kelas } from "@/lib/domain/kelas";
@@ -154,6 +155,12 @@ export default function PembagianMengajarWorkspace({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Link
+            href="/pembagian-mengajar/target-jp"
+            className="flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-[13px] font-medium text-ink-700 hover:bg-surface-muted"
+          >
+            <Target size={15} /> Target JP
+          </Link>
           <Button variant="secondary" onClick={() => setImportOpen(true)}>
             <Upload size={16} /> Import
           </Button>
