@@ -53,7 +53,7 @@ export async function moveAssignmentAction(
   id: string,
   changes: { day: HariSekolah; periodStart: number; periodEnd: number; roomId: string | null; classId?: string; subjectId?: string; teacherId?: string },
   label?: string
-): Promise<ActionResult<{ assignment: ScheduleAssignment; versionId: string }>> {
+): Promise<ActionResult<{ assignment: ScheduleAssignment; versionId: string; conflicts: ScheduleConflict[] }>> {
   try {
     const supabase = await createClient();
     const result = await scheduleAssignmentUseCases.moveAssignment(supabase, id, changes, label);

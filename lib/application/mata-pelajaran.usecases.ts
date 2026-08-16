@@ -10,6 +10,13 @@ export async function listMataPelajaran(supabase: SupabaseClient): Promise<MataP
   return mataPelajaranRepository.findAll(supabase);
 }
 
+export async function getMataPelajaranById(
+  supabase: SupabaseClient,
+  id: string
+): Promise<MataPelajaran | null> {
+  return mataPelajaranRepository.findById(supabase, id);
+}
+
 export async function createMataPelajaran(
   supabase: SupabaseClient,
   draft: MataPelajaranDraft

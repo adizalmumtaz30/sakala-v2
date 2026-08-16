@@ -62,18 +62,12 @@ export default function JadwalWorkspace({
   ruanganList: Ruangan[];
   assignments: ScheduleAssignment[];
 }) {
-  if (!activeContext) {
-    return (
-      <div className="mx-auto max-w-3xl pt-10">
-        <EmptyState
-          title="Belum ada konteks akademik aktif"
-          description="Aktifkan satu konteks akademik dulu di halaman Akademik sebelum membuka Jadwal."
-        />
-      </div>
-    );
-  }
-  const context = activeContext;
-
+  // PENTING (Rules of Hooks): guard early-return TIDAK BOLEH ditaruh sebelum hook
+  // apa pun — kalau activeContext null di satu render lalu terisi di render
+  // berikutnya (mis. setelah revalidatePath), jumlah hook yang dipanggil harus
+  // tetap identik di semua render, atau React error "Rendered more hooks than
+  // during the previous render". Jadi SEMUA hook (useState/useMemo) dipanggil
+  // dulu tanpa syarat di atas, guard dipindah ke bawah setelah hook terakhir.
   const activeModels = useMemo(() => scheduleModels.filter((m) => m.status === "aktif"), [scheduleModels]);
   const [selectedModelId, setSelectedModelId] = useState<string>(activeModels[0]?.id ?? "");
   const selectedModel = activeModels.find((m) => m.id === selectedModelId) ?? null;
@@ -162,6 +156,20 @@ export default function JadwalWorkspace({
   const [duplicateSource, setDuplicateSource] = useState<ScheduleAssignment | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
+  // Guard SETELAH semua hook (lihat catatan di atas) — aman dari pelanggaran
+  // Rules of Hooks karena tidak ada hook lagi di bawah titik ini.
+  if (!activeContext) {
+    return (
+      <div className="mx-auto max-w-3xl pt-10">
+        <EmptyState
+          title="Belum ada konteks akademik aktif"
+          description="Aktifkan satu konteks akademik dulu di halaman Akademik sebelum membuka Jadwal."
+        />
+      </div>
+    );
+  }
+  const context = activeContext;
+
   function openAdd(day: HariSekolah, nomorUrut: number) {
     setAddTarget({ day, nomorUrut });
     setAddConflicts(null);
@@ -238,7 +246,7 @@ export default function JadwalWorkspace({
       setAddError(result.error);
       return;
     }
-    setToast(commit ? "Jadwal berhasil disimpan dan di-commit." : "Jadwal berhasil disimpan sebagai draft (lihat di Jadwal Cerdas → Review & Commit).");
+    setToast(commit ? buildCommitToast("Jadwal berhasil disimpan dan di-commit.", result.data.conflicts) : "Jadwal berhasil disimpan sebagai draft (lihat di Jadwal Cerdas → Review & Commit).");
     closeAdd();
   }
 
@@ -280,7 +288,7 @@ export default function JadwalWorkspace({
       setEditError(result.error);
       return;
     }
-    setToast("Jadwal berhasil diperbarui dan tercatat sebagai versi baru.");
+    setToast(buildCommitToast("Jadwal berhasil diperbarui dan tercatat sebagai versi baru.", result.data.conflicts));
     setEditTarget(null);
   }
 
@@ -709,6 +717,19 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+/**
+ * Bagian 22.5 (JP_MISMATCH) & non-blocking conflict lain hasil commit —
+ * blocking sudah dicegah di lapisan usecases, jadi apa pun yang tersisa di
+ * sini murni catatan non-blocking. Digabung ke toast singkat supaya tidak
+ * dibuang begitu saja setelah Tambah Jadwal / Pindah Jadwal, konsisten
+ * dengan pola "postCommitConflicts" di app/jadwal-cerdas.
+ */
+function buildCommitToast(base: string, conflicts: ScheduleConflict[]): string {
+  const nonBlocking = conflicts.filter((c) => !c.blocking);
+  if (nonBlocking.length === 0) return base;
+  return `${base} Catatan: ${nonBlocking.map((c) => c.message).join(" ")}`;
+}
+
 function ConflictList({ conflicts }: { conflicts: ScheduleConflict[] }) {
   if (conflicts.length === 0) {
     return (
@@ -774,13 +795,13 @@ function JadwalCell({
   return (
     <button
       onClick={onClick}
-      className={`flex h-16 w-full flex-col justify-center gap-0.5 rounded-xl border px-2 py-1.5 text-left text-[11.5px] transition-colors ${
+      className={`flex min-h-16 w-full flex-col justify-center gap-0.5 rounded-xl border px-2 py-1.5 text-left text-[11.5px] transition-colors ${
         isConflict ? "border-rose bg-rose-50 hover:bg-rose-50/70" : "border-brand-600/20 bg-brand-50 hover:bg-brand-50/70"
       }`}
     >
-      <span className="truncate font-semibold text-ink-900">{mapelLabel ?? "-"}</span>
-      <span className="truncate text-ink-500">{entityLabel ?? "-"}</span>
-      {ruanganLabel && <span className="truncate text-ink-400">{ruanganLabel}</span>}
+      <span className="break-words font-semibold leading-snug text-ink-900">{mapelLabel ?? "-"}</span>
+      <span className="break-words leading-snug text-ink-500">{entityLabel ?? "-"}</span>
+      {ruanganLabel && <span className="break-words leading-snug text-ink-400">{ruanganLabel}</span>}
       {isConflict ? (
         <Badge tone="danger">
           <AlertTriangle size={10} className="mr-0.5 inline" /> Konflik

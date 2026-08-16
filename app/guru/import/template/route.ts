@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { buildTemplateWorkbook, type TemplateColumn } from "@/lib/import/template";
+import { bufferToBodyInit } from "@/lib/utils/response";
 
 // Template resmi Guru (Bagian 19-22): kolom wajib hanya NamaLengkap, sisanya opsional.
 const columns: TemplateColumn[] = [
@@ -19,11 +20,10 @@ export async function GET() {
     ["nonaktif"],
   ]);
 
-  return new NextResponse(new Uint8Array(buffer), {
+  return new NextResponse(bufferToBodyInit(buffer), {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "Content-Disposition": 'attachment; filename="Template_Guru_SAKALA_V2.3.xlsx"',
     },
   });
 }
-

@@ -28,6 +28,7 @@ const dataSubnav = [
   { label: "Mata Pelajaran", href: "/mata-pelajaran" },
   { label: "Kelas", href: "/kelas" },
   { label: "Ruangan", href: "/ruangan" },
+  { label: "Pembagian Mengajar", href: "/pembagian-mengajar" },
 ];
 
 export default function Sidebar() {

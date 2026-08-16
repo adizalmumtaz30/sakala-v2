@@ -105,14 +105,14 @@ export async function commitAssignmentsAction(
   assignmentIds: string[],
   label: string,
   changeSummary: string | null
-): Promise<ActionResult<{ versionId: string }>> {
+): Promise<ActionResult<{ versionId: string; conflictsByAssignment: Record<string, ScheduleConflict[]> }>> {
   try {
     const supabase = await createClient();
     const result = await scheduleAssignmentUseCases.commitAssignments(supabase, academicContextId, assignmentIds, label, changeSummary);
     revalidatePath("/jadwal-cerdas");
     revalidatePath("/jadwal");
     revalidatePath("/");
-    return { ok: true, data: { versionId: result.versionId } };
+    return { ok: true, data: { versionId: result.versionId, conflictsByAssignment: result.conflictsByAssignment } };
   } catch (err) {
     return { ok: false, error: toMessage(err) };
   }

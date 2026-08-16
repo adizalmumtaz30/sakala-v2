@@ -16,9 +16,11 @@ import { jamPelajaranRepository } from "@/lib/data-access/jamPelajaran.repositor
 import { slotTemplateRepository } from "@/lib/data-access/slotTemplate.repository";
 import { scheduleModelRepository } from "@/lib/data-access/scheduleModel.repository";
 import { scheduleAssignmentRepository } from "@/lib/data-access/scheduleAssignment.repository";
+import { pembagianMengajarRepository } from "@/lib/data-access/pembagianMengajar.repository";
 import { isFixedSlot } from "@/lib/domain/slotTemplate";
 import { periodsOverlap, type ScheduleAssignmentDraft } from "@/lib/domain/scheduleAssignment";
-import { isBlockingSeverity, nextConflictId, type ScheduleConflict } from "@/lib/domain/conflict";
+import { summarizeJp } from "@/lib/domain/pembagianMengajar";
+import { isBlockingSeverity, nextConflictId, toJpReconciliationState, type ScheduleConflict } from "@/lib/domain/conflict";
 
 /**
  * Menjalankan seluruh pengecekan Bagian 22 (invariant) terhadap satu
@@ -208,6 +210,70 @@ export async function validateAssignmentCandidate(
   }
   if (ruangan && ruangan.status === "nonaktif") {
     conflicts.push(inactiveConflict("room", ruangan.id, "Ruangan", draft.status));
+  }
+
+  // --- JP_MISMATCH (Bagian 22.5) — target JP per minggu (Pembagian Mengajar,
+  // Bagian 35-36/72-75) vs jadwal yang SUDAH COMMITTED untuk kombinasi
+  // Guru+Mapel+Kelas yang sama. Spesifikasi eksplisit bunyinya "committed
+  // schedule must reconcile" — sengaja HANYA dievaluasi saat kandidat ini
+  // sendiri berstatus "committed", supaya menyusun draft/candidate secara
+  // bertahap tidak berisik dengan warning "belum lengkap" tiap nambah baris
+  // (Jadwal Cerdas sudah menampilkan JP tersisa live, lihat
+  // app/jadwal-cerdas/JadwalCerdasWorkspace.tsx). Hanya berlaku untuk
+  // activityType "belajar_mengajar" — aktivitas tetap (Upacara dll.) tidak
+  // punya target JP. Kombinasi tanpa Pembagian Mengajar aktif dilewati
+  // (additive by design, bukan semua assignment wajib punya target).
+  if (draft.activityType === "belajar_mengajar" && draft.status === "committed") {
+    const target = await pembagianMengajarRepository.findActiveByCombination(
+      supabase,
+      draft.academicContextId,
+      draft.teacherId,
+      draft.subjectId,
+      draft.classId
+    );
+    if (target) {
+      const semuaAssignmentKonteks = await scheduleAssignmentRepository.findByContext(supabase, draft.academicContextId);
+      const jpCommittedLain = semuaAssignmentKonteks
+        .filter(
+          (a) =>
+            a.id !== excludeId &&
+            a.status === "committed" &&
+            a.teacherId === draft.teacherId &&
+            a.subjectId === draft.subjectId &&
+            a.classId === draft.classId
+        )
+        .reduce((sum, a) => sum + (a.periodEnd - a.periodStart + 1), 0);
+      const totalJpCommitted = jpCommittedLain + (draft.periodEnd - draft.periodStart + 1);
+      const { jpTersisa, status } = summarizeJp(target.jpPerMinggu, totalJpCommitted);
+      const state = toJpReconciliationState(status);
+
+      if (state === "over") {
+        conflicts.push(
+          makeConflict(
+            "warning",
+            "JP_MISMATCH",
+            "schedule",
+            [],
+            [],
+            `Total JP committed untuk kombinasi Guru+Mapel+Kelas ini menjadi ${totalJpCommitted} JP, melebihi target ${target.jpPerMinggu} JP/minggu di Pembagian Mengajar.`,
+            "Kurangi rentang periode assignment ini, arsipkan/pindahkan assignment committed lain pada kombinasi yang sama, atau naikkan Target JP per Minggu di Pembagian Mengajar."
+          )
+        );
+      } else if (state === "incomplete") {
+        conflicts.push(
+          makeConflict(
+            "info",
+            "JP_MISMATCH",
+            "schedule",
+            [],
+            [],
+            `Setelah commit ini, kombinasi Guru+Mapel+Kelas mencapai ${totalJpCommitted} dari target ${target.jpPerMinggu} JP/minggu (sisa ${jpTersisa} JP belum committed).`,
+            "Tambahkan assignment committed lain untuk kombinasi ini sampai target JP terpenuhi, atau abaikan kalau memang sengaja dijadwalkan bertahap."
+          )
+        );
+      }
+      // state === "complete" — target pas terpenuhi, tidak ada conflict.
+    }
   }
 
   return conflicts;

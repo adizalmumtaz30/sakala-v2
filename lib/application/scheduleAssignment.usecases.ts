@@ -130,7 +130,11 @@ export async function addAssignment(
   }
   const result = await commitAssignments(supabase, draft.academicContextId, [saved.assignment.id], label ?? "Tambah jadwal manual", null);
   const committed = await scheduleAssignmentRepository.findById(supabase, saved.assignment.id);
-  return { assignment: committed ?? saved.assignment, conflicts: saved.conflicts, versionId: result.versionId };
+  // Bagian 22.5 (JP_MISMATCH) hanya dievaluasi Conflict Engine saat status
+  // sudah "committed" — pakai conflictsByAssignment hasil commit (bukan
+  // saved.conflicts yang masih level draft) supaya reconciliation JP ikut
+  // terlihat oleh pemanggil, bukan cuma dihitung lalu dibuang.
+  return { assignment: committed ?? saved.assignment, conflicts: result.conflictsByAssignment[saved.assignment.id] ?? saved.conflicts, versionId: result.versionId };
 }
 
 /**
@@ -149,7 +153,7 @@ export async function moveAssignment(
   id: string,
   changes: { day: ScheduleAssignmentDraft["day"]; periodStart: number; periodEnd: number; roomId: string | null; classId?: string; subjectId?: string; teacherId?: string },
   label?: string
-): Promise<{ assignment: ScheduleAssignment; versionId: string }> {
+): Promise<{ assignment: ScheduleAssignment; versionId: string; conflicts: ScheduleConflict[] }> {
   const existing = await scheduleAssignmentRepository.findById(supabase, id);
   if (!existing) {
     throw new ScheduleAssignmentValidationError("id", "Assignment tidak ditemukan.");
@@ -175,8 +179,12 @@ export async function moveAssignment(
   if (!moved) {
     throw new ScheduleAssignmentValidationError("id", "Assignment tidak ditemukan setelah dipindahkan.");
   }
-  return { assignment: moved, versionId: result.versionId };
+  // Sama seperti addAssignment() — conflictsByAssignment hasil commit
+  // dikembalikan supaya JP_MISMATCH (dan non-blocking conflict lain) ikut
+  // terlihat setelah pindah jadwal, bukan cuma dihitung lalu dibuang.
+  return { assignment: moved, versionId: result.versionId, conflicts: result.conflictsByAssignment[id] ?? [] };
 }
+
 
 /**
  * Bagian 21.3 / 68 — "CANDIDATE tidak boleh mengubah COMMITTED SCHEDULE

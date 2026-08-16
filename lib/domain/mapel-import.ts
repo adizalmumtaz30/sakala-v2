@@ -1,7 +1,17 @@
 // Domain layer — validasi baris import Mata Pelajaran. Fungsi murni, sama pola
 // dengan guru-import.ts (Bagian 33-34: import Mapel mengikuti pola Guru).
+//
+// Pack 09b (lanjutan): kolom baru Kelompok/WarnaJadwal/PrioritasPenjadwalan/
+// JenisMapel ikut divalidasi — semua optional, tidak memblokir baris jika kosong
+// atau tidak ada di file (Bagian 22-23).
 
-import type { StatusAktif, MataPelajaranDraft } from "./mata-pelajaran";
+import type {
+  StatusAktif,
+  MataPelajaranDraft,
+  PrioritasPenjadwalan,
+  JenisMapel,
+} from "./mata-pelajaran";
+import { PRIORITAS_OPTIONS, JENIS_MAPEL_OPTIONS } from "./mata-pelajaran";
 
 export interface MapelImportIssue {
   column: string;
@@ -15,6 +25,22 @@ export interface MapelImportRowResult {
   status: "valid" | "perlu_diperbaiki";
   issues: MapelImportIssue[];
   draft: MataPelajaranDraft;
+}
+
+const HEX_COLOR_PATTERN = /^#[0-9A-Fa-f]{6}$/;
+
+function parsePrioritas(raw: string): { value?: PrioritasPenjadwalan; invalid: boolean } {
+  const trimmed = raw.trim().toLowerCase();
+  if (!trimmed) return { invalid: false };
+  const match = PRIORITAS_OPTIONS.find((p) => p === trimmed);
+  return match ? { value: match, invalid: false } : { invalid: true };
+}
+
+function parseJenis(raw: string): { value?: JenisMapel; invalid: boolean } {
+  const trimmed = raw.trim().toLowerCase().replace(/\s+/g, "_");
+  if (!trimmed) return { invalid: false };
+  const match = JENIS_MAPEL_OPTIONS.find((j) => j === trimmed);
+  return match ? { value: match, invalid: false } : { invalid: true };
 }
 
 export function validateMapelImportRows(
@@ -31,7 +57,11 @@ export function validateMapelImportRows(
     const kode = (raw["KodeMapel"] ?? raw["Kode"] ?? "").trim();
     const statusRaw = (raw["StatusAktif"] ?? "aktif").trim().toLowerCase();
     const status: StatusAktif = statusRaw === "nonaktif" ? "nonaktif" : "aktif";
-    const targetJpRaw = (raw["TargetJPPerRombel"] ?? "").trim();
+    const targetJpRaw = (raw["TargetJPPerRombel"] ?? raw["JP"] ?? "").trim();
+    const kelompok = (raw["Kelompok"] ?? "").trim();
+    const warnaJadwal = (raw["WarnaJadwal"] ?? "").trim();
+    const prioritasRaw = (raw["PrioritasPenjadwalan"] ?? "").trim();
+    const jenisRaw = (raw["JenisMapel"] ?? "").trim();
 
     const issues: MapelImportIssue[] = [];
 
@@ -47,6 +77,26 @@ export function validateMapelImportRows(
       } else {
         targetJpPerRombel = parsed;
       }
+    }
+
+    if (warnaJadwal && !HEX_COLOR_PATTERN.test(warnaJadwal)) {
+      issues.push({ column: "WarnaJadwal", message: `"${warnaJadwal}" harus format hex, mis. #6366F1.` });
+    }
+
+    const prioritas = parsePrioritas(prioritasRaw);
+    if (prioritas.invalid) {
+      issues.push({
+        column: "PrioritasPenjadwalan",
+        message: `"${prioritasRaw}" tidak dikenali. Gunakan: tinggi, normal, atau rendah.`,
+      });
+    }
+
+    const jenis = parseJenis(jenisRaw);
+    if (jenis.invalid) {
+      issues.push({
+        column: "JenisMapel",
+        message: `"${jenisRaw}" tidak dikenali. Lihat sheet REFERENSI untuk nilai yang valid.`,
+      });
     }
 
     if (kode) {
@@ -81,7 +131,16 @@ export function validateMapelImportRows(
       kode,
       status: issues.length === 0 ? "valid" : "perlu_diperbaiki",
       issues,
-      draft: { nama, kode, status, targetJpPerRombel },
+      draft: {
+        nama,
+        kode,
+        status,
+        targetJpPerRombel,
+        kelompok: kelompok || undefined,
+        warnaJadwal: warnaJadwal || undefined,
+        prioritasPenjadwalan: prioritas.value,
+        jenisMapel: jenis.value,
+      },
     };
   });
 }

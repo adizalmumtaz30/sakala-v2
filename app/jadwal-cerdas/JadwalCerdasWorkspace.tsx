@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { Plus, Trash2, Sparkles, Wand2, CheckCircle2, AlertTriangle, Info, RefreshCw } from "lucide-react";
+import { Plus, Trash2, Sparkles, Wand2, CheckCircle2, AlertTriangle, Info, RefreshCw, ListChecks } from "lucide-react";
 import type { AcademicContext } from "@/lib/domain/academicContext";
 import { formatContextLabel } from "@/lib/domain/academicContext";
 import type { ScheduleModel } from "@/lib/domain/scheduleModel";
@@ -10,6 +10,7 @@ import type { Kelas } from "@/lib/domain/kelas";
 import type { MataPelajaran } from "@/lib/domain/mata-pelajaran";
 import type { Ruangan } from "@/lib/domain/ruangan";
 import type { ScheduleAssignment } from "@/lib/domain/scheduleAssignment";
+import type { PembagianMengajar } from "@/lib/domain/pembagianMengajar";
 import { formatHari, URUTAN_HARI } from "@/lib/domain/jamPelajaran";
 import type { JenisSlot } from "@/lib/domain/slotTemplate";
 import { formatJenisSlot } from "@/lib/domain/slotTemplate";
@@ -75,6 +76,7 @@ export default function JadwalCerdasWorkspace({
   mapelList,
   ruanganList,
   candidateAssignments,
+  pembagianMengajarList,
 }: {
   activeContext: AcademicContext | null;
   scheduleModels: ScheduleModel[];
@@ -83,6 +85,7 @@ export default function JadwalCerdasWorkspace({
   mapelList: MataPelajaran[];
   ruanganList: Ruangan[];
   candidateAssignments: ScheduleAssignment[];
+  pembagianMengajarList: PembagianMengajar[];
 }) {
   const [tab, setTab] = useState<Tab>("generate");
   const [isPending, startTransition] = useTransition();
@@ -107,6 +110,7 @@ export default function JadwalCerdasWorkspace({
   const [changeSummary, setChangeSummary] = useState("");
   const [commitMessage, setCommitMessage] = useState<string | null>(null);
   const [commitErr, setCommitErr] = useState<string | null>(null);
+  const [postCommitConflicts, setPostCommitConflicts] = useState<ScheduleConflict[]>([]);
 
   const guruMap = useMemo(() => new Map(guruList.map((g) => [g.id, g.namaGuru])), [guruList]);
   const kelasMap = useMemo(() => new Map(kelasList.map((k) => [k.id, `${k.tingkat} ${k.namaRombel}`])), [kelasList]);
@@ -130,11 +134,38 @@ export default function JadwalCerdasWorkspace({
   // otomatis menembus closure yang dideklarasikan setelahnya.
   const context = activeContext;
 
-  function addRow() {
+  function addRow(prefill?: Partial<RequirementRow>) {
     setRows((prev) => [
       ...prev,
-      { clientId: nextRowId(), classId: "", subjectId: "", teacherId: "", roomId: "", activityType: "belajar_mengajar", jpTarget: 1, jpTouched: false },
+      {
+        clientId: nextRowId(),
+        classId: "",
+        subjectId: "",
+        teacherId: "",
+        roomId: "",
+        activityType: "belajar_mengajar",
+        jpTarget: 1,
+        jpTouched: false,
+        ...prefill,
+      },
     ]);
+  }
+
+  /**
+   * Bagian 73: quick-add dari Pembagian Mengajar — prefill kelas/mapel/guru
+   * otomatis, jpTarget dipakai dari JP TERSISA (bukan JP total), supaya tidak
+   * generate ulang porsi yang sudah dijadwalkan. jpTouched: true supaya tidak
+   * ketimpa efek pre-fill targetJpPerRombel Mata Pelajaran di updateRow().
+   */
+  function addRowFromPembagianMengajar(item: PembagianMengajar) {
+    const jpTersisa = item.jpTersisa ?? item.jpPerMinggu;
+    addRow({
+      classId: item.kelasId,
+      subjectId: item.mataPelajaranId,
+      teacherId: item.guruId,
+      jpTarget: Math.max(jpTersisa, 1),
+      jpTouched: true,
+    });
   }
 
   function updateRow(clientId: string, patch: Partial<RequirementRow>) {
@@ -273,6 +304,7 @@ export default function JadwalCerdasWorkspace({
   function runCommit() {
     setCommitErr(null);
     setCommitMessage(null);
+    setPostCommitConflicts([]);
     const ids = Array.from(selectedIds);
     if (ids.length === 0) {
       setCommitErr("Pilih minimal satu candidate untuk di-commit.");
@@ -289,6 +321,11 @@ export default function JadwalCerdasWorkspace({
         return;
       }
       setCommitMessage(`Berhasil commit — Schedule Version baru dibuat (${result.data.versionId}).`);
+      // Blocking conflict sudah dicegah di lapisan usecases (batch dibatalkan
+      // seluruhnya kalau ada) — sisa di sini murni non-blocking (mis.
+      // JP_MISMATCH Bagian 22.5), ditampilkan sebagai info pasca-commit,
+      // bukan untuk mencegah apa pun.
+      setPostCommitConflicts(Object.values(result.data.conflictsByAssignment).flat());
       setSelectedIds(new Set());
       setLabel("");
       setChangeSummary("");
@@ -357,9 +394,57 @@ export default function JadwalCerdasWorkspace({
 
               <Card className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-[13px] font-semibold text-ink-900">2. Load Constraints (kebutuhan penempatan)</p>
-                  <Button variant="secondary" size="sm" onClick={addRow}>
-                    <Plus size={14} /> Tambah Baris
+                  <div>
+                    <p className="text-[13px] font-semibold text-ink-900">2. Pilih dari Pembagian Mengajar (opsional)</p>
+                    <p className="text-[12px] text-ink-500">
+                      Cara paling aman — otomatis mengisi Kelas + Mapel + Guru + sisa JP, mengurangi salah pilih (Bagian 73).
+                    </p>
+                  </div>
+                </div>
+
+                {pembagianMengajarList.length === 0 ? (
+                  <p className="py-3 text-center text-[12.5px] text-ink-400">
+                    Belum ada Pembagian Mengajar aktif. Kelola di menu Data → Pembagian Mengajar, atau lewati dan isi baris manual di bawah.
+                  </p>
+                ) : (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {pembagianMengajarList.map((item) => {
+                      const jpTersisa = item.jpTersisa ?? item.jpPerMinggu;
+                      const habis = jpTersisa <= 0;
+                      return (
+                        <div
+                          key={item.id}
+                          className="flex items-center justify-between gap-2 rounded-xl border border-border px-3.5 py-2.5"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-[13px] font-medium text-ink-900">{item.guruNama ?? "—"}</p>
+                            <p className="truncate text-[12px] text-ink-400">
+                              {item.mataPelajaranNama ?? "—"} · {item.kelasLabel ?? "—"}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <Badge tone={habis ? "neutral" : "info"}>{jpTersisa} JP tersisa</Badge>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              disabled={habis}
+                              onClick={() => addRowFromPembagianMengajar(item)}
+                            >
+                              <ListChecks size={13} /> Pakai
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </Card>
+
+              <Card className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-[13px] font-semibold text-ink-900">3. Load Constraints (kebutuhan penempatan)</p>
+                  <Button variant="secondary" size="sm" onClick={() => addRow()}>
+                    <Plus size={14} /> Tambah Baris Manual
                   </Button>
                 </div>
 
@@ -484,7 +569,7 @@ export default function JadwalCerdasWorkspace({
 
               {preview && (
                 <Card className="space-y-3">
-                  <p className="text-[13px] font-semibold text-ink-900">3. Hasil Generate (preview, belum tersimpan)</p>
+                  <p className="text-[13px] font-semibold text-ink-900">4. Hasil Generate (preview, belum tersimpan)</p>
                   <div className="space-y-2">
                     {preview.outcomes.map((o) => (
                       <div key={o.requirementId} className="flex items-center justify-between rounded-lg bg-surface-muted px-3 py-2 text-[12.5px]">
@@ -679,6 +764,17 @@ export default function JadwalCerdasWorkspace({
                 <p className="flex items-center gap-1.5 text-[12.5px] text-emerald">
                   <CheckCircle2 size={13} /> {commitMessage}
                 </p>
+              )}
+              {postCommitConflicts.length > 0 && (
+                <div className="space-y-1.5 rounded-lg border border-border/60 bg-surface-muted/50 p-2.5">
+                  <p className="text-[12px] font-medium text-ink-700">Catatan non-blocking pasca-commit:</p>
+                  {postCommitConflicts.map((c) => (
+                    <p key={c.conflictId} className="flex items-start gap-1.5 text-[12px] text-ink-500">
+                      <Badge tone={c.severity === "warning" ? "warning" : "info"}>{c.type}</Badge>
+                      <span>{c.message}</span>
+                    </p>
+                  ))}
+                </div>
               )}
               <div className="flex justify-end">
                 <Button onClick={runCommit} loading={isPending}>

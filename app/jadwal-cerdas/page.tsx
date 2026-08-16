@@ -6,6 +6,7 @@ import { listKelas } from "@/lib/application/kelas.usecases";
 import { listMataPelajaran } from "@/lib/application/mata-pelajaran.usecases";
 import { listRuangan } from "@/lib/application/ruangan.usecases";
 import { listScheduleAssignments } from "@/lib/application/scheduleAssignment.usecases";
+import { listPembagianMengajar } from "@/lib/application/pembagianMengajar.usecases";
 import JadwalCerdasWorkspace from "./JadwalCerdasWorkspace";
 import { ErrorState } from "@/components/ui/primitives";
 
@@ -25,18 +26,24 @@ export default async function JadwalCerdasPage() {
           mapelList={[]}
           ruanganList={[]}
           candidateAssignments={[]}
+          pembagianMengajarList={[]}
         />
       );
     }
 
-    const [scheduleModels, guruList, kelasList, mapelList, ruanganList, allAssignments] = await Promise.all([
-      listScheduleModels(supabase, activeContext.id),
-      listGuru(supabase),
-      listKelas(supabase),
-      listMataPelajaran(supabase),
-      listRuangan(supabase),
-      listScheduleAssignments(supabase, activeContext.id),
-    ]);
+    const [scheduleModels, guruList, kelasList, mapelList, ruanganList, allAssignments, pembagianMengajarList] =
+      await Promise.all([
+        listScheduleModels(supabase, activeContext.id),
+        listGuru(supabase),
+        listKelas(supabase),
+        listMataPelajaran(supabase),
+        listRuangan(supabase),
+        listScheduleAssignments(supabase, activeContext.id),
+        // Bagian 73: sumber assignment selector — dipakai UI sebagai jalan pintas
+        // pengisian baris kebutuhan (kelas+mapel+guru+JP tersisa), TIDAK menggantikan
+        // entri manual (activityType non belajar-mengajar mis. Upacara tetap manual).
+        listPembagianMengajar(supabase, activeContext.id),
+      ]);
 
     const candidateAssignments = allAssignments.filter((a) => a.status === "candidate");
 
@@ -49,6 +56,7 @@ export default async function JadwalCerdasPage() {
         mapelList={mapelList}
         ruanganList={ruanganList}
         candidateAssignments={candidateAssignments}
+        pembagianMengajarList={pembagianMengajarList.filter((p) => p.status === "aktif")}
       />
     );
   } catch {

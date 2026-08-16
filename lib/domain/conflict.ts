@@ -7,6 +7,8 @@
 // Application layer karena butuh data lintas-entity (bukan invariant satu
 // entity saja).
 
+import type { JpSummaryStatus } from "@/lib/domain/pembagianMengajar";
+
 export type ConflictSeverity = "error" | "warning" | "info";
 
 /** Bagian 23.2 / 86 — minimum conflict type, tidak boleh dikurangi. */
@@ -39,12 +41,31 @@ export interface ScheduleConflict {
 
 /**
  * Bagian 22.5 — JP reconciliation state antara target jam pelajaran
- * terkonfigurasi vs jadwal yang sudah committed. Target belum punya sumber
- * data resmi di baseline ini (menyusul di step 21/29 — Target JP View),
- * jadi engine hanya bisa menghasilkan state ini kalau target eksplisit
- * disediakan pemanggil — flag untuk direview saat step tersebut dibangun.
+ * terkonfigurasi (Pembagian Mengajar, Bagian 35-36/72-75, `jpPerMinggu`) vs
+ * jadwal yang sudah committed. Disambungkan ke Conflict Engine lewat blok
+ * JP_MISMATCH di lib/application/conflictEngine.ts (Pack 09e) — engine
+ * membaca target dari `pembagianMengajarRepository.findActiveByCombination()`
+ * lalu memetakan hasil `summarizeJp()` ke state ini lewat
+ * `toJpReconciliationState()` di bawah.
  */
 export type JpReconciliationState = "complete" | "incomplete" | "over";
+
+/**
+ * Konversi status Indonesia dari `summarizeJp()` (Pembagian Mengajar) ke
+ * `JpReconciliationState` (bahasa spesifikasi Bagian 22.5). "kosong" dan
+ * "sebagian" sama-sama "incomplete" — seberapa jauh dari target sudah
+ * tercermin di angka `jpTersisa` pada pesan conflict, bukan di state ini.
+ */
+export function toJpReconciliationState(status: JpSummaryStatus): JpReconciliationState {
+  switch (status) {
+    case "penuh":
+      return "complete";
+    case "lebih":
+      return "over";
+    default:
+      return "incomplete";
+  }
+}
 
 let counter = 0;
 /** ID conflict sementara (in-memory, bukan PK database) — cukup unik per proses validasi satu kali panggil. */

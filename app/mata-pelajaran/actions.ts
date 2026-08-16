@@ -6,21 +6,18 @@ import * as usecases from "@/lib/application/mata-pelajaran.usecases";
 import {
   MataPelajaranValidationError,
   type MataPelajaran,
-  type StatusAktif,
+  type MataPelajaranDraft,
 } from "@/lib/domain/mata-pelajaran";
 import { validateMapelImportRows, type MapelImportRowResult } from "@/lib/domain/mapel-import";
 
 export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
 export async function createMataPelajaranAction(
-  nama: string,
-  kode: string,
-  status: StatusAktif,
-  targetJpPerRombel: number | null
+  draft: MataPelajaranDraft
 ): Promise<ActionResult<MataPelajaran>> {
   try {
     const supabase = await createClient();
-    const item = await usecases.createMataPelajaran(supabase, { nama, kode, status, targetJpPerRombel });
+    const item = await usecases.createMataPelajaran(supabase, draft);
     revalidatePath("/mata-pelajaran");
     return { ok: true, data: item };
   } catch (err) {
@@ -30,14 +27,11 @@ export async function createMataPelajaranAction(
 
 export async function updateMataPelajaranAction(
   id: string,
-  nama: string,
-  kode: string,
-  status: StatusAktif,
-  targetJpPerRombel: number | null
+  draft: MataPelajaranDraft
 ): Promise<ActionResult<MataPelajaran>> {
   try {
     const supabase = await createClient();
-    const item = await usecases.updateMataPelajaran(supabase, id, { nama, kode, status, targetJpPerRombel });
+    const item = await usecases.updateMataPelajaran(supabase, id, draft);
     revalidatePath("/mata-pelajaran");
     return { ok: true, data: item };
   } catch (err) {

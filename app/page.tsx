@@ -24,7 +24,9 @@ const pipeline = [
   { step: "12", label: "Schedule Model + Slot Template", done: true, href: "/akademik" },
   { step: "13", label: "Schedule Domain & Validation Engine", done: true },
   { step: "14", label: "Jadwal Cerdas", done: true, href: "/jadwal-cerdas" },
-  { step: "15", label: "Jadwal Operational Workspace", done: false },
+  { step: "15", label: "Jadwal Operational Workspace", done: true, href: "/jadwal" },
+  { step: "V2.3", label: "Guru & Mata Pelajaran (disederhanakan + diperkaya) + Import/Export", done: true, href: "/guru" },
+  { step: "V2.3", label: "Pembagian Mengajar", done: true, href: "/pembagian-mengajar" },
   { step: "16", label: "Dashboard", done: false },
 ];
 
@@ -35,7 +37,7 @@ export default function HomePage() {
         <h1 className="text-[20px] font-bold text-ink-900">Status Build — SAKALA V2</h1>
         <p className="text-[13px] text-ink-500">
           Mengikuti Master Build Pipeline (Bagian 2/69). Dashboard baru dibangun setelah data,
-          state, dan komponen inti stabil. Status terkini: <strong>Phase 07 selesai</strong> — Jadwal Cerdas (Generate → Candidate Review → Optimasi → Commit), dipakai Jadwal Operational Workspace di step 15.
+          state, dan komponen inti stabil. Status terkini: <strong>Pack 09 (SAKALA V2.3) selesai</strong> — Jadwal Operational Workspace (step 15), Guru & Mata Pelajaran mengikuti revisi V2.3 (form disederhanakan + import/export + field diperkaya), dan Pembagian Mengajar (Bagian 35-36/72-75) sebagai layer penghubung ke Jadwal.
         </p>
       </div>
 

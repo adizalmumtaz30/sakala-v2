@@ -4,7 +4,7 @@ Dibangun mengikuti **Master Build Pipeline** (`docs/specification/MASTER-SPECIFI
 Bagian 2). **Mulai dari sini** → baca `SETUP.md` untuk setup dari nol
 (folder, GitHub, Supabase, Vercel).
 
-## Status (selesai s.d. Phase 05)
+## Status (selesai s.d. Phase 08 + Pack 09 "SAKALA V2.3")
 
 | Step | Cakupan |
 |---|---|
@@ -208,12 +208,55 @@ tetap hanya terlihat di Jadwal Cerdas (step 14).
 - **Tidak ada migration baru** — murni Application + Presentation di atas
   tabel yang sudah ada (Phase 04/06).
 
+## Pack 09 — Revisi SAKALA V2.3 (di atas Phase 08)
+
+Mengikuti dokumen revisi "SAKALA V2.3" — lihat `docs/changelog/PACK-09-GURU.md`,
+`PACK-10-IMPORT.md`, `PACK-09B-MAPEL.md`.
+
+- **Linearitas dihapus total** — sudah diaudit, konsep ini memang tidak
+  pernah diimplementasikan di codebase manapun (tidak ada yang perlu dihapus).
+- **Guru** (`/guru`) — form disederhanakan (progressive disclosure): hanya
+  Nama wajib, Kode Guru auto-generate (trigger Postgres), field lain
+  (NIP/NUPTK/Email/Telepon) opsional di balik "Informasi Tambahan". Avatar
+  inisial dengan warna stabil per nama. Halaman detail `/guru/[id]`.
+- **Mata Pelajaran** (`/mata-pelajaran`) — diperkaya: Kelompok, Warna Jadwal
+  (swatch preset), Prioritas Penjadwalan, Jenis Mapel. Form dua kolom dengan
+  live preview real-time.
+- **Import/Export** — Guru & Mapel punya template resmi 3-sheet
+  (DATA/PETUNJUK/REFERENSI), flow Upload→Parse→Validate→Preview→Confirm→
+  Commit (server selalu re-validate dari nol), duplicate detection, error
+  forensic per baris+kolom. Engine reusable di `components/import/ImportModal.tsx`.
+- **Pembagian Mengajar** (`/pembagian-mengajar`, BARU) — layer penghubung
+  Guru+Mapel+Kelas+JP per Academic Context (Bagian 35-36/72-75). Menampilkan
+  progres "X/Y JP terjadwal" dihitung live dari `schedule_assignment`
+  (draft/candidate/committed dihitung terpakai). Soft-delete: kalau sudah
+  punya JP terjadwal, hapus permanen ditolak — arahkan ke nonaktifkan
+  (Bagian 80-81). Punya import sendiri dengan **reference resolution**
+  (kolom file berisi nama/kode Guru-Mapel-Kelas, SAKALA otomatis mencocokkan
+  ke ID — Bagian 74-76), template-nya berisi sheet REFERENSI dinamis (daftar
+  Guru/Mapel/Kelas yang sesungguhnya ada di database saat file di-download).
+- **Bug fix regresi**: `app/jadwal/JadwalWorkspace.tsx` sempat kembali
+  melanggar Rules of Hooks (guard early-return sebelum hook) di ZIP yang
+  diaudit — sudah diperbaiki lagi (lihat komentar di file, guard dipindah
+  ke bawah semua hook).
+
 ## Yang BELUM dibangun (menyusul, sesuai urutan pipeline)
 
+- Redesain **Pengaturan Jadwal** & **Tambah Jadwal Pelajaran** supaya
+  memilih dari Pembagian Mengajar (assignment selector), bukan Guru/Mapel/
+  Kelas mentah satu per satu (Bagian 37-53/73) — ✅ **SUDAH** untuk Jadwal
+  Cerdas (`/jadwal-cerdas`, Pack 09d): section quick-add di atas entri
+  manual, target JP otomatis pakai JP tersisa. Jadwal Operational Workspace
+  (`/jadwal`) sengaja tidak diberi quick-add serupa karena alurnya per-slot
+  manual by design (klik sel kosong di grid).
+- Animation system 4-level (Bagian 66-68), macOS-inspired polish lanjutan.
 - Step 16: Dashboard (baru dibangun setelah data & schedule stabil — hard rule Bagian 2)
-- Step 17+: Analytics, History, Notifications, AI Assistant, Import/Export, Auth, dst.
+- Step 17+: Analytics, History, Notifications, AI Assistant, Auth, dst.
 - `JP_MISMATCH` reconciliation + cell state `incomplete`/`complete` di grid Jadwal (butuh Target JP, step 21/29 — lihat catatan Phase 06/08)
 - Generator constraint solver yang lebih canggih (backtrack lintas requirement) kalau greedy Phase 07 terasa kurang — lihat catatan Phase 07 di atas
 - Delete reason & audit trail Move/Edit belum persisten ke tabel histori nyata (step 18)
+- **Super script diagnose + auto-fix** (usulan user) — script yang bisa dijalankan
+  setelah copy-paste kode untuk mengaudit error & memperbaikinya otomatis,
+  laporan terintegrasi. Belum dirancang, menunggu pack tersendiri.
 
 Kabari urutan prioritas mana yang mau dikerjakan berikutnya.
