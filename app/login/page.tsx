@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { Suspense, useActionState } from "react";
 import { useSearchParams } from "next/navigation";
 import { GraduationCap } from "lucide-react";
 import { login, type LoginState } from "./actions";
@@ -9,7 +9,18 @@ import Button from "@/components/ui/Button";
 
 const initialState: LoginState = {};
 
+// useSearchParams() WAJIB dibungkus Suspense supaya Next.js bisa
+// static-prerender halaman ini (kalau tidak, build gagal:
+// "useSearchParams() should be wrapped in a suspense boundary").
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const [state, formAction, pending] = useActionState(login, initialState);
   const searchParams = useSearchParams();
   const next = searchParams.get("next") ?? "/";
