@@ -14,6 +14,7 @@ import type { ScheduleConflict } from "@/lib/domain/conflict";
 import { scheduleAssignmentRepository } from "@/lib/data-access/scheduleAssignment.repository";
 import { scheduleVersionRepository } from "@/lib/data-access/scheduleVersion.repository";
 import { validateAssignmentCandidate } from "@/lib/application/conflictEngine";
+import { recordAuditEvent } from "@/lib/application/auditLog.usecases";
 
 export interface ValidationResult {
   conflicts: ScheduleConflict[];
@@ -104,9 +105,28 @@ export async function archiveOrDeleteAssignment(supabase: SupabaseClient, id: st
   }
   if (existing.status === "committed") {
     await scheduleAssignmentRepository.setStatus(supabase, id, "archived", existing.versionId);
+    await recordAuditEvent({
+      supabase,
+      academicContextId: existing.academicContextId,
+      action: "delete",
+      entityType: "schedule_assignment",
+      entityId: id,
+      entityLabel: null,
+      before: existing,
+      reason: "Assignment committed di-archive, bukan dihapus permanen.",
+    });
     return { archived: true };
   }
   await scheduleAssignmentRepository.remove(supabase, id);
+  await recordAuditEvent({
+    supabase,
+    academicContextId: existing.academicContextId,
+    action: "delete",
+    entityType: "schedule_assignment",
+    entityId: id,
+    entityLabel: null,
+    before: existing,
+  });
   return { archived: false };
 }
 
@@ -239,6 +259,27 @@ export async function commitAssignments(
 
   for (const id of assignmentIds) {
     await scheduleAssignmentRepository.setStatus(supabase, id, "committed", version.id);
+  }
+
+  // Bagian 34 (History/Audit) — commit adalah satu-satunya jalur assignment
+  // menjadi "committed" (lihat catatan di atas fungsi ini), jadi ini titik
+  // yang tepat untuk mencatat jejak "create"/"move"/"commit" schedule
+  // sekaligus (addAssignment dan moveAssignment sama-sama berakhir di sini).
+  // Best-effort — kegagalan pencatatan audit tidak membatalkan commit yang
+  // sudah berhasil.
+  for (const id of assignmentIds) {
+    const committed = await scheduleAssignmentRepository.findById(supabase, id);
+    await recordAuditEvent({
+      supabase,
+      academicContextId,
+      action: "commit",
+      entityType: "schedule_assignment",
+      entityId: id,
+      entityLabel: label,
+      after: committed,
+      source: "manual",
+      reason: changeSummary,
+    });
   }
 
   return { versionId: version.id, conflictsByAssignment };
