@@ -32,7 +32,7 @@ interface Props {
   kelasList: Kelas[];
 }
 
-const emptyForm = { guruId: "", mataPelajaranId: "", kelasId: "", jpPerMinggu: "" };
+const emptyForm = { guruId: "", mataPelajaranId: "", kelasIds: [] as string[], jpPerMinggu: "" };
 type FormState = typeof emptyForm;
 
 export default function PembagianMengajarWorkspace({
@@ -72,39 +72,78 @@ export default function PembagianMengajarWorkspace({
     setForm({
       guruId: item.guruId,
       mataPelajaranId: item.mataPelajaranId,
-      kelasId: item.kelasId,
+      kelasIds: [item.kelasId],
       jpPerMinggu: String(item.jpPerMinggu),
     });
     setFormError(null);
     setModalOpen(true);
   }
 
+  function toggleKelas(kelasId: string) {
+    setForm((f) => {
+      // Mode edit: satu pembagian mengajar tetap terikat satu kelas — pilih ganti, bukan tambah.
+      if (editing) return { ...f, kelasIds: [kelasId] };
+      const already = f.kelasIds.includes(kelasId);
+      return { ...f, kelasIds: already ? f.kelasIds.filter((id) => id !== kelasId) : [...f.kelasIds, kelasId] };
+    });
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.guruId || !form.mataPelajaranId || !form.kelasId) {
-      setFormError("Guru, Mata Pelajaran, dan Kelas wajib dipilih.");
+    if (!form.guruId || !form.mataPelajaranId || form.kelasIds.length === 0) {
+      setFormError("Guru, Mata Pelajaran, dan minimal satu Kelas wajib dipilih.");
       return;
     }
-    const draft: PembagianMengajarDraft = {
-      academicContextId: activeContextId,
-      guruId: form.guruId,
-      mataPelajaranId: form.mataPelajaranId,
-      kelasId: form.kelasId,
-      jpPerMinggu: Number(form.jpPerMinggu) || 0,
-      status: "aktif" as StatusAktif,
-    };
+    const jpPerMinggu = Number(form.jpPerMinggu) || 0;
 
     startTransition(async () => {
-      const result = editing
-        ? await updatePembagianMengajarAction(editing.id, draft)
-        : await createPembagianMengajarAction(draft);
-
-      if (!result.ok) {
-        setFormError(result.error);
+      if (editing) {
+        const draft: PembagianMengajarDraft = {
+          academicContextId: activeContextId,
+          guruId: form.guruId,
+          mataPelajaranId: form.mataPelajaranId,
+          kelasId: form.kelasIds[0],
+          jpPerMinggu,
+          status: "aktif" as StatusAktif,
+        };
+        const result = await updatePembagianMengajarAction(editing.id, draft);
+        if (!result.ok) {
+          setFormError(result.error);
+          return;
+        }
+        router.refresh();
+        setModalOpen(false);
         return;
       }
+
+      // Create: satu guru+mapel bisa langsung dipasang ke beberapa kelas sekaligus
+      // (Bagian "Pemilihan Kelas") — kirim satu draft per kelas terpilih, JP sama untuk semua.
+      const failures: string[] = [];
+      for (const kelasId of form.kelasIds) {
+        const kelasLabel = kelasList.find((k) => k.id === kelasId);
+        const draft: PembagianMengajarDraft = {
+          academicContextId: activeContextId,
+          guruId: form.guruId,
+          mataPelajaranId: form.mataPelajaranId,
+          kelasId,
+          jpPerMinggu,
+          status: "aktif" as StatusAktif,
+        };
+        const result = await createPembagianMengajarAction(draft);
+        if (!result.ok) {
+          failures.push(`${kelasLabel ? `${kelasLabel.tingkat} ${kelasLabel.namaRombel}` : kelasId}: ${result.error}`);
+        }
+      }
+
       router.refresh();
-      setModalOpen(false);
+      if (failures.length === 0) {
+        setModalOpen(false);
+      } else if (failures.length === form.kelasIds.length) {
+        setFormError(`Gagal untuk semua kelas — ${failures.join("; ")}`);
+      } else {
+        setFormError(`Sebagian berhasil. Gagal: ${failures.join("; ")}`);
+        setForm((f) => ({ ...f, kelasIds: [] }));
+      }
     });
   }
 
@@ -294,35 +333,48 @@ export default function PembagianMengajarWorkspace({
             </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[12.5px] font-medium text-ink-700">Kelas *</label>
-              <select
-                value={form.kelasId}
-                onChange={(e) => setForm((f) => ({ ...f, kelasId: e.target.value }))}
-                required
-                className="h-11 rounded-xl border border-border bg-surface px-3.5 text-[13.5px] text-ink-900 outline-none focus:border-brand-600/50 focus:ring-2 focus:ring-brand-600/15"
-              >
-                <option value="">Pilih kelas...</option>
-                {kelasList.map((k) => (
-                  <option key={k.id} value={k.id}>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[12.5px] font-medium text-ink-700">
+              Kelas * {!editing && <span className="font-normal text-ink-400">(centang satu atau lebih)</span>}
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {kelasList.map((k) => {
+                const checked = form.kelasIds.includes(k.id);
+                return (
+                  <button
+                    key={k.id}
+                    type="button"
+                    onClick={() => toggleKelas(k.id)}
+                    className={`rounded-xl border px-3.5 py-2 text-[13.5px] font-medium transition-colors ${
+                      checked
+                        ? "border-brand-600 bg-brand-600/10 text-brand-700"
+                        : "border-border bg-surface text-ink-700 hover:bg-surface-muted"
+                    }`}
+                  >
                     {k.tingkat} {k.namaRombel}
-                  </option>
-                ))}
-              </select>
+                  </button>
+                );
+              })}
             </div>
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[12.5px] font-medium text-ink-700">JP / Minggu *</label>
-              <input
-                type="number"
-                min={1}
-                required
-                value={form.jpPerMinggu}
-                onChange={(e) => setForm((f) => ({ ...f, jpPerMinggu: e.target.value }))}
-                placeholder="cth. 4"
-                className="h-11 rounded-xl border border-border bg-surface px-3.5 text-[13.5px] text-ink-900 outline-none focus:border-brand-600/50 focus:ring-2 focus:ring-brand-600/15"
-              />
-            </div>
+            {kelasList.length === 0 && <p className="text-[12px] text-ink-400">Belum ada data Kelas.</p>}
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[12.5px] font-medium text-ink-700">JP / Minggu *</label>
+            <input
+              type="number"
+              min={1}
+              required
+              value={form.jpPerMinggu}
+              onChange={(e) => setForm((f) => ({ ...f, jpPerMinggu: e.target.value }))}
+              placeholder="cth. 4"
+              className="h-11 w-full rounded-xl border border-border bg-surface px-3.5 text-[13.5px] text-ink-900 outline-none focus:border-brand-600/50 focus:ring-2 focus:ring-brand-600/15 sm:w-40"
+            />
+            {!editing && form.kelasIds.length > 1 && (
+              <p className="text-[12px] text-ink-400">
+                Berlaku sama untuk {form.kelasIds.length} kelas terpilih — bisa diubah satu-satu lewat Edit nanti.
+              </p>
+            )}
           </div>
 
           <div className="mt-2 flex justify-end gap-2">
