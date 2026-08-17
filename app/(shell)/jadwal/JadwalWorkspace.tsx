@@ -130,6 +130,7 @@ export default function JadwalWorkspace({
   // --- Modal / interaction state ---
   const [addTarget, setAddTarget] = useState<{ day: HariSekolah; nomorUrut: number } | null>(null);
   const [addForm, setAddForm] = useState<FormState>(EMPTY_FORM);
+  const [addJpCount, setAddJpCount] = useState(1);
   const [addSaving, setAddSaving] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
   const [addLabel, setAddLabel] = useState("");
@@ -172,6 +173,7 @@ export default function JadwalWorkspace({
     setAddTarget({ day, nomorUrut });
     setAddError(null);
     setAddLabel("");
+    setAddJpCount(1);
     if (duplicateSource) {
       setAddForm({
         classId: duplicateSource.classId,
@@ -188,6 +190,23 @@ export default function JadwalWorkspace({
   function closeAdd() {
     setAddTarget(null);
     setDuplicateSource(null);
+  }
+
+  /** Bagian "Penambahan Jam — Dukungan Multi-JP": hitung berapa JP berurutan
+   * yang masih kosong & eligible mulai dari sel yang diklik, di hari yang
+   * sama — supaya pilihan "2 JP sekaligus" tidak pernah menimpa sel yang
+   * sudah terisi atau melewati batas hari (grid sudah menandai itu semua
+   * lewat isEligibleForAdd, jadi tidak perlu query tambahan ke server). */
+  function maxContiguousJp(day: HariSekolah, startNomorUrut: number): number {
+    let count = 0;
+    let nomor = startNomorUrut;
+    while (true) {
+      const cell = cellsByKey.get(cellKey(day, nomor));
+      if (!cell || (nomor !== startNomorUrut && !isEligibleForAdd(cell))) break;
+      count++;
+      nomor++;
+    }
+    return count;
   }
 
   function handleCellClick(cell: GridCell) {
@@ -209,7 +228,7 @@ export default function JadwalWorkspace({
       roomId: addForm.roomId || null,
       day: addTarget.day,
       periodStart: addTarget.nomorUrut,
-      periodEnd: addTarget.nomorUrut,
+      periodEnd: addTarget.nomorUrut + effectiveAddJp - 1,
       activityType: addForm.activityType,
       status: "draft",
       source: "manual",
@@ -297,6 +316,10 @@ export default function JadwalWorkspace({
   // dicek terhadap assignment committed yang sudah ter-fetch. Lihat
   // checkRealtimeOverlap() di lib/domain/conflict.ts untuk detail & batasan
   // (subset dari Conflict Engine server, cukup untuk feedback instan).
+  const addMaxJp = addTarget ? maxContiguousJp(addTarget.day, addTarget.nomorUrut) : 1;
+  const effectiveAddJp = Math.min(Math.max(addJpCount, 1), Math.max(addMaxJp, 1));
+  const addPeriodEnd = addTarget ? addTarget.nomorUrut + effectiveAddJp - 1 : 0;
+
   const addRealtimeConflicts =
     addTarget && addForm.classId && addForm.teacherId
       ? checkRealtimeOverlap({
@@ -306,7 +329,7 @@ export default function JadwalWorkspace({
             roomId: addForm.roomId || null,
             day: addTarget.day,
             periodStart: addTarget.nomorUrut,
-            periodEnd: addTarget.nomorUrut,
+            periodEnd: addPeriodEnd,
           },
           assignments,
           roomModeAktif: !roomDisabled,
@@ -511,7 +534,34 @@ export default function JadwalWorkspace({
           <div className="flex flex-col gap-3">
             <p className="text-[12.5px] text-ink-500">
               {formatHari(addTarget.day)}, Jam ke-{addTarget.nomorUrut}
+              {effectiveAddJp > 1 ? ` s.d. ke-${addPeriodEnd}` : ""}
             </p>
+
+            {addMaxJp > 1 && (
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[12.5px] font-medium text-ink-700">Jumlah JP</label>
+                <div className="flex gap-2">
+                  {Array.from({ length: addMaxJp }, (_, i) => i + 1).map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setAddJpCount(n)}
+                      className={`h-10 min-w-[52px] rounded-xl border px-3 text-[13px] font-medium transition-colors ${
+                        effectiveAddJp === n
+                          ? "border-brand-600 bg-brand-600/10 text-brand-700"
+                          : "border-border bg-surface text-ink-700 hover:bg-surface-muted"
+                      }`}
+                    >
+                      {n} JP
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11.5px] text-ink-400">
+                  Jam ke-{addTarget.nomorUrut} s.d. ke-{addTarget.nomorUrut + addMaxJp - 1} kosong dan tersedia berurutan.
+                </p>
+              </div>
+            )}
+
             <SelectField label="Kelas" value={addForm.classId} onChange={(v) => setAddForm((f) => ({ ...f, classId: v }))} options={kelasList.map((k) => ({ id: k.id, label: `${k.tingkat} ${k.namaRombel}` }))} />
             <SelectField label="Mata Pelajaran" value={addForm.subjectId} onChange={(v) => setAddForm((f) => ({ ...f, subjectId: v }))} options={mapelList.map((m) => ({ id: m.id, label: m.nama }))} />
             <SelectField label="Guru" value={addForm.teacherId} onChange={(v) => setAddForm((f) => ({ ...f, teacherId: v }))} options={guruList.map((g) => ({ id: g.id, label: g.namaGuru }))} />
