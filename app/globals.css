@@ -55,3 +55,27 @@ html, body {
   box-shadow: 0 12px 28px -14px rgba(18,20,26,0.14);
   border-color: #DBDEE6;
 }
+
+/* Splash screen (Bagian 5.2 / 42 / 76) — dimatikan total lewat
+   prefers-reduced-motion di komponen (tidak dirender sama sekali, bukan
+   cuma dipercepat), jadi keyframes ini aman didefinisikan global. */
+@keyframes splashLogoIn {
+  from { opacity: 0; transform: scale(0.86); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes splashFadeUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes splashGlow {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50% { opacity: 0.9; transform: scale(1.08); }
+}
+@keyframes splashWire {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 0.75; }
+}
+@keyframes splashNode {
+  0%, 100% { opacity: 0.35; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.4); }
+}

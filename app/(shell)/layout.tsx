@@ -1,6 +1,7 @@
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import CommandPalette from "@/components/layout/CommandPalette";
+import SplashScreen from "@/components/splash/SplashScreen";
 import { createClient } from "@/lib/supabase/server";
 import { getSchoolProfile } from "@/lib/application/schoolProfile.usecases";
 import { getActiveAcademicContext } from "@/lib/application/academicContext.usecases";
@@ -28,6 +29,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
 
   return (
     <div className="flex min-h-screen">
+      <SplashScreen schoolProfileNama={schoolProfileNama} activeContextLabel={activeContextLabel} />
       <Sidebar />
       <div className="flex-1 flex flex-col" style={{ marginLeft: "var(--shell-sidebar-w)" }}>
         <Header schoolProfileNama={schoolProfileNama} activeContextLabel={activeContextLabel} />
