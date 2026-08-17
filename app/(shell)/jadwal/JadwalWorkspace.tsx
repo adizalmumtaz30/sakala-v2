@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus, X, Trash2, Copy, Pencil, Eye, AlertTriangle, CheckCircle2, Info, CalendarClock, User, Users, DoorOpen } from "lucide-react";
 import type { AcademicContext } from "@/lib/domain/academicContext";
 import { formatContextLabel } from "@/lib/domain/academicContext";
@@ -164,6 +164,41 @@ export default function JadwalWorkspace({
 
   const [duplicateSource, setDuplicateSource] = useState<ScheduleAssignment | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+
+  // Item #7 (deep-link dari baris Guru): ➕/👁 di halaman Guru mengarah ke sini
+  // lewat query string ?viewBy=guru&entityId=<id>&autoAdd=1. Dibaca via
+  // window.location (bukan useSearchParams) supaya tidak menambah kebutuhan
+  // Suspense boundary di page.tsx — murni penyesuaian state client, sekali di mount.
+  const [pendingAutoAdd, setPendingAutoAdd] = useState(false);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const qViewBy = params.get("viewBy");
+    const qEntityId = params.get("entityId");
+    const qAutoAdd = params.get("autoAdd") === "1";
+    if (qViewBy === "kelas" || qViewBy === "guru" || qViewBy === "ruangan") setViewBy(qViewBy);
+    if (qEntityId) setSelectedEntityId(qEntityId);
+    if (qAutoAdd) setPendingAutoAdd(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Begitu grid untuk entitas yang diminta sudah siap, buka modal Tambah Jadwal
+  // otomatis di sel kosong pertama yang eligible, dengan Guru sudah terisi.
+  useEffect(() => {
+    if (!pendingAutoAdd) return;
+    if (grid.cells.length === 0) return;
+    const firstEmpty = grid.cells.find((c) => c.state === "empty" && isEligibleForAdd(c));
+    setPendingAutoAdd(false);
+    if (!firstEmpty) {
+      setToast("Tidak ada slot kosong yang tersedia untuk ditambahkan saat ini.");
+      return;
+    }
+    setAddTarget({ day: firstEmpty.day, nomorUrut: firstEmpty.nomorUrut });
+    setAddError(null);
+    setAddLabel("");
+    setAddJpCount(1);
+    setAddForm({ ...EMPTY_FORM, activityType: "belajar_mengajar", teacherId: viewBy === "guru" ? activeEntityId : "" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAutoAdd, grid]);
 
   // Guard SETELAH semua hook (lihat catatan di atas) — aman dari pelanggaran
   // Rules of Hooks karena tidak ada hook lagi di bawah titik ini.

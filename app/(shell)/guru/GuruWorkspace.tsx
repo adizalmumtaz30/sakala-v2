@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Plus, Pencil, Trash2, Search, ChevronDown, Upload } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, ChevronDown, Upload, Eye, CalendarPlus } from "lucide-react";
 import type { Guru, GuruDraft, StatusAktif } from "@/lib/domain/guru";
 import {
   createGuruAction,
@@ -165,6 +165,22 @@ export default function GuruWorkspace({ initialData }: { initialData: Guru[] }) 
                   {guru.status === "aktif" ? "Aktif" : "Nonaktif"}
                 </Badge>
                 <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => router.push(`/jadwal?viewBy=guru&entityId=${guru.id}`)}
+                    className="rounded-lg p-1.5 text-ink-400 hover:bg-surface hover:text-ink-900"
+                    aria-label="Lihat Jadwal"
+                    title="Lihat Jadwal"
+                  >
+                    <Eye size={15} />
+                  </button>
+                  <button
+                    onClick={() => router.push(`/jadwal?viewBy=guru&entityId=${guru.id}&autoAdd=1`)}
+                    className="rounded-lg p-1.5 text-ink-400 hover:bg-brand-50 hover:text-brand-700"
+                    aria-label="Tambah Jadwal"
+                    title="Tambah Jadwal"
+                  >
+                    <CalendarPlus size={15} />
+                  </button>
                   <button
                     onClick={() => openEdit(guru)}
                     className="rounded-lg p-1.5 text-ink-400 hover:bg-surface hover:text-ink-900"
