@@ -16,8 +16,8 @@ import type { SlotTemplate, JenisSlot } from "@/lib/domain/slotTemplate";
 import { formatJenisSlot } from "@/lib/domain/slotTemplate";
 import type { ScheduleAssignment, ScheduleAssignmentDraft } from "@/lib/domain/scheduleAssignment";
 import { buildJadwalGrid, isEligibleForAdd, cellKey, type GridCell, type JadwalViewBy, type JadwalRangeMode } from "@/lib/domain/jadwalGrid";
-import type { ScheduleConflict } from "@/lib/domain/conflict";
-import { validateAssignmentAction, addAssignmentAction, moveAssignmentAction, deleteAssignmentAction } from "./actions";
+import { checkRealtimeOverlap, type ScheduleConflict } from "@/lib/domain/conflict";
+import { addAssignmentAction, moveAssignmentAction, deleteAssignmentAction } from "./actions";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Modal from "@/components/ui/Modal";
@@ -130,8 +130,6 @@ export default function JadwalWorkspace({
   // --- Modal / interaction state ---
   const [addTarget, setAddTarget] = useState<{ day: HariSekolah; nomorUrut: number } | null>(null);
   const [addForm, setAddForm] = useState<FormState>(EMPTY_FORM);
-  const [addConflicts, setAddConflicts] = useState<ScheduleConflict[] | null>(null);
-  const [addValidating, setAddValidating] = useState(false);
   const [addSaving, setAddSaving] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
   const [addLabel, setAddLabel] = useState("");
@@ -172,7 +170,6 @@ export default function JadwalWorkspace({
 
   function openAdd(day: HariSekolah, nomorUrut: number) {
     setAddTarget({ day, nomorUrut });
-    setAddConflicts(null);
     setAddError(null);
     setAddLabel("");
     if (duplicateSource) {
@@ -218,21 +215,6 @@ export default function JadwalWorkspace({
       source: "manual",
       versionId: null,
     };
-  }
-
-  async function runValidateAdd() {
-    const draft = buildAddDraft();
-    if (!draft) return;
-    setAddValidating(true);
-    setAddError(null);
-    const result = await validateAssignmentAction(draft);
-    setAddValidating(false);
-    if (!result.ok) {
-      setAddError(result.error);
-      setAddConflicts(null);
-      return;
-    }
-    setAddConflicts(result.data.conflicts);
   }
 
   async function runSaveAdd(commit: boolean) {
@@ -309,6 +291,28 @@ export default function JadwalWorkspace({
 
   const roomRequired = selectedModel?.modeRuangan === "wajib";
   const roomDisabled = selectedModel?.modeRuangan === "tidak_dipakai";
+
+  // Realtime overlap check (client-side, tanpa tombol "Validasi" / round-trip
+  // server) — begitu Kelas & Guru dipilih di form Tambah Jadwal, langsung
+  // dicek terhadap assignment committed yang sudah ter-fetch. Lihat
+  // checkRealtimeOverlap() di lib/domain/conflict.ts untuk detail & batasan
+  // (subset dari Conflict Engine server, cukup untuk feedback instan).
+  const addRealtimeConflicts =
+    addTarget && addForm.classId && addForm.teacherId
+      ? checkRealtimeOverlap({
+          candidate: {
+            classId: addForm.classId,
+            teacherId: addForm.teacherId,
+            roomId: addForm.roomId || null,
+            day: addTarget.day,
+            periodStart: addTarget.nomorUrut,
+            periodEnd: addTarget.nomorUrut,
+          },
+          assignments,
+          roomModeAktif: !roomDisabled,
+        })
+      : [];
+  const addHasBlockingConflict = addRealtimeConflicts.some((c) => c.blocking);
 
   if (activeModels.length === 0) {
     return (
@@ -527,20 +531,17 @@ export default function JadwalWorkspace({
               options={ACTIVITY_OPTIONS.map((a) => ({ id: a, label: formatJenisSlot({ jenisSlot: a, namaCustom: "Custom" }) }))}
             />
 
-            {addConflicts && <ConflictList conflicts={addConflicts} />}
+            {addForm.classId && addForm.teacherId && <ConflictList conflicts={addRealtimeConflicts} />}
             {addError && <p className="text-[12px] text-rose">{addError}</p>}
 
             <Input label="Label Schedule Version (opsional)" value={addLabel} onChange={(e) => setAddLabel(e.target.value)} placeholder="mis. Tambahan manual — Agustus" />
 
             <div className="flex flex-wrap gap-2 pt-1">
-              <Button variant="secondary" size="sm" loading={addValidating} onClick={runValidateAdd} disabled={!addForm.classId || !addForm.subjectId || !addForm.teacherId}>
-                Validasi
-              </Button>
               <Button
                 variant="secondary"
                 size="sm"
                 loading={addSaving}
-                disabled={!addConflicts || addConflicts.some((c) => c.blocking)}
+                disabled={!addForm.classId || !addForm.subjectId || !addForm.teacherId || addHasBlockingConflict}
                 onClick={() => runSaveAdd(false)}
               >
                 Simpan Draft
@@ -549,7 +550,7 @@ export default function JadwalWorkspace({
                 variant="primary"
                 size="sm"
                 loading={addSaving}
-                disabled={!addConflicts || addConflicts.some((c) => c.blocking)}
+                disabled={!addForm.classId || !addForm.subjectId || !addForm.teacherId || addHasBlockingConflict}
                 onClick={() => runSaveAdd(true)}
               >
                 Simpan &amp; Commit

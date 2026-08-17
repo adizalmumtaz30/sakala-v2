@@ -8,6 +8,9 @@
 // entity saja).
 
 import type { JpSummaryStatus } from "@/lib/domain/pembagianMengajar";
+import type { HariSekolah } from "@/lib/domain/jamPelajaran";
+import type { ScheduleAssignment } from "@/lib/domain/scheduleAssignment";
+import { periodsOverlap } from "@/lib/domain/scheduleAssignment";
 
 export type ConflictSeverity = "error" | "warning" | "info";
 
@@ -72,6 +75,104 @@ let counter = 0;
 export function nextConflictId(): string {
   counter += 1;
   return `conflict_${Date.now()}_${counter}`;
+}
+
+/**
+ * Realtime overlap check (client-side, murni in-memory) — dipakai form
+ * Tambah/Pindah Jadwal supaya user langsung tahu bentrok Guru/Kelas/Ruangan
+ * begitu memilih Mapel/Guru/Ruangan, TANPA harus klik tombol "Validasi" ke
+ * server. Sengaja subset dari validateAssignmentCandidate() (Application
+ * layer) — hanya TEACHER_OVERLAP/CLASS_OVERLAP/ROOM_OVERLAP, dicek terhadap
+ * assignment "committed" yang sudah ter-fetch di client. Tidak menggantikan
+ * validasi server (FIXED_SLOT, JP_MISMATCH, INACTIVE_ENTITY, dll masih perlu
+ * server) — hanya lapisan realtime tambahan untuk feedback instan.
+ */
+export function checkRealtimeOverlap(params: {
+  candidate: {
+    classId: string;
+    teacherId: string;
+    roomId: string | null;
+    day: HariSekolah;
+    periodStart: number;
+    periodEnd: number;
+  };
+  assignments: ScheduleAssignment[];
+  roomModeAktif: boolean;
+  /** Saat edit assignment existing, kecualikan dirinya sendiri dari perbandingan. */
+  excludeAssignmentId?: string;
+}): ScheduleConflict[] {
+  const { candidate, assignments, roomModeAktif, excludeAssignmentId } = params;
+  const conflicts: ScheduleConflict[] = [];
+
+  const siblings = assignments.filter(
+    (a) =>
+      a.status === "committed" &&
+      a.day === candidate.day &&
+      a.id !== excludeAssignmentId &&
+      periodsOverlap(candidate.periodStart, candidate.periodEnd, a.periodStart, a.periodEnd)
+  );
+
+  for (const sibling of siblings) {
+    if (candidate.teacherId && sibling.teacherId === candidate.teacherId) {
+      conflicts.push(
+        makeRealtimeConflict(
+          "TEACHER_OVERLAP",
+          "teacher",
+          [candidate.teacherId],
+          [sibling.id],
+          `Guru sudah mengajar kelas lain pada periode ${sibling.periodStart}-${sibling.periodEnd} hari ${candidate.day}.`,
+          "Pilih guru lain, atau ubah periode agar tidak tumpang tindih."
+        )
+      );
+    }
+    if (candidate.classId && sibling.classId === candidate.classId) {
+      conflicts.push(
+        makeRealtimeConflict(
+          "CLASS_OVERLAP",
+          "class",
+          [candidate.classId],
+          [sibling.id],
+          `Kelas sudah memiliki mata pelajaran lain pada periode ${sibling.periodStart}-${sibling.periodEnd} hari ${candidate.day}.`,
+          "Ubah periode, atau hapus/pindahkan assignment yang bentrok terlebih dahulu."
+        )
+      );
+    }
+    if (roomModeAktif && candidate.roomId && sibling.roomId === candidate.roomId) {
+      conflicts.push(
+        makeRealtimeConflict(
+          "ROOM_OVERLAP",
+          "room",
+          [candidate.roomId],
+          [sibling.id],
+          `Ruangan sudah dipakai kelas lain pada periode ${sibling.periodStart}-${sibling.periodEnd} hari ${candidate.day}.`,
+          "Pilih ruangan lain, atau ubah periode."
+        )
+      );
+    }
+  }
+
+  return conflicts;
+}
+
+function makeRealtimeConflict(
+  type: ConflictType,
+  entityType: ConflictEntityType,
+  entityIds: string[],
+  scheduleIds: string[],
+  message: string,
+  resolutionHint: string
+): ScheduleConflict {
+  return {
+    conflictId: nextConflictId(),
+    severity: "error",
+    type,
+    entityType,
+    entityIds,
+    scheduleIds,
+    message,
+    resolutionHint,
+    blocking: true,
+  };
 }
 
 export function isBlockingSeverity(severity: ConflictSeverity): boolean {
