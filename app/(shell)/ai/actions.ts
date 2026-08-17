@@ -3,20 +3,143 @@
 import { createClient } from "@/lib/supabase/server";
 import { planScheduleFromCommand, type AiSchedulePlan } from "@/lib/application/aiSchedulePlanner";
 import { saveCandidatesAction, commitAssignmentsAction } from "@/app/(shell)/jadwal-cerdas/actions";
+import { listAcademicContexts } from "@/lib/application/academicContext.usecases";
+import { listKelas } from "@/lib/application/kelas.usecases";
+import { listMataPelajaran } from "@/lib/application/mata-pelajaran.usecases";
+import { listPembagianMengajar } from "@/lib/application/pembagianMengajar.usecases";
 
 export type AiActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
+
+export type AiCopilotIntent =
+  | "complete_remaining_jp"
+  | "schedule_full_week"
+  | "fill_empty_slots"
+  | "schedule_one_subject";
+
+export interface AiCopilotClassStatus {
+  id: string;
+  label: string;
+  targetJp: number;
+  scheduledJp: number;
+  remainingJp: number;
+  subjectDeficits: Array<{ subjectId: string; subjectName: string; targetJp: number; scheduledJp: number; remainingJp: number }>;
+}
+
+export interface AiCopilotContext {
+  academicContextId: string;
+  classes: AiCopilotClassStatus[];
+  activeClassId: string | null;
+}
+
+async function getActiveContext() {
+  const supabase = await createClient();
+  const contexts = await listAcademicContexts(supabase);
+  const active = contexts.find((c) => c.isActive);
+  if (!active) throw new Error("Belum ada konteks akademik aktif.");
+  return { supabase, active };
+}
+
+/** Read-only context snapshot for the AI Copilot. No schedule mutation occurs here. */
+export async function getAiCopilotContextAction(): Promise<AiActionResult<AiCopilotContext>> {
+  try {
+    const { supabase, active } = await getActiveContext();
+    const [kelas, mapel, pembagian] = await Promise.all([
+      listKelas(supabase),
+      listMataPelajaran(supabase),
+      listPembagianMengajar(supabase, active.id),
+    ]);
+
+    const activeAssignments = pembagian.filter((p) => p.status === "aktif");
+    const classes = kelas.map((k) => {
+      const assignments = activeAssignments.filter((p) => p.kelasId === k.id);
+      const bySubject = new Map<string, { targetJp: number; scheduledJp: number }>();
+      for (const item of assignments) {
+        const current = bySubject.get(item.mataPelajaranId) ?? { targetJp: 0, scheduledJp: 0 };
+        current.targetJp += item.jpPerMinggu;
+        current.scheduledJp += item.jpTerjadwal ?? Math.max(0, item.jpPerMinggu - (item.jpTersisa ?? item.jpPerMinggu));
+        bySubject.set(item.mataPelajaranId, current);
+      }
+      const subjectDeficits = [...bySubject.entries()]
+        .map(([subjectId, value]) => ({
+          subjectId,
+          subjectName: mapel.find((m) => m.id === subjectId)?.nama ?? "Mata Pelajaran",
+          targetJp: value.targetJp,
+          scheduledJp: value.scheduledJp,
+          remainingJp: Math.max(0, value.targetJp - value.scheduledJp),
+        }))
+        .filter((x) => x.remainingJp > 0)
+        .sort((a, b) => b.remainingJp - a.remainingJp);
+      const targetJp = assignments.reduce((sum, item) => sum + item.jpPerMinggu, 0);
+      const scheduledJp = assignments.reduce((sum, item) => sum + (item.jpTerjadwal ?? Math.max(0, item.jpPerMinggu - (item.jpTersisa ?? item.jpPerMinggu))), 0);
+      return {
+        id: k.id,
+        label: `${k.tingkat} ${k.namaRombel}`.trim(),
+        targetJp,
+        scheduledJp,
+        remainingJp: Math.max(0, targetJp - scheduledJp),
+        subjectDeficits,
+      };
+    }).filter((x) => x.targetJp > 0);
+
+    return { ok: true, data: { academicContextId: active.id, classes, activeClassId: classes[0]?.id ?? null } };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Gagal membaca kondisi jadwal AI." };
+  }
+}
 
 /** AI planning is preview-only. It never writes or commits a schedule. */
 export async function planScheduleAction(command: string): Promise<AiActionResult<AiSchedulePlan>> {
   try {
-    const supabase = await createClient();
-    const contexts = await import("@/lib/application/academicContext.usecases").then((m) => m.listAcademicContexts(supabase));
-    const active = contexts.find((c) => c.isActive);
-    if (!active) return { ok: false, error: "Belum ada konteks akademik aktif." };
+    const { supabase, active } = await getActiveContext();
     const plan = await planScheduleFromCommand(supabase, active.id, command);
     return { ok: true, data: plan };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Gagal menyusun rancangan jadwal AI." };
+  }
+}
+
+/**
+ * Structured quick actions. Buttons never need to manufacture a natural-language
+ * prompt. The intent is resolved server-side from current academic data, then
+ * handed to the same constraint-aware candidate planner.
+ */
+export async function runAiCopilotIntentAction(
+  intent: AiCopilotIntent,
+  classId: string
+): Promise<AiActionResult<AiSchedulePlan>> {
+  try {
+    const { supabase, active } = await getActiveContext();
+    const [kelas, mapel, pembagian] = await Promise.all([
+      listKelas(supabase),
+      listMataPelajaran(supabase),
+      listPembagianMengajar(supabase, active.id),
+    ]);
+    const targetClass = kelas.find((k) => k.id === classId);
+    if (!targetClass) return { ok: false, error: "Kelas target tidak ditemukan pada konteks akademik aktif." };
+
+    const assignments = pembagian.filter((p) => p.status === "aktif" && p.kelasId === classId);
+    if (!assignments.length) return { ok: false, error: `Belum ada Pembagian Mengajar aktif untuk ${targetClass.tingkat} ${targetClass.namaRombel}.` };
+
+    if (intent === "schedule_one_subject") {
+      return { ok: false, error: "Pilih mata pelajaran melalui kolom perintah untuk aksi satu mapel. Quick Action ini tidak akan menebak mapel." };
+    }
+
+    const subjectTargets = new Map<string, number>();
+    for (const item of assignments) {
+      subjectTargets.set(item.mataPelajaranId, (subjectTargets.get(item.mataPelajaranId) ?? 0) + item.jpPerMinggu);
+    }
+    const rows = [...subjectTargets.entries()]
+      .map(([subjectId, target]) => ({ name: mapel.find((m) => m.id === subjectId)?.nama ?? "", target }))
+      .filter((x) => x.name && x.target > 0)
+      .map((x) => `${x.name} ${x.target} JP`);
+
+    if (!rows.length) return { ok: false, error: "Tidak ada target JP aktif yang dapat direncanakan." };
+
+    const command = `${intent === "fill_empty_slots" ? "Isi slot kosong" : "Susun semua mata pelajaran"} kelas ${targetClass.tingkat} ${targetClass.namaRombel}.\n${rows.join("\n")}`;
+    const plan = await planScheduleFromCommand(supabase, active.id, command);
+    return { ok: true, data: plan };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Gagal menjalankan Quick Action AI." };
   }
 }
 
