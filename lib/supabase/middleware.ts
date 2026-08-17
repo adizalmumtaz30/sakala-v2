@@ -32,16 +32,14 @@ export async function updateSession(request: NextRequest) {
 
   const isPublicPath = PUBLIC_PATHS.some((p) => request.nextUrl.pathname.startsWith(p));
 
-  // AUTH DINONAKTIFKAN SEMENTARA (permintaan eksplisit user) — gate redirect
-  // ke /login di-skip supaya semua route bisa diakses tanpa login. Untuk
-  // mengaktifkan lagi Bagian 40 (Authentication), un-comment blok di bawah.
-  //
-  // if (!user && !isPublicPath) {
-  //   const url = request.nextUrl.clone();
-  //   url.pathname = "/login";
-  //   url.searchParams.set("next", request.nextUrl.pathname);
-  //   return NextResponse.redirect(url);
-  // }
+  // Bagian 40 — Authentication AKTIF: semua route digate lewat sesi Supabase
+  // Auth asli (getUser() di atas, bukan getSession()).
+  if (!user && !isPublicPath) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    url.searchParams.set("next", request.nextUrl.pathname);
+    return NextResponse.redirect(url);
+  }
 
   if (user && request.nextUrl.pathname === "/login") {
     const url = request.nextUrl.clone();
