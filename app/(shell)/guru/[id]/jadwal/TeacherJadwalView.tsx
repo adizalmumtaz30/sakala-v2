@@ -91,7 +91,7 @@ export default function TeacherJadwalView({
       </Link>
 
       <Card className="flex items-center gap-4" style={{ borderLeft: `3px solid ${color.accent}` }}>
-        <Avatar name={guru.namaGuru} size="lg" />
+        <Avatar name={guru.namaGuru} size="lg" jenisKelamin={guru.jenisKelamin} kodeGuru={guru.kodeGuru} />
         <div className="flex-1">
           <h1 className="text-[18px] font-bold text-ink-900">{guru.namaGuru}</h1>
           <p className="text-[12.5px] text-ink-400">{guru.kodeGuru}</p>

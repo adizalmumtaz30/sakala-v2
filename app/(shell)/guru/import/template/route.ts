@@ -11,6 +11,12 @@ const columns: TemplateColumn[] = [
   { key: "Email", required: false, format: "Alamat email", example: "ahmad@sekolah.sch.id" },
   { key: "NomorTelepon", required: false, format: "Teks", example: "" },
   { key: "StatusAktif", required: false, format: '"aktif" atau "nonaktif" (default aktif)', example: "aktif" },
+  {
+    key: "JenisKelamin",
+    required: false,
+    format: '"L" (Laki-laki) atau "P" (Perempuan) — dipakai untuk varian ilustrasi avatar',
+    example: "",
+  },
 ];
 
 export async function GET() {
@@ -18,6 +24,10 @@ export async function GET() {
     ["Referensi StatusAktif"],
     ["aktif"],
     ["nonaktif"],
+    [],
+    ["Referensi JenisKelamin"],
+    ["L"],
+    ["P"],
   ]);
 
   return new NextResponse(bufferToBodyInit(buffer), {

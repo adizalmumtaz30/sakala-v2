@@ -6,6 +6,7 @@
 // dan tidak boleh memblokir pembuatan Guru (Bagian 11 & 98).
 
 export type StatusAktif = "aktif" | "nonaktif";
+export type JenisKelamin = "L" | "P";
 
 export interface Guru {
   id: string;
@@ -17,6 +18,10 @@ export interface Guru {
   nuptk?: string;
   email?: string;
   noTelepon?: string;
+  // Penyempurnaan #1 (Icon & Avatar Premium) — opsional, dipakai untuk
+  // memilih varian ilustrasi avatar. Tanpa nilai ini, UI fallback ke
+  // initial avatar seperti sebelumnya (backward compatible).
+  jenisKelamin?: JenisKelamin;
   // Computed (Bagian 17.1) — dihitung di Application layer, bukan disimpan mentah di sini
   jumlahJadwal?: number;
   totalJamMengajar?: number;
@@ -30,6 +35,7 @@ export interface GuruDraft {
   nuptk?: string;
   email?: string;
   noTelepon?: string;
+  jenisKelamin?: JenisKelamin;
 }
 
 export class GuruValidationError extends Error {

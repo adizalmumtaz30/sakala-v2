@@ -3,8 +3,8 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Plus, Pencil, Trash2, Search, ChevronDown, Upload, Eye, CalendarPlus } from "lucide-react";
-import type { Guru, GuruDraft, StatusAktif } from "@/lib/domain/guru";
+import { Plus, Pencil, Trash2, Search, ChevronDown, Upload, Eye, CalendarPlus, GraduationCap } from "lucide-react";
+import type { Guru, GuruDraft, JenisKelamin, StatusAktif } from "@/lib/domain/guru";
 import {
   createGuruAction,
   updateGuruAction,
@@ -16,6 +16,7 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Modal from "@/components/ui/Modal";
 import Avatar from "@/components/ui/Avatar";
+import IconChip from "@/components/ui/IconChip";
 import { Card, Badge, EmptyState } from "@/components/ui/primitives";
 import ImportModal, { type ImportRowResult } from "@/components/import/ImportModal";
 import { teacherColor } from "@/lib/utils/teacherColor";
@@ -47,7 +48,7 @@ export default function GuruWorkspace({ initialData }: { initialData: Guru[] }) 
     setEditing(guru);
     setFormError(null);
     // Bagian 84: langsung buka Informasi Tambahan saat edit jika sudah pernah diisi.
-    setShowMore(Boolean(guru.nip || guru.nuptk || guru.email || guru.noTelepon));
+    setShowMore(Boolean(guru.nip || guru.nuptk || guru.email || guru.noTelepon || guru.jenisKelamin));
     setModalOpen(true);
   }
 
@@ -59,6 +60,7 @@ export default function GuruWorkspace({ initialData }: { initialData: Guru[] }) 
       nuptk: String(formData.get("nuptk") ?? "").trim() || undefined,
       email: String(formData.get("email") ?? "").trim() || undefined,
       noTelepon: String(formData.get("noTelepon") ?? "").trim() || undefined,
+      jenisKelamin: (String(formData.get("jenisKelamin") ?? "").trim() || undefined) as JenisKelamin | undefined,
     };
 
     startTransition(async () => {
@@ -109,9 +111,12 @@ export default function GuruWorkspace({ initialData }: { initialData: Guru[] }) 
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-[20px] font-bold text-ink-900">Guru</h1>
-          <p className="text-[13px] text-ink-500">Kelola data guru dan tenaga pendidik.</p>
+        <div className="flex items-center gap-3">
+          <IconChip icon={<GraduationCap size={20} strokeWidth={2.1} />} tone="brand" size="lg" shadow />
+          <div>
+            <h1 className="text-[20px] font-bold text-ink-900">Guru</h1>
+            <p className="text-[13px] text-ink-500">Kelola data guru dan tenaga pendidik.</p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="secondary" onClick={() => setImportOpen(true)}>
@@ -160,7 +165,7 @@ export default function GuruWorkspace({ initialData }: { initialData: Guru[] }) 
                 style={{ borderLeft: `3px solid ${color.accent}` }}
                 className="flex items-center gap-3.5 border-b border-border px-5 py-3.5 last:border-0 hover:bg-surface-muted/60"
               >
-                <Avatar name={guru.namaGuru} />
+                <Avatar name={guru.namaGuru} jenisKelamin={guru.jenisKelamin} kodeGuru={guru.kodeGuru} />
                 <Link href={`/guru/${guru.id}`} className="min-w-0 flex-1">
                   <p className="truncate text-[13.5px] font-medium text-ink-900">{guru.namaGuru}</p>
                   <p className="text-[12px] text-ink-400">{guru.kodeGuru}</p>
@@ -171,33 +176,33 @@ export default function GuruWorkspace({ initialData }: { initialData: Guru[] }) 
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => router.push(`/guru/${guru.id}/jadwal`)}
-                    className="rounded-lg p-1.5 text-ink-400 hover:bg-surface hover:text-ink-900"
+                    className="group/act rounded-lg p-0.5 transition-transform hover:scale-105"
                     aria-label="Lihat Jadwal"
                     title="Lihat Jadwal"
                   >
-                    <Eye size={15} />
+                    <IconChip icon={<Eye size={14} />} tone="cyan" size="sm" className="opacity-70 group-hover/act:opacity-100" />
                   </button>
                   <button
                     onClick={() => router.push(`/jadwal?viewBy=guru&entityId=${guru.id}&autoAdd=1`)}
-                    className="rounded-lg p-1.5 text-ink-400 hover:bg-brand-50 hover:text-brand-700"
+                    className="group/act rounded-lg p-0.5 transition-transform hover:scale-105"
                     aria-label="Tambah Jadwal"
                     title="Tambah Jadwal"
                   >
-                    <CalendarPlus size={15} />
+                    <IconChip icon={<CalendarPlus size={14} />} tone="brand" size="sm" className="opacity-70 group-hover/act:opacity-100" />
                   </button>
                   <button
                     onClick={() => openEdit(guru)}
-                    className="rounded-lg p-1.5 text-ink-400 hover:bg-surface hover:text-ink-900"
+                    className="group/act rounded-lg p-0.5 transition-transform hover:scale-105"
                     aria-label="Edit"
                   >
-                    <Pencil size={15} />
+                    <IconChip icon={<Pencil size={14} />} tone="amber" size="sm" className="opacity-70 group-hover/act:opacity-100" />
                   </button>
                   <button
                     onClick={() => handleDelete(guru.id)}
-                    className="rounded-lg p-1.5 text-ink-400 hover:bg-rose-50 hover:text-rose"
+                    className="group/act rounded-lg p-0.5 transition-transform hover:scale-105"
                     aria-label="Hapus"
                   >
-                    <Trash2 size={15} />
+                    <IconChip icon={<Trash2 size={14} />} tone="rose" size="sm" className="opacity-70 group-hover/act:opacity-100" />
                   </button>
                 </div>
               </li>
@@ -259,6 +264,19 @@ export default function GuruWorkspace({ initialData }: { initialData: Guru[] }) 
 
             {showMore && (
               <div className="mt-3.5 flex flex-col gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[12.5px] font-medium text-ink-700">Jenis Kelamin</label>
+                  <select
+                    name="jenisKelamin"
+                    defaultValue={editing?.jenisKelamin ?? ""}
+                    className="h-11 rounded-xl border border-border bg-surface px-3.5 text-[13.5px] text-ink-900 outline-none focus:border-brand-600/50 focus:ring-2 focus:ring-brand-600/15"
+                  >
+                    <option value="">Opsional — kosongkan jika tidak ingin diisi</option>
+                    <option value="L">Laki-laki</option>
+                    <option value="P">Perempuan</option>
+                  </select>
+                  <p className="text-[11.5px] text-ink-400">Dipakai untuk memilih varian ilustrasi avatar.</p>
+                </div>
                 <Input name="nip" label="NIP" placeholder="Opsional" defaultValue={editing?.nip} />
                 <Input name="nuptk" label="NUPTK" placeholder="Opsional" defaultValue={editing?.nuptk} />
                 <Input

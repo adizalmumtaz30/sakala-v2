@@ -17,10 +17,11 @@ type Row = {
   nuptk: string | null;
   email: string | null;
   no_telepon: string | null;
+  jenis_kelamin: "L" | "P" | null;
   created_at: string;
 };
 
-const SELECT_COLUMNS = "id, nama_guru, kode_guru, status, nip, nuptk, email, no_telepon, created_at";
+const SELECT_COLUMNS = "id, nama_guru, kode_guru, status, nip, nuptk, email, no_telepon, jenis_kelamin, created_at";
 
 function rowToEntity(row: Row): Guru {
   return {
@@ -32,6 +33,7 @@ function rowToEntity(row: Row): Guru {
     nuptk: row.nuptk ?? undefined,
     email: row.email ?? undefined,
     noTelepon: row.no_telepon ?? undefined,
+    jenisKelamin: row.jenis_kelamin ?? undefined,
   };
 }
 
@@ -73,6 +75,7 @@ export const guruRepository = {
         nuptk: optionalText(draft.nuptk),
         email: optionalText(draft.email),
         no_telepon: optionalText(draft.noTelepon),
+        jenis_kelamin: draft.jenisKelamin ?? null,
       })
       .select(SELECT_COLUMNS)
       .single();
@@ -91,6 +94,7 @@ export const guruRepository = {
         nuptk: optionalText(draft.nuptk),
         email: optionalText(draft.email),
         no_telepon: optionalText(draft.noTelepon),
+        jenis_kelamin: draft.jenisKelamin ?? null,
       })
       .eq("id", id)
       .select(SELECT_COLUMNS)

@@ -2,7 +2,7 @@
 // supaya bisa dipanggil ulang persis sama saat validate (preview) dan commit (server
 // re-validate, tidak pernah percaya hasil validasi client — Bagian 78).
 
-import type { StatusAktif, GuruDraft } from "./guru";
+import type { StatusAktif, JenisKelamin, GuruDraft } from "./guru";
 
 export interface GuruImportIssue {
   column: string;
@@ -45,8 +45,20 @@ export function validateGuruImportRows(
     const noTelepon = (raw["NomorTelepon"] ?? "").trim();
     const statusRaw = (raw["StatusAktif"] ?? "aktif").trim().toLowerCase();
     const status: StatusAktif = statusRaw === "nonaktif" ? "nonaktif" : "aktif";
+    const jenisKelaminRaw = (raw["JenisKelamin"] ?? "").trim().toLowerCase();
+    let jenisKelamin: JenisKelamin | undefined;
 
     const issues: GuruImportIssue[] = [];
+
+    if (jenisKelaminRaw) {
+      if (jenisKelaminRaw === "l" || jenisKelaminRaw === "laki-laki" || jenisKelaminRaw === "pria") {
+        jenisKelamin = "L";
+      } else if (jenisKelaminRaw === "p" || jenisKelaminRaw === "perempuan" || jenisKelaminRaw === "wanita") {
+        jenisKelamin = "P";
+      } else {
+        issues.push({ column: "JenisKelamin", message: 'Isi "L" (Laki-laki) atau "P" (Perempuan), atau kosongkan.' });
+      }
+    }
 
     if (namaGuru.length < 3) {
       issues.push({ column: "NamaLengkap", message: "Wajib diisi, minimal 3 karakter." });
@@ -95,6 +107,7 @@ export function validateGuruImportRows(
         nuptk: nuptk || undefined,
         email: email || undefined,
         noTelepon: noTelepon || undefined,
+        jenisKelamin,
       },
     };
   });

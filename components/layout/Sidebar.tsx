@@ -66,7 +66,13 @@ export default function Sidebar() {
                   {active && (
                     <span className="absolute left-0 top-1/2 h-4 w-1 -translate-y-1/2 rounded-full bg-brand-600" />
                   )}
-                  <Icon size={17} strokeWidth={2} className={active ? "text-brand-600" : "text-ink-400 group-hover:text-ink-700"} />
+                  <span
+                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors ${
+                      active ? "bg-brand-100 text-brand-600" : "text-ink-400 group-hover:bg-surface group-hover:text-ink-700"
+                    }`}
+                  >
+                    <Icon size={16} strokeWidth={2.1} />
+                  </span>
                   {item.label}
                 </Link>
                 {item.key === "data" && inDataCore && (
