@@ -2,8 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Search, Bell, ChevronDown, Wifi, WifiOff, GraduationCap, LogOut } from "lucide-react";
-import { logout } from "@/app/login/actions";
+import { Search, Bell, ChevronDown, Wifi, WifiOff, GraduationCap } from "lucide-react";
 
 function initialsOf(nama: string): string {
   const parts = nama.trim().split(/\s+/).filter(Boolean);
@@ -35,11 +34,9 @@ function useOnlineStatus(): boolean {
 export default function Header({
   schoolProfileNama,
   activeContextLabel,
-  userEmail,
 }: {
   schoolProfileNama: string | null;
   activeContextLabel: string | null;
-  userEmail: string | null;
 }) {
   const online = useOnlineStatus();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -103,20 +100,9 @@ export default function Header({
 
           {menuOpen && (
             <div className="absolute right-0 top-full mt-2 w-56 rounded-xl border border-border bg-surface py-1.5 shadow-lg">
-              {userEmail && (
-                <div className="border-b border-border px-3.5 py-2">
-                  <p className="truncate text-[12.5px] font-medium text-ink-900">{schoolProfileNama ?? "Admin"}</p>
-                  <p className="truncate text-[11.5px] text-ink-400">{userEmail}</p>
-                </div>
-              )}
               <Link href="/akademik" onClick={() => setMenuOpen(false)} className="block px-3.5 py-2 text-[13px] text-ink-700 hover:bg-surface-muted">
                 Profil Admin Sekolah
               </Link>
-              <form action={logout}>
-                <button type="submit" className="flex w-full items-center gap-2 px-3.5 py-2 text-left text-[13px] text-rose hover:bg-rose-50">
-                  <LogOut size={14} /> Keluar
-                </button>
-              </form>
             </div>
           )}
         </div>
