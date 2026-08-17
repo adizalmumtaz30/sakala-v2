@@ -18,6 +18,7 @@ import Modal from "@/components/ui/Modal";
 import Avatar from "@/components/ui/Avatar";
 import { Card, Badge, EmptyState } from "@/components/ui/primitives";
 import ImportModal, { type ImportRowResult } from "@/components/import/ImportModal";
+import { teacherColor } from "@/lib/utils/teacherColor";
 
 export default function GuruWorkspace({ initialData }: { initialData: Guru[] }) {
   const router = useRouter();
@@ -151,9 +152,12 @@ export default function GuruWorkspace({ initialData }: { initialData: Guru[] }) 
           />
         ) : (
           <ul>
-            {filtered.map((guru) => (
+            {filtered.map((guru) => {
+              const color = teacherColor(guru.kodeGuru || guru.id);
+              return (
               <li
                 key={guru.id}
+                style={{ borderLeft: `3px solid ${color.accent}` }}
                 className="flex items-center gap-3.5 border-b border-border px-5 py-3.5 last:border-0 hover:bg-surface-muted/60"
               >
                 <Avatar name={guru.namaGuru} />
@@ -197,7 +201,8 @@ export default function GuruWorkspace({ initialData }: { initialData: Guru[] }) 
                   </button>
                 </div>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </Card>

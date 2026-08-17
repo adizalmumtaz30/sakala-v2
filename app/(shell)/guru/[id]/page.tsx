@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getGuruById } from "@/lib/application/guru.usecases";
 import { ErrorState, Card, Badge } from "@/components/ui/primitives";
 import Avatar from "@/components/ui/Avatar";
+import { teacherColor } from "@/lib/utils/teacherColor";
 
 // Detail Guru (Bagian 86-87) — informasi tambahan dilengkapi di sini setelah
 // Guru dibuat cepat lewat form minimal. Statistik pengajaran/jadwal (JP, kelas,
@@ -25,7 +26,10 @@ export default async function GuruDetailPage({ params }: { params: Promise<{ id:
           <ArrowLeft size={15} /> Kembali ke Guru
         </Link>
 
-        <Card className="flex items-center gap-4">
+        <Card
+          className="flex items-center gap-4"
+          style={{ borderLeft: `3px solid ${teacherColor(guru.kodeGuru || guru.id).accent}` }}
+        >
           <Avatar name={guru.namaGuru} size="lg" />
           <div className="flex-1">
             <h1 className="text-[18px] font-bold text-ink-900">{guru.namaGuru}</h1>

@@ -1,8 +1,21 @@
+import type { CSSProperties } from "react";
 import { AlertTriangle, Inbox, RefreshCw } from "lucide-react";
 import Button from "./Button";
 
-export function Card({ className = "", children }: { className?: string; children: React.ReactNode }) {
-  return <div className={`rounded-card border border-border bg-surface p-5 ${className}`}>{children}</div>;
+export function Card({
+  className = "",
+  style,
+  children,
+}: {
+  className?: string;
+  style?: CSSProperties;
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={style} className={`rounded-card border border-border bg-surface p-5 ${className}`}>
+      {children}
+    </div>
+  );
 }
 
 type BadgeTone = "success" | "warning" | "danger" | "info" | "neutral";

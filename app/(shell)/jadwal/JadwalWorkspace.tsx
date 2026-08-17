@@ -17,6 +17,7 @@ import { formatJenisSlot } from "@/lib/domain/slotTemplate";
 import type { ScheduleAssignment, ScheduleAssignmentDraft } from "@/lib/domain/scheduleAssignment";
 import { buildJadwalGrid, isEligibleForAdd, cellKey, type GridCell, type JadwalViewBy, type JadwalRangeMode } from "@/lib/domain/jadwalGrid";
 import { checkRealtimeOverlap, CONFLICT_TYPE_LABEL, type ScheduleConflict } from "@/lib/domain/conflict";
+import { teacherColor } from "@/lib/utils/teacherColor";
 import { addAssignmentAction, moveAssignmentAction, deleteAssignmentAction } from "./actions";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -86,6 +87,12 @@ export default function JadwalWorkspace({
   const [rangeMode, setRangeMode] = useState<JadwalRangeMode>("mingguan");
 
   const guruMap = useMemo(() => new Map(guruList.map((g) => [g.id, g.namaGuru])), [guruList]);
+  // Identitas Warna Guru (Bagian 10) — di-hash dari kodeGuru (stabil, bukan
+  // dari nama yang bisa diedit), dipakai konsisten di kotak Jadwal & Data Guru.
+  const guruColorMap = useMemo(
+    () => new Map(guruList.map((g) => [g.id, teacherColor(g.kodeGuru || g.id)])),
+    [guruList]
+  );
   const kelasMap = useMemo(() => new Map(kelasList.map((k) => [k.id, `${k.tingkat} ${k.namaRombel}`])), [kelasList]);
   const mapelMap = useMemo(() => new Map(mapelList.map((m) => [m.id, m.nama])), [mapelList]);
   const ruanganMap = useMemo(() => new Map(ruanganList.map((r) => [r.id, r.nama])), [ruanganList]);
@@ -588,6 +595,7 @@ export default function JadwalWorkspace({
                             }
                             mapelLabel={cell.assignment ? mapelMap.get(cell.assignment.subjectId) : undefined}
                             ruanganLabel={cell.assignment?.roomId ? ruanganMap.get(cell.assignment.roomId) : undefined}
+                            teacherColor={cell.assignment ? guruColorMap.get(cell.assignment.teacherId) : undefined}
                           />
                         </td>
                       );
@@ -885,12 +893,14 @@ function JadwalCell({
   entityLabel,
   mapelLabel,
   ruanganLabel,
+  teacherColor,
 }: {
   cell: GridCell;
   onClick: () => void;
   entityLabel?: string;
   mapelLabel?: string;
   ruanganLabel?: string;
+  teacherColor?: { tint: string; accent: string; text: string };
 }) {
   if (cell.state === "empty") {
     if (!cell.jamPelajaran) {
@@ -921,15 +931,32 @@ function JadwalCell({
 
   const isConflict = cell.state === "conflict";
 
+  // Identitas Warna Guru (Bagian 10): tint lembut + accent strip kiri per guru,
+  // konsisten dengan Data Guru. Blocking conflict tetap prioritas visual merah
+  // (readability atas identitas warna — Bagian 10.6) sehingga tidak tertutupi.
+  const style = !isConflict && teacherColor
+    ? { backgroundColor: teacherColor.tint, borderColor: `${teacherColor.accent}33`, borderLeft: `3px solid ${teacherColor.accent}` }
+    : undefined;
+
   return (
     <button
       onClick={onClick}
+      style={style}
       className={`flex min-h-16 w-full flex-col justify-center gap-0.5 rounded-xl border px-2 py-1.5 text-left text-[11.5px] transition-colors ${
-        isConflict ? "border-rose bg-rose-50 hover:bg-rose-50/70" : "border-brand-600/20 bg-brand-50 hover:bg-brand-50/70"
+        isConflict
+          ? "border-rose bg-rose-50 hover:bg-rose-50/70"
+          : teacherColor
+            ? "hover:brightness-95"
+            : "border-brand-600/20 bg-brand-50 hover:bg-brand-50/70"
       }`}
     >
       <span className="break-words font-semibold leading-snug text-ink-900">{mapelLabel ?? "-"}</span>
-      <span className="break-words leading-snug text-ink-500">{entityLabel ?? "-"}</span>
+      <span
+        className="break-words leading-snug"
+        style={!isConflict && teacherColor ? { color: teacherColor.text } : undefined}
+      >
+        {entityLabel ?? "-"}
+      </span>
       {ruanganLabel && <span className="break-words leading-snug text-ink-400">{ruanganLabel}</span>}
       {isConflict ? (
         <Badge tone="danger">
