@@ -57,7 +57,7 @@ export default function Header({
       style={{ height: "var(--shell-topbar-h)" }}
     >
       {/* CENTER — Global Search / Command Palette trigger (Bagian 10.2) */}
-      <button className="flex max-w-md flex-1 items-center gap-2 rounded-xl border border-border bg-surface-muted px-3.5 py-2.5 text-left text-ink-400 transition-colors hover:border-brand-600/30">
+      <button className="flex max-w-md flex-1 items-center gap-2 rounded-xl border border-border bg-surface-muted px-3.5 py-2.5 text-left text-ink-400 transition-all duration-150 hover:border-brand-600/30 hover:shadow-soft focus:border-brand-600/40 focus:shadow-soft focus:outline-none">
         <Search size={16} />
         <span className="flex-1 text-[13px]">Cari guru, jadwal, mapel...</span>
         <kbd className="rounded-md border border-border bg-surface px-1.5 py-0.5 text-[10px] font-semibold text-ink-400">⌘K</kbd>
@@ -80,6 +80,12 @@ export default function Header({
       {/* RIGHT — Connection + notification + profile (Bagian 10.2) */}
       <div className="ml-auto flex items-center gap-5">
         <div className={`hidden items-center gap-1.5 text-[12px] font-medium md:flex ${online ? "text-emerald" : "text-rose"}`}>
+          <span className="relative flex h-2 w-2">
+            {online && (
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald opacity-60" />
+            )}
+            <span className={`relative inline-flex h-2 w-2 rounded-full ${online ? "bg-emerald" : "bg-rose"}`} />
+          </span>
           {online ? <Wifi size={14} /> : <WifiOff size={14} />} {online ? "Online" : "Offline"}
         </div>
 
@@ -90,9 +96,9 @@ export default function Header({
         <div ref={menuRef} className="relative">
           <button
             onClick={() => setMenuOpen((v) => !v)}
-            className="flex items-center gap-2 rounded-xl py-1.5 pl-1.5 pr-2 hover:bg-surface-muted"
+            className="flex items-center gap-2 rounded-xl py-1.5 pl-1.5 pr-2 transition-colors hover:bg-surface-muted"
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-50 text-[12px] font-bold text-brand-700">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-50 text-[12px] font-bold text-brand-700 ring-2 ring-surface ring-offset-1 ring-offset-brand-100">
               {schoolProfileNama ? initialsOf(schoolProfileNama) : "?"}
             </div>
             <ChevronDown size={15} className="text-ink-400" />

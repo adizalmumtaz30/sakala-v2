@@ -40,7 +40,7 @@ export default function Sidebar() {
       className="fixed inset-y-0 left-0 z-30 flex flex-col border-r border-border bg-surface"
       style={{ width: "var(--shell-sidebar-w)" }}
     >
-      <div className="flex items-center gap-2.5 px-5 pt-5 pb-4">
+      <div className="flex items-center gap-2.5 border-b border-border px-5 pt-5 pb-4">
         <Image src="/logo.png" alt="SAKALA" width={30} height={30} className="shrink-0" />
         <div className="leading-tight">
           <p className="text-sm font-bold tracking-tight text-ink-900">SAKALA</p>
@@ -48,7 +48,7 @@ export default function Sidebar() {
         </div>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 pb-3">
+      <nav className="flex-1 overflow-y-auto px-3 pt-3 pb-3">
         <div className="flex flex-col gap-0.5">
           {coreNav.map((item) => {
             const active = item.key === "data" ? inDataCore : pathname === item.href;
@@ -57,10 +57,15 @@ export default function Sidebar() {
               <div key={item.key}>
                 <Link
                   href={item.href}
-                  className={`group flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors ${
-                    active ? "bg-brand-50 text-brand-700" : "text-ink-700 hover:bg-surface-muted"
+                  className={`group relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium transition-all duration-150 ${
+                    active
+                      ? "bg-brand-50 text-brand-700 shadow-soft"
+                      : "text-ink-700 hover:translate-x-0.5 hover:bg-surface-muted"
                   }`}
                 >
+                  {active && (
+                    <span className="absolute left-0 top-1/2 h-4 w-1 -translate-y-1/2 rounded-full bg-brand-600" />
+                  )}
                   <Icon size={17} strokeWidth={2} className={active ? "text-brand-600" : "text-ink-400 group-hover:text-ink-700"} />
                   {item.label}
                 </Link>
