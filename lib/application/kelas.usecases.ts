@@ -1,10 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { validateKelasDraft, type Kelas, type KelasDraft } from "@/lib/domain/kelas";
+import { validateKelasDraft, sortKelasByTingkat, type Kelas, type KelasDraft } from "@/lib/domain/kelas";
 import { kelasRepository } from "@/lib/data-access/kelas.repository";
 import { recordAuditEvent } from "@/lib/application/auditLog.usecases";
 
 export async function listKelas(supabase: SupabaseClient): Promise<Kelas[]> {
-  return kelasRepository.findAll(supabase);
+  const data = await kelasRepository.findAll(supabase);
+  return sortKelasByTingkat(data);
 }
 
 // Kelas tidak terikat Academic Context via kolom relasi (identitas tahun ajaran/
