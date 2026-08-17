@@ -9,6 +9,7 @@
 
 import type { JpSummaryStatus } from "@/lib/domain/pembagianMengajar";
 import type { HariSekolah } from "@/lib/domain/jamPelajaran";
+import { formatHari } from "@/lib/domain/jamPelajaran";
 import type { ScheduleAssignment } from "@/lib/domain/scheduleAssignment";
 import { periodsOverlap } from "@/lib/domain/scheduleAssignment";
 
@@ -87,6 +88,22 @@ export function nextConflictId(): string {
  * validasi server (FIXED_SLOT, JP_MISMATCH, INACTIVE_ENTITY, dll masih perlu
  * server) — hanya lapisan realtime tambahan untuk feedback instan.
  */
+/** Lookup nama entitas (id → nama tampilan) supaya pesan conflict bisa
+ * menyebut nama asli ("Guru Ahmad", "Kelas 8", "Ruang 03") alih-alih hanya
+ * "kelas lain"/"guru lain" — sesuai requirement V2.3 #5 (pesan harus jelas
+ * tanpa pengguna perlu mencari penyebab manual). Semua opsional & fallback
+ * ke label generik kalau id tidak ditemukan di map (mis. entity baru saja
+ * dihapus tapi assignment lama belum di-refresh dari server). */
+export interface RealtimeConflictNames {
+  guru?: Map<string, string>;
+  kelas?: Map<string, string>;
+  ruangan?: Map<string, string>;
+}
+
+function jamLabel(periodStart: number, periodEnd: number): string {
+  return periodStart === periodEnd ? `jam ke-${periodStart}` : `jam ke-${periodStart} s.d. ke-${periodEnd}`;
+}
+
 export function checkRealtimeOverlap(params: {
   candidate: {
     classId: string;
@@ -100,9 +117,16 @@ export function checkRealtimeOverlap(params: {
   roomModeAktif: boolean;
   /** Saat edit assignment existing, kecualikan dirinya sendiri dari perbandingan. */
   excludeAssignmentId?: string;
+  /** Nama tampilan Guru/Kelas/Ruangan — lihat RealtimeConflictNames. */
+  names?: RealtimeConflictNames;
 }): ScheduleConflict[] {
-  const { candidate, assignments, roomModeAktif, excludeAssignmentId } = params;
+  const { candidate, assignments, roomModeAktif, excludeAssignmentId, names } = params;
   const conflicts: ScheduleConflict[] = [];
+
+  const guruName = (id: string) => names?.guru?.get(id) ?? "yang dipilih";
+  const kelasName = (id: string) => names?.kelas?.get(id) ?? "kelas lain";
+  const ruanganName = (id: string) => names?.ruangan?.get(id) ?? "yang dipilih";
+  const hari = formatHari(candidate.day);
 
   const siblings = assignments.filter(
     (a) =>
@@ -113,6 +137,7 @@ export function checkRealtimeOverlap(params: {
   );
 
   for (const sibling of siblings) {
+    const jam = jamLabel(sibling.periodStart, sibling.periodEnd);
     if (candidate.teacherId && sibling.teacherId === candidate.teacherId) {
       conflicts.push(
         makeRealtimeConflict(
@@ -120,7 +145,7 @@ export function checkRealtimeOverlap(params: {
           "teacher",
           [candidate.teacherId],
           [sibling.id],
-          `Guru sudah mengajar kelas lain pada periode ${sibling.periodStart}-${sibling.periodEnd} hari ${candidate.day}.`,
+          `Guru ${guruName(candidate.teacherId)} sudah mengajar ${kelasName(sibling.classId)} pada ${jam} hari ${hari}.`,
           "Pilih guru lain, atau ubah periode agar tidak tumpang tindih."
         )
       );
@@ -132,7 +157,7 @@ export function checkRealtimeOverlap(params: {
           "class",
           [candidate.classId],
           [sibling.id],
-          `Kelas sudah memiliki mata pelajaran lain pada periode ${sibling.periodStart}-${sibling.periodEnd} hari ${candidate.day}.`,
+          `${kelasName(candidate.classId)} sudah memiliki jadwal pada ${jam} hari ${hari}.`,
           "Ubah periode, atau hapus/pindahkan assignment yang bentrok terlebih dahulu."
         )
       );
@@ -144,7 +169,7 @@ export function checkRealtimeOverlap(params: {
           "room",
           [candidate.roomId],
           [sibling.id],
-          `Ruangan sudah dipakai kelas lain pada periode ${sibling.periodStart}-${sibling.periodEnd} hari ${candidate.day}.`,
+          `Ruangan ${ruanganName(candidate.roomId)} sedang digunakan oleh ${kelasName(sibling.classId)} pada ${jam} hari ${hari}.`,
           "Pilih ruangan lain, atau ubah periode."
         )
       );
@@ -178,3 +203,20 @@ function makeRealtimeConflict(
 export function isBlockingSeverity(severity: ConflictSeverity): boolean {
   return severity === "error";
 }
+
+/** Label singkat berbahasa Indonesia per jenis konflik — shared di semua
+ * tempat conflict ditampilkan (Jadwal Operational Workspace, Jadwal Cerdas
+ * Review & Commit) supaya pengguna tidak melihat nama internal enum seperti
+ * "TEACHER_OVERLAP". Requirement V2.3 #5: penjelasan harus jelas tanpa
+ * pengguna perlu mencari penyebab manual. */
+export const CONFLICT_TYPE_LABEL: Record<ConflictType, string> = {
+  TEACHER_OVERLAP: "Bentrok Guru",
+  CLASS_OVERLAP: "Bentrok Kelas",
+  ROOM_OVERLAP: "Bentrok Ruangan",
+  FIXED_SLOT: "Slot Tetap",
+  INVALID_PERIOD: "Periode Tidak Valid",
+  INACTIVE_ENTITY: "Entitas Nonaktif",
+  JP_MISMATCH: "Selisih Target JP",
+  MISSING_REQUIRED_FIELD: "Data Belum Lengkap",
+  CONTEXT_MISMATCH: "Konteks Tidak Cocok",
+};

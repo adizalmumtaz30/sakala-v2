@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, X, Trash2, Copy, Pencil, Eye, AlertTriangle, CheckCircle2, Info, CalendarClock } from "lucide-react";
+import { Plus, X, Trash2, Copy, Pencil, Eye, AlertTriangle, CheckCircle2, Info, CalendarClock, User, Users, DoorOpen } from "lucide-react";
 import type { AcademicContext } from "@/lib/domain/academicContext";
 import { formatContextLabel } from "@/lib/domain/academicContext";
 import type { ScheduleModel } from "@/lib/domain/scheduleModel";
@@ -16,7 +16,7 @@ import type { SlotTemplate, JenisSlot } from "@/lib/domain/slotTemplate";
 import { formatJenisSlot } from "@/lib/domain/slotTemplate";
 import type { ScheduleAssignment, ScheduleAssignmentDraft } from "@/lib/domain/scheduleAssignment";
 import { buildJadwalGrid, isEligibleForAdd, cellKey, type GridCell, type JadwalViewBy, type JadwalRangeMode } from "@/lib/domain/jadwalGrid";
-import { checkRealtimeOverlap, type ScheduleConflict } from "@/lib/domain/conflict";
+import { checkRealtimeOverlap, CONFLICT_TYPE_LABEL, type ScheduleConflict } from "@/lib/domain/conflict";
 import { addAssignmentAction, moveAssignmentAction, deleteAssignmentAction } from "./actions";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -39,6 +39,16 @@ function conflictTone(severity: ScheduleConflict["severity"]): "danger" | "warni
   if (severity === "error") return "danger";
   if (severity === "warning") return "warning";
   return "info";
+}
+
+/** Icon premium per jenis konflik — memperjelas jenis bentrok secara visual
+ * (Guru/Kelas/Ruangan) tanpa harus membaca teks badge dulu. */
+function ConflictTypeIcon({ entityType }: { entityType: ScheduleConflict["entityType"] }) {
+  const size = 13;
+  if (entityType === "teacher") return <User size={size} />;
+  if (entityType === "class") return <Users size={size} />;
+  if (entityType === "room") return <DoorOpen size={size} />;
+  return <AlertTriangle size={size} />;
 }
 
 export default function JadwalWorkspace({
@@ -320,6 +330,8 @@ export default function JadwalWorkspace({
   const effectiveAddJp = Math.min(Math.max(addJpCount, 1), Math.max(addMaxJp, 1));
   const addPeriodEnd = addTarget ? addTarget.nomorUrut + effectiveAddJp - 1 : 0;
 
+  const realtimeNames = { guru: guruMap, kelas: kelasMap, ruangan: ruanganMap };
+
   const addRealtimeConflicts =
     addTarget && addForm.classId && addForm.teacherId
       ? checkRealtimeOverlap({
@@ -333,9 +345,34 @@ export default function JadwalWorkspace({
           },
           assignments,
           roomModeAktif: !roomDisabled,
+          names: realtimeNames,
         })
       : [];
   const addHasBlockingConflict = addRealtimeConflicts.some((c) => c.blocking);
+
+  // Sama seperti Tambah Jadwal — realtime check juga aktif di modal
+  // Edit/Pindah (sebelumnya hanya divalidasi server setelah submit, jadi
+  // user baru tahu bentrok setelah klik "Validasi & Commit"). Assignment
+  // yang sedang diedit dikecualikan dari perbandingan (excludeAssignmentId)
+  // supaya tidak "bentrok dengan dirinya sendiri" di posisi lama.
+  const editRealtimeConflicts =
+    editTarget && editForm.classId && editForm.teacherId
+      ? checkRealtimeOverlap({
+          candidate: {
+            classId: editForm.classId,
+            teacherId: editForm.teacherId,
+            roomId: editForm.roomId || null,
+            day: editForm.day,
+            periodStart: editForm.nomorUrut,
+            periodEnd: editForm.nomorUrut,
+          },
+          assignments,
+          roomModeAktif: !roomDisabled,
+          excludeAssignmentId: editTarget.id,
+          names: realtimeNames,
+        })
+      : [];
+  const editHasBlockingConflict = editRealtimeConflicts.some((c) => c.blocking);
 
   if (activeModels.length === 0) {
     return (
@@ -676,11 +713,12 @@ export default function JadwalWorkspace({
                 onChange={(e) => setEditForm((f) => ({ ...f, nomorUrut: Number(e.target.value) || 1 }))}
               />
             </div>
+            {editForm.classId && editForm.teacherId && <ConflictList conflicts={editRealtimeConflicts} />}
             {editError && <p className="text-[12px] text-rose">{editError}</p>}
             <Input label="Label Schedule Version (opsional)" value={editLabel} onChange={(e) => setEditLabel(e.target.value)} placeholder="mis. Pindah karena bentrok ruangan" />
             <p className="text-[11.5px] text-ink-400">Menyimpan akan langsung memvalidasi ulang dan membuat Schedule Version baru (histori perubahan).</p>
             <div className="flex gap-2 pt-1">
-              <Button variant="primary" size="sm" loading={editSaving} onClick={runSaveEdit}>
+              <Button variant="primary" size="sm" loading={editSaving} disabled={editHasBlockingConflict} onClick={runSaveEdit}>
                 Validasi &amp; Commit Perubahan
               </Button>
             </div>
@@ -792,9 +830,14 @@ function ConflictList({ conflicts }: { conflicts: ScheduleConflict[] }) {
   return (
     <div className="flex flex-col gap-1.5">
       {conflicts.map((c) => (
-        <div key={c.conflictId} className="flex items-start gap-1.5 rounded-xl bg-surface-muted px-3 py-2 text-[12px] text-ink-700">
-          <Badge tone={conflictTone(c.severity)}>{c.type}</Badge>
-          <span>{c.message}</span>
+        <div key={c.conflictId} className="flex items-start gap-2 rounded-xl bg-surface-muted px-3 py-2 text-[12px] text-ink-700">
+          <span className={`mt-0.5 flex-shrink-0 ${c.severity === "error" ? "text-rose" : c.severity === "warning" ? "text-amber-600" : "text-ink-400"}`}>
+            <ConflictTypeIcon entityType={c.entityType} />
+          </span>
+          <div className="flex flex-col gap-0.5">
+            <Badge tone={conflictTone(c.severity)}>{CONFLICT_TYPE_LABEL[c.type] ?? c.type}</Badge>
+            <span>{c.message}</span>
+          </div>
         </div>
       ))}
     </div>

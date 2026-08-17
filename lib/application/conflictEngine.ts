@@ -18,6 +18,7 @@ import { scheduleModelRepository } from "@/lib/data-access/scheduleModel.reposit
 import { scheduleAssignmentRepository } from "@/lib/data-access/scheduleAssignment.repository";
 import { pembagianMengajarRepository } from "@/lib/data-access/pembagianMengajar.repository";
 import { isFixedSlot } from "@/lib/domain/slotTemplate";
+import { formatHari } from "@/lib/domain/jamPelajaran";
 import { periodsOverlap, type ScheduleAssignmentDraft } from "@/lib/domain/scheduleAssignment";
 import { summarizeJp } from "@/lib/domain/pembagianMengajar";
 import { isBlockingSeverity, nextConflictId, toJpReconciliationState, type ScheduleConflict } from "@/lib/domain/conflict";
@@ -132,8 +133,18 @@ export async function validateAssignmentCandidate(
   }
 
   // --- TEACHER_OVERLAP / CLASS_OVERLAP / ROOM_OVERLAP (Bagian 22.1-22.3) ---
+  // Pesan menyebut nama asli (Guru/Kelas/Ruangan) — bukan "kelas lain"/"guru
+  // lain" — supaya pengguna tidak perlu mencari sendiri penyebab konflik
+  // (requirement V2.3 #5). Sama seperti pesan realtime client-side di
+  // lib/domain/conflict.ts (checkRealtimeOverlap) — dua-duanya harus konsisten.
+  const guruNamaMap = new Map(guruList.map((g) => [g.id, g.namaGuru]));
+  const kelasNamaMap = new Map(kelasList.map((k) => [k.id, `${k.tingkat} ${k.namaRombel}`]));
+  const ruanganNamaMap = new Map(ruanganList.map((r) => [r.id, r.nama]));
+  const jamLabel = (start: number, end: number) => (start === end ? `jam ke-${start}` : `jam ke-${start} s.d. ke-${end}`);
+
   for (const sibling of siblingAssignments) {
     if (!periodsOverlap(draft.periodStart, draft.periodEnd, sibling.periodStart, sibling.periodEnd)) continue;
+    const jam = jamLabel(sibling.periodStart, sibling.periodEnd);
 
     if (sibling.teacherId === draft.teacherId) {
       conflicts.push(
@@ -143,7 +154,7 @@ export async function validateAssignmentCandidate(
           "teacher",
           [draft.teacherId],
           [sibling.id],
-          `Guru sudah mengajar kelas lain pada periode ${sibling.periodStart}-${sibling.periodEnd} hari ${draft.day}.`,
+          `Guru ${guruNamaMap.get(draft.teacherId) ?? "yang dipilih"} sudah mengajar ${kelasNamaMap.get(sibling.classId) ?? "kelas lain"} pada ${jam} hari ${formatHari(draft.day)}.`,
           "Pilih guru lain, atau ubah periode agar tidak tumpang tindih."
         )
       );
@@ -156,7 +167,7 @@ export async function validateAssignmentCandidate(
           "class",
           [draft.classId],
           [sibling.id],
-          `Kelas sudah memiliki mata pelajaran lain pada periode ${sibling.periodStart}-${sibling.periodEnd} hari ${draft.day}.`,
+          `${kelasNamaMap.get(draft.classId) ?? "Kelas ini"} sudah memiliki jadwal pada ${jam} hari ${formatHari(draft.day)}.`,
           "Ubah periode, atau hapus/pindahkan assignment yang bentrok terlebih dahulu."
         )
       );
@@ -170,7 +181,7 @@ export async function validateAssignmentCandidate(
           "room",
           [draft.roomId],
           [sibling.id],
-          `Ruangan sudah dipakai kelas lain pada periode ${sibling.periodStart}-${sibling.periodEnd} hari ${draft.day}.`,
+          `Ruangan ${ruanganNamaMap.get(draft.roomId) ?? "yang dipilih"} sedang digunakan oleh ${kelasNamaMap.get(sibling.classId) ?? "kelas lain"} pada ${jam} hari ${formatHari(draft.day)}.`,
           "Pilih ruangan lain, atau ubah periode."
         )
       );

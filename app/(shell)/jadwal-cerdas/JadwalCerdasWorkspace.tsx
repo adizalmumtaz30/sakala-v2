@@ -15,7 +15,7 @@ import { formatHari, URUTAN_HARI } from "@/lib/domain/jamPelajaran";
 import type { JenisSlot } from "@/lib/domain/slotTemplate";
 import { formatJenisSlot } from "@/lib/domain/slotTemplate";
 import type { GenerationRequirement } from "@/lib/domain/candidateGeneration";
-import type { ScheduleConflict } from "@/lib/domain/conflict";
+import { CONFLICT_TYPE_LABEL, type ScheduleConflict } from "@/lib/domain/conflict";
 import type { OptimizationPreview } from "@/lib/application/candidateGenerator";
 import {
   generateCandidatesAction,
@@ -665,13 +665,13 @@ export default function JadwalCerdasWorkspace({
                               ) : (
                                 <div className="flex flex-col gap-1">
                                   {blocking.map((c) => (
-                                    <Badge key={c.conflictId} tone="danger">
-                                      {c.type}
+                                    <Badge key={c.conflictId} tone="danger" title={c.message}>
+                                      {CONFLICT_TYPE_LABEL[c.type] ?? c.type}
                                     </Badge>
                                   ))}
                                   {warnings.map((c) => (
-                                    <Badge key={c.conflictId} tone="warning">
-                                      {c.type}
+                                    <Badge key={c.conflictId} tone="warning" title={c.message}>
+                                      {CONFLICT_TYPE_LABEL[c.type] ?? c.type}
                                     </Badge>
                                   ))}
                                 </div>
@@ -770,7 +770,7 @@ export default function JadwalCerdasWorkspace({
                   <p className="text-[12px] font-medium text-ink-700">Catatan non-blocking pasca-commit:</p>
                   {postCommitConflicts.map((c) => (
                     <p key={c.conflictId} className="flex items-start gap-1.5 text-[12px] text-ink-500">
-                      <Badge tone={c.severity === "warning" ? "warning" : "info"}>{c.type}</Badge>
+                      <Badge tone={c.severity === "warning" ? "warning" : "info"}>{CONFLICT_TYPE_LABEL[c.type] ?? c.type}</Badge>
                       <span>{c.message}</span>
                     </p>
                   ))}
