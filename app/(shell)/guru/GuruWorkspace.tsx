@@ -170,7 +170,7 @@ export default function GuruWorkspace({ initialData }: { initialData: Guru[] }) 
                 </Badge>
                 <div className="flex items-center gap-1">
                   <button
-                    onClick={() => router.push(`/jadwal?viewBy=guru&entityId=${guru.id}`)}
+                    onClick={() => router.push(`/guru/${guru.id}/jadwal`)}
                     className="rounded-lg p-1.5 text-ink-400 hover:bg-surface hover:text-ink-900"
                     aria-label="Lihat Jadwal"
                     title="Lihat Jadwal"
