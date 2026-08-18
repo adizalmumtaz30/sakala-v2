@@ -11,7 +11,7 @@ import { formatHari, URUTAN_HARI } from "@/lib/domain/jamPelajaran";
 import ReportExportBar from "@/components/ui/ReportExportBar";
 
 export default function ScheduleExportPanel({
-  assignments, guruList, kelasList, mapelList, jamPelajaranList, activeDays, contextLabel,
+  assignments, guruList, kelasList, mapelList, jamPelajaranList, activeDays, contextLabel, schoolName,
 }: {
   assignments: ScheduleAssignment[];
   guruList: Guru[];
@@ -20,6 +20,7 @@ export default function ScheduleExportPanel({
   jamPelajaranList: JamPelajaran[];
   activeDays: HariSekolah[];
   contextLabel: string;
+  schoolName?: string;
 }) {
   const [mode, setMode] = useState<"mingguan" | "harian" | "kelas" | "guru">("mingguan");
   const [day, setDay] = useState<HariSekolah>(activeDays[0] ?? "senin");
@@ -56,6 +57,7 @@ export default function ScheduleExportPanel({
     { key: "guru", label: "Guru" }, { key: "ruangan", label: "Ruangan" }, { key: "status", label: "Status" },
   ];
   const label = mode === "kelas" ? `Per Kelas — ${kelasMap.get(activeEntity) ?? "Belum dipilih"}` : mode === "guru" ? `Per Guru — ${guruMap.get(activeEntity) ?? "Belum dipilih"}` : mode === "harian" ? `Harian — ${formatHari(day)}` : "Mingguan";
+  const filterLabel = `Mode: ${label}${mode === "harian" ? ` · Hari: ${formatHari(day)}` : ""}${mode === "kelas" ? ` · Kelas: ${kelasMap.get(activeEntity) ?? "-"}` : ""}${mode === "guru" ? ` · Guru: ${guruMap.get(activeEntity) ?? "-"}` : ""}`;
 
   return (
     <div className="flex flex-col gap-3">
@@ -81,7 +83,16 @@ export default function ScheduleExportPanel({
         )}
         <span className="ml-auto text-[11.5px] text-ink-400">{label} · {scoped.length} jadwal · {contextLabel}</span>
       </div>
-      <ReportExportBar title={`Jadwal ${label}`} context={`${contextLabel} · ${label}`} columns={columns} rows={rows} landscape />
+      <ReportExportBar
+        title={`Jadwal ${label}`}
+        context={`${contextLabel} · ${label}`}
+        schoolName={schoolName}
+        periodLabel={contextLabel}
+        filterLabel={filterLabel}
+        columns={columns}
+        rows={rows}
+        landscape
+      />
     </div>
   );
 }

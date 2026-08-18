@@ -46,12 +46,21 @@ export async function exportPdf(
   title: string,
   columns: ReportColumn[],
   rows: ReportRow[],
-  options: { context?: string; landscape?: boolean } = {},
+  options: { context?: string; schoolName?: string; periodLabel?: string; filterLabel?: string; landscape?: boolean } = {},
 ) {
   const response = await fetch("/api/export/pdf", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ title, columns, rows, context: options.context, landscape: options.landscape ?? true }),
+    body: JSON.stringify({
+      title,
+      columns,
+      rows,
+      context: options.context,
+      schoolName: options.schoolName,
+      periodLabel: options.periodLabel,
+      filterLabel: options.filterLabel,
+      landscape: options.landscape ?? true,
+    }),
   });
   if (!response.ok) throw new Error("PDF gagal dibuat");
   downloadBlob(await response.blob(), `${title.toLowerCase().replace(/[^a-z0-9]+/gi, "-")}-${stamp()}.pdf`);

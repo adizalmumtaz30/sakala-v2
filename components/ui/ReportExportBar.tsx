@@ -8,12 +8,18 @@ import Button from "./Button";
 export default function ReportExportBar({
   title,
   context,
+  schoolName,
+  periodLabel,
+  filterLabel,
   columns,
   rows,
   landscape = true,
 }: {
   title: string;
   context?: string;
+  schoolName?: string;
+  periodLabel?: string;
+  filterLabel?: string;
   columns: ReportColumn[];
   rows: ReportRow[];
   landscape?: boolean;
@@ -22,7 +28,7 @@ export default function ReportExportBar({
   async function run(kind: "pdf" | "excel" | "csv") {
     setBusy(kind);
     try {
-      if (kind === "pdf") await exportPdf(title, columns, rows, { context, landscape });
+      if (kind === "pdf") await exportPdf(title, columns, rows, { context, schoolName, periodLabel: periodLabel ?? context, filterLabel, landscape });
       if (kind === "excel") exportExcel(title, columns, rows, context);
       if (kind === "csv") exportCsv(title, columns, rows);
     } catch {

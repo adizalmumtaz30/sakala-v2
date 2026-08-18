@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getActiveAcademicContext } from "@/lib/application/academicContext.usecases";
 import { getAnalitikView } from "@/lib/application/analitik.usecases";
+import { getSchoolProfile } from "@/lib/application/schoolProfile.usecases";
 import AnalitikWorkspace from "./AnalitikWorkspace";
 import ReportExportBar from "@/components/ui/ReportExportBar";
 import { ErrorState, EmptyState } from "@/components/ui/primitives";
@@ -18,7 +19,10 @@ export default async function AnalitikPage() {
       );
     }
 
-    const view = await getAnalitikView(supabase, activeContext.id);
+    const [view, schoolProfile] = await Promise.all([
+      getAnalitikView(supabase, activeContext.id),
+      getSchoolProfile(supabase),
+    ]);
     const contextLabel = `${activeContext.tahunPelajaran} · ${activeContext.semester === "ganjil" ? "Ganjil" : "Genap"}`;
     const rows = [
       ...view.bebanGuru.map((g) => ({ kategori: "Beban Guru", item: g.guruNama, nilai: `${g.totalJamCommitted} JP`, detail: `${g.jumlahKombinasi} kelas`, status: "Data" })),
@@ -39,6 +43,9 @@ export default async function AnalitikPage() {
         <ReportExportBar
           title="Analitik SAKALA"
           context={contextLabel}
+          schoolName={schoolProfile?.namaSekolah}
+          periodLabel={contextLabel}
+          filterLabel="Ringkasan seluruh dashboard analitik"
           columns={columns}
           rows={rows}
           landscape

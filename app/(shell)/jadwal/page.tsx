@@ -8,6 +8,7 @@ import { listKelas } from "@/lib/application/kelas.usecases";
 import { listMataPelajaran } from "@/lib/application/mata-pelajaran.usecases";
 import { listRuangan } from "@/lib/application/ruangan.usecases";
 import { listScheduleAssignments } from "@/lib/application/scheduleAssignment.usecases";
+import { getSchoolProfile } from "@/lib/application/schoolProfile.usecases";
 import JadwalWorkspace from "./JadwalWorkspace";
 import JadwalPointerDrag from "@/components/jadwal/JadwalPointerDrag";
 import ScheduleExportPanel from "@/components/jadwal/ScheduleExportPanel";
@@ -27,7 +28,7 @@ export default async function JadwalPage() {
       );
     }
 
-    const [scheduleModels, jamPelajaranList, guruList, kelasList, mapelList, ruanganList, allAssignments] = await Promise.all([
+    const [scheduleModels, jamPelajaranList, guruList, kelasList, mapelList, ruanganList, allAssignments, schoolProfile] = await Promise.all([
       listScheduleModels(supabase, activeContext.id),
       listJamPelajaran(supabase, activeContext.id),
       listGuru(supabase),
@@ -35,6 +36,7 @@ export default async function JadwalPage() {
       listMataPelajaran(supabase),
       listRuangan(supabase),
       listScheduleAssignments(supabase, activeContext.id),
+      getSchoolProfile(supabase),
     ]);
 
     const slotTemplateLists = await Promise.all(scheduleModels.map((m) => listSlotTemplate(supabase, m.id)));
@@ -68,6 +70,7 @@ export default async function JadwalPage() {
             mapelList={mapelList}
             jamPelajaranList={jamPelajaranList}
             activeDays={activeDays}
+            schoolName={schoolProfile?.namaSekolah}
             contextLabel={contextLabel}
           />
         </div>
