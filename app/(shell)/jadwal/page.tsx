@@ -38,6 +38,7 @@ export default async function JadwalPage() {
 
     return (
       <div data-sakala-jadwal-root>
+        <h1 className="sr-only">Jadwal</h1>
         {/* The pointer interaction binds to this single operational workspace. */}
         <JadwalPointerDrag academicContextId={activeContext.id} scheduleModels={scheduleModels} assignments={allAssignments} />
         <JadwalWorkspace
