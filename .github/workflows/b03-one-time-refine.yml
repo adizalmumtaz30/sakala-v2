@@ -1,0 +1,44 @@
+name: B-03 One-Time Source Refine
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  refine-once:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply B-03 refinement exactly once
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('app/(shell)/akademik/AkademikWorkspace.tsx')
+          s = p.read_text()
+          replacements = [
+              ('<div className="flex flex-col gap-6">\n      <div>\n        <h1 className="text-[20px] font-bold text-ink-900">Akademik</h1>\n        <p className="text-[13px] text-ink-500">', '<div className="flex flex-col gap-5">\n      <div className="space-y-1">\n        <h1 className="text-[20px] font-bold text-ink-900">Akademik</h1>\n        <p className="max-w-3xl text-[13px] text-ink-500">'),
+              ('<div className="flex gap-1 rounded-xl border border-border bg-surface-muted p-1">', '<div className="flex gap-0.5 rounded-xl border border-border bg-surface-muted p-0.5">'),
+              ('<div className="flex flex-col gap-6">\n          {/* Bagian 8.1 / 78 — School Profile */}', '<div className="flex flex-col gap-4">\n          {/* Bagian 8.1 / 78 — School Profile */'),
+              ('className="p-0">\n            <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-3">', 'className="p-0">\n            <div className="flex items-center justify-between gap-3 px-5 pt-4 pb-2.5">'),
+              ('className="mt-4 grid grid-cols-1 gap-3 border-t border-border pt-4 sm:grid-cols-2"', 'className="mt-3 grid grid-cols-1 gap-2.5 border-t border-border pt-3 sm:grid-cols-2"'),
+          ]
+          changed = 0
+          for old, new in replacements:
+              if old in s:
+                  s = s.replace(old, new, 1)
+                  changed += 1
+          if changed != len(replacements):
+              raise SystemExit(f'B-03 expected {len(replacements)} source matches, found {changed}; refusing mutation')
+          p.write_text(s)
+      - name: Remove one-time workflow and commit
+        run: |
+          git config user.name 'adizalmumtaz30'
+          git config user.email 'adizalmumtaz30@gmail.com'
+          rm -f .github/workflows/b03-one-time-refine.yml
+          git add 'app/(shell)/akademik/AkademikWorkspace.tsx' .github/workflows/b03-one-time-refine.yml
+          git commit -m 'fix: restore B-03 Akademik workspace refinement'
+          git push
