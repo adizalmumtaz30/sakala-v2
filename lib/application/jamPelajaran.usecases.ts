@@ -23,7 +23,7 @@ async function assertNoClash(supabase: SupabaseClient, draft: JamPelajaranDraft,
   if (clashNomor) {
     throw new JamPelajaranValidationError(
       "nomorUrut",
-      `Nomor urut ${draft.nomorUrut} pada hari ${draft.hari} sudah dipakai oleh "${clashNomor.nama}".`
+      `Jam Ke ${draft.nomorUrut} pada hari ${draft.hari} sudah dipakai oleh "${clashNomor.nama}".`
     );
   }
 
