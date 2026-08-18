@@ -1,61 +1,67 @@
 :root {
   color-scheme: light;
-  --color-canvas: #F6F7FA;
+  /* SAKALA Calm Intelligence — foundation tokens */
+  --color-canvas: #F7F8F6;
   --color-surface: #FFFFFF;
-  --color-surface-muted: #FAFBFC;
-  --color-border: #E8EAEF;
-  --color-border-strong: #DBDEE6;
-  --color-ink-900: #12141A;
-  --color-ink-700: #3A3D46;
-  --color-ink-500: #6B7080;
-  --color-ink-400: #8B909E;
-  --color-ink-300: #AEB3C0;
-  --color-brand: #2F6FED;
-  --color-brand-50: #EEF3FF;
-  --color-brand-100: #DDE9FF;
-  --color-brand-700: #1E56D6;
-  --color-cyan: #31B7F6;
-  --color-cyan-50: #EAF9FF;
-  --color-amber: #F6A623;
-  --color-amber-50: #FFF6E8;
-  --color-violet: #7C6FF0;
-  --color-violet-50: #F1EFFF;
-  --color-emerald: #22B07D;
-  --color-emerald-50: #E9FBF3;
-  --color-rose: #F0483E;
-  --color-rose-50: #FFEFEE;
-  --shadow-soft: 0 1px 2px rgba(18,20,26,.04), 0 8px 24px -12px rgba(18,20,26,.08);
-  --shadow-float: 0 12px 32px -8px rgba(18,20,26,.16);
+  --color-surface-muted: #F3F5F2;
+  --color-border: #E3E7E1;
+  --color-border-strong: #CFD6CC;
+  --color-ink-900: #172019;
+  --color-ink-700: #3F4A42;
+  --color-ink-500: #68736B;
+  --color-ink-400: #879188;
+  --color-ink-300: #AAB2AB;
+  --color-brand: #2F7D55;
+  --color-brand-50: #EDF7F0;
+  --color-brand-100: #D9EDDF;
+  --color-brand-700: #21613F;
+  --color-cyan: #147E9A;
+  --color-cyan-50: #EAF7FA;
+  --color-amber: #A86500;
+  --color-amber-50: #FFF5E5;
+  --color-violet: #6D55B8;
+  --color-violet-50: #F2EEFB;
+  --color-emerald: #1F8A5B;
+  --color-emerald-50: #E8F6EF;
+  --color-rose: #C73C3C;
+  --color-rose-50: #FDECEC;
+  --shadow-soft: 0 1px 2px rgba(23,32,25,.04), 0 6px 18px -14px rgba(23,32,25,.14);
+  --shadow-float: 0 14px 32px -18px rgba(23,32,25,.20);
+  --focus-ring: 0 0 0 3px rgba(47,125,85,.18);
+  --radius-input: 10px;
+  --radius-card: 12px;
+  --radius-panel: 16px;
 }
 
 html.dark {
   color-scheme: dark;
-  --color-canvas: #0D1016;
-  --color-surface: #151922;
-  --color-surface-muted: #1B202B;
-  --color-border: #2A303C;
-  --color-border-strong: #363D4B;
-  --color-ink-900: #F4F6FA;
-  --color-ink-700: #D3D8E2;
-  --color-ink-500: #9AA3B3;
-  --color-ink-400: #778194;
-  --color-ink-300: #5D6778;
-  --color-brand: #6D9BFF;
-  --color-brand-50: #182642;
-  --color-brand-100: #21365C;
-  --color-brand-700: #8BAFFF;
-  --color-cyan: #5AC7F8;
-  --color-cyan-50: #123044;
-  --color-amber: #FFBB57;
+  --color-canvas: #0E1511;
+  --color-surface: #151D18;
+  --color-surface-muted: #1B251F;
+  --color-border: #2C3830;
+  --color-border-strong: #3A493F;
+  --color-ink-900: #F1F5F1;
+  --color-ink-700: #D3DDD5;
+  --color-ink-500: #9CA9A0;
+  --color-ink-400: #7E8B82;
+  --color-ink-300: #5F6C63;
+  --color-brand: #67B889;
+  --color-brand-50: #172D21;
+  --color-brand-100: #214632;
+  --color-brand-700: #8FD0A8;
+  --color-cyan: #56B9D0;
+  --color-cyan-50: #12323A;
+  --color-amber: #F0B45A;
   --color-amber-50: #3A2A15;
-  --color-violet: #9A90FF;
-  --color-violet-50: #282448;
-  --color-emerald: #43C996;
-  --color-emerald-50: #123A2C;
-  --color-rose: #FF746C;
-  --color-rose-50: #3D1E20;
-  --shadow-soft: 0 1px 2px rgba(0,0,0,.18), 0 8px 24px -12px rgba(0,0,0,.38);
-  --shadow-float: 0 16px 38px -10px rgba(0,0,0,.55);
+  --color-violet: #A596E0;
+  --color-violet-50: #2A2442;
+  --color-emerald: #58C796;
+  --color-emerald-50: #123A2A;
+  --color-rose: #F17878;
+  --color-rose-50: #3D2020;
+  --shadow-soft: 0 1px 2px rgba(0,0,0,.20), 0 8px 22px -14px rgba(0,0,0,.48);
+  --shadow-float: 0 16px 36px -16px rgba(0,0,0,.60);
+  --focus-ring: 0 0 0 3px rgba(103,184,137,.22);
 }
 
 html, body {
@@ -65,7 +71,7 @@ html, body {
 }
 
 html.dark ::selection {
-  background: rgba(109,155,255,.28);
+  background: rgba(103,184,137,.28);
 }
 
 html.dark .bg-white,
@@ -108,10 +114,6 @@ html.dark .border-slate-300 {
   border-color: var(--color-border) !important;
 }
 
-html.dark .shadow-\[0_18px_60px_rgba\(15\,23\,42\,\.07\)\] {
-  box-shadow: var(--shadow-float) !important;
-}
-
 html.dark table.w-full.border-collapse.text-\[12\.5px\] {
   background: var(--color-surface);
 }
@@ -131,28 +133,10 @@ html.dark table.w-full.border-collapse.text-\[12\.5px\] tbody td {
 }
 
 html.dark table.w-full.border-collapse.text-\[12\.5px\] tbody td:first-child {
-  background: linear-gradient(90deg, #171C25 0%, #151922 100%);
+  background: var(--color-surface-muted);
   border-color: var(--color-border);
-}
-
-html.dark table.w-full.border-collapse.text-\[12\.5px\] tbody td button {
-  background: #1A1F29;
-  border-color: rgba(255,255,255,.09);
-  box-shadow: 0 1px 2px rgba(0,0,0,.22);
 }
 
 html.dark table.w-full.border-collapse.text-\[12\.5px\] tbody td button:hover {
-  border-color: rgba(139,175,255,.35);
   box-shadow: var(--shadow-float);
-}
-
-html.dark table.w-full.border-collapse.text-\[12\.5px\] tbody td button.border-dashed:hover {
-  background: rgba(109,155,255,.08);
-  border-color: rgba(109,155,255,.3);
-  color: var(--color-brand-700);
-}
-
-html.dark table.w-full.border-collapse.text-\[12\.5px\] tbody td > div.flex.h-16 {
-  border-color: var(--color-border);
-  background: var(--color-surface-muted);
 }
