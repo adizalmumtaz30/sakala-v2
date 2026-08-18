@@ -10,7 +10,8 @@ import { listRuangan } from "@/lib/application/ruangan.usecases";
 import { listScheduleAssignments } from "@/lib/application/scheduleAssignment.usecases";
 import JadwalWorkspace from "./JadwalWorkspace";
 import JadwalPointerDrag from "@/components/jadwal/JadwalPointerDrag";
-import { ErrorState } from "@/components/ui/primitives";
+import ScheduleExportPanel from "@/components/jadwal/ScheduleExportPanel";
+import { ErrorState, EmptyState } from "@/components/ui/primitives";
 
 export default async function JadwalPage() {
   try {
@@ -19,7 +20,11 @@ export default async function JadwalPage() {
     const activeContext = contexts.find((c) => c.isActive) ?? null;
 
     if (!activeContext) {
-      return <JadwalWorkspace activeContext={null} scheduleModels={[]} jamPelajaranList={[]} slotTemplatesByModel={{}} guruList={[]} kelasList={[]} mapelList={[]} ruanganList={[]} assignments={[]} />;
+      return (
+        <div className="mx-auto max-w-6xl pt-10">
+          <EmptyState title="Belum ada konteks akademik aktif" description="Aktifkan satu konteks akademik dulu di halaman Akademik sebelum membuka Jadwal." />
+        </div>
+      );
     }
 
     const [scheduleModels, jamPelajaranList, guruList, kelasList, mapelList, ruanganList, allAssignments] = await Promise.all([
@@ -36,10 +41,13 @@ export default async function JadwalPage() {
     const slotTemplatesByModel: Record<string, Awaited<ReturnType<typeof listSlotTemplate>>> = {};
     scheduleModels.forEach((m, i) => { slotTemplatesByModel[m.id] = slotTemplateLists[i]; });
 
+    const activeModel = scheduleModels.find((m) => m.status === "aktif");
+    const activeDays = activeModel?.hariAktif ?? [];
+    const contextLabel = `${activeContext.tahunPelajaran} · ${activeContext.semester === "ganjil" ? "Ganjil" : "Genap"}`;
+
     return (
       <div data-sakala-jadwal-root>
         <h1 className="sr-only">Jadwal</h1>
-        {/* The pointer interaction binds to this single operational workspace. */}
         <JadwalPointerDrag academicContextId={activeContext.id} scheduleModels={scheduleModels} assignments={allAssignments} />
         <JadwalWorkspace
           activeContext={activeContext}
@@ -52,6 +60,17 @@ export default async function JadwalPage() {
           ruanganList={ruanganList}
           assignments={allAssignments}
         />
+        <div className="mx-auto max-w-6xl px-4 pb-12">
+          <ScheduleExportPanel
+            assignments={allAssignments}
+            guruList={guruList}
+            kelasList={kelasList}
+            mapelList={mapelList}
+            jamPelajaranList={jamPelajaranList}
+            activeDays={activeDays}
+            contextLabel={contextLabel}
+          />
+        </div>
       </div>
     );
   } catch {
