@@ -9,7 +9,7 @@ import { listMataPelajaran } from "@/lib/application/mata-pelajaran.usecases";
 import { listRuangan } from "@/lib/application/ruangan.usecases";
 import { listScheduleAssignments } from "@/lib/application/scheduleAssignment.usecases";
 import JadwalWorkspace from "./JadwalWorkspace";
-import JadwalDragDrop from "@/components/jadwal/JadwalDragDrop";
+import JadwalDragBehavior from "@/components/jadwal/JadwalDragBehavior";
 import { ErrorState } from "@/components/ui/primitives";
 
 export default async function JadwalPage() {
@@ -50,19 +50,12 @@ export default async function JadwalPage() {
       slotTemplatesByModel[m.id] = slotTemplateLists[i];
     });
 
-    const classNames = Object.fromEntries(kelasList.map((k) => [k.id, `${k.tingkat} ${k.namaRombel}`]));
-    const subjectNames = Object.fromEntries(mapelList.map((m) => [m.id, m.nama]));
-    const teacherNames = Object.fromEntries(guruList.map((g) => [g.id, g.namaGuru]));
-
     return (
-      <div className="space-y-4">
-        <JadwalDragDrop
+      <>
+        <JadwalDragBehavior
+          academicContextId={activeContext.id}
           scheduleModels={scheduleModels}
-          jamPelajaranList={jamPelajaranList}
           assignments={allAssignments}
-          classNames={classNames}
-          subjectNames={subjectNames}
-          teacherNames={teacherNames}
         />
         <JadwalWorkspace
           activeContext={activeContext}
@@ -75,7 +68,7 @@ export default async function JadwalPage() {
           ruanganList={ruanganList}
           assignments={allAssignments}
         />
-      </div>
+      </>
     );
   } catch {
     return (
