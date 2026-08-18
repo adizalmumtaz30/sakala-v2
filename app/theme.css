@@ -1,0 +1,158 @@
+:root {
+  color-scheme: light;
+  --color-canvas: #F6F7FA;
+  --color-surface: #FFFFFF;
+  --color-surface-muted: #FAFBFC;
+  --color-border: #E8EAEF;
+  --color-border-strong: #DBDEE6;
+  --color-ink-900: #12141A;
+  --color-ink-700: #3A3D46;
+  --color-ink-500: #6B7080;
+  --color-ink-400: #8B909E;
+  --color-ink-300: #AEB3C0;
+  --color-brand: #2F6FED;
+  --color-brand-50: #EEF3FF;
+  --color-brand-100: #DDE9FF;
+  --color-brand-700: #1E56D6;
+  --color-cyan: #31B7F6;
+  --color-cyan-50: #EAF9FF;
+  --color-amber: #F6A623;
+  --color-amber-50: #FFF6E8;
+  --color-violet: #7C6FF0;
+  --color-violet-50: #F1EFFF;
+  --color-emerald: #22B07D;
+  --color-emerald-50: #E9FBF3;
+  --color-rose: #F0483E;
+  --color-rose-50: #FFEFEE;
+  --shadow-soft: 0 1px 2px rgba(18,20,26,.04), 0 8px 24px -12px rgba(18,20,26,.08);
+  --shadow-float: 0 12px 32px -8px rgba(18,20,26,.16);
+}
+
+html.dark {
+  color-scheme: dark;
+  --color-canvas: #0D1016;
+  --color-surface: #151922;
+  --color-surface-muted: #1B202B;
+  --color-border: #2A303C;
+  --color-border-strong: #363D4B;
+  --color-ink-900: #F4F6FA;
+  --color-ink-700: #D3D8E2;
+  --color-ink-500: #9AA3B3;
+  --color-ink-400: #778194;
+  --color-ink-300: #5D6778;
+  --color-brand: #6D9BFF;
+  --color-brand-50: #182642;
+  --color-brand-100: #21365C;
+  --color-brand-700: #8BAFFF;
+  --color-cyan: #5AC7F8;
+  --color-cyan-50: #123044;
+  --color-amber: #FFBB57;
+  --color-amber-50: #3A2A15;
+  --color-violet: #9A90FF;
+  --color-violet-50: #282448;
+  --color-emerald: #43C996;
+  --color-emerald-50: #123A2C;
+  --color-rose: #FF746C;
+  --color-rose-50: #3D1E20;
+  --shadow-soft: 0 1px 2px rgba(0,0,0,.18), 0 8px 24px -12px rgba(0,0,0,.38);
+  --shadow-float: 0 16px 38px -10px rgba(0,0,0,.55);
+}
+
+html, body {
+  background: var(--color-canvas);
+  color: var(--color-ink-900);
+  transition: background-color 180ms ease, color 180ms ease;
+}
+
+html.dark ::selection {
+  background: rgba(109,155,255,.28);
+}
+
+html.dark .bg-white,
+html.dark .bg-white\/80,
+html.dark .bg-white\/75,
+html.dark .bg-white\/70,
+html.dark .bg-white\/60 {
+  background-color: var(--color-surface) !important;
+}
+
+html.dark .bg-slate-50,
+html.dark .bg-slate-50\/70,
+html.dark .bg-slate-50\/45,
+html.dark .bg-slate-50\/90 {
+  background-color: var(--color-surface-muted) !important;
+}
+
+html.dark .text-slate-950,
+html.dark .text-slate-900,
+html.dark .text-slate-800,
+html.dark .text-slate-700 {
+  color: var(--color-ink-900) !important;
+}
+
+html.dark .text-slate-600,
+html.dark .text-slate-500 {
+  color: var(--color-ink-500) !important;
+}
+
+html.dark .text-slate-400,
+html.dark .text-slate-300 {
+  color: var(--color-ink-400) !important;
+}
+
+html.dark .border-slate-200,
+html.dark .border-slate-200\/80,
+html.dark .border-slate-200\/70,
+html.dark .border-slate-200\/60,
+html.dark .border-slate-300 {
+  border-color: var(--color-border) !important;
+}
+
+html.dark .shadow-\[0_18px_60px_rgba\(15\,23\,42\,\.07\)\] {
+  box-shadow: var(--shadow-float) !important;
+}
+
+html.dark table.w-full.border-collapse.text-\[12\.5px\] {
+  background: var(--color-surface);
+}
+
+html.dark table.w-full.border-collapse.text-\[12\.5px\] thead tr,
+html.dark table.w-full.border-collapse.text-\[12\.5px\] thead th:first-child {
+  background: var(--color-surface-muted);
+}
+
+html.dark table.w-full.border-collapse.text-\[12\.5px\] thead th {
+  border-color: var(--color-border);
+  color: var(--color-ink-500);
+}
+
+html.dark table.w-full.border-collapse.text-\[12\.5px\] tbody td {
+  border-color: rgba(255,255,255,.055);
+}
+
+html.dark table.w-full.border-collapse.text-\[12\.5px\] tbody td:first-child {
+  background: linear-gradient(90deg, #171C25 0%, #151922 100%);
+  border-color: var(--color-border);
+}
+
+html.dark table.w-full.border-collapse.text-\[12\.5px\] tbody td button {
+  background: #1A1F29;
+  border-color: rgba(255,255,255,.09);
+  box-shadow: 0 1px 2px rgba(0,0,0,.22);
+}
+
+html.dark table.w-full.border-collapse.text-\[12\.5px\] tbody td button:hover {
+  border-color: rgba(139,175,255,.35);
+  box-shadow: var(--shadow-float);
+}
+
+html.dark table.w-full.border-collapse.text-\[12\.5px\] tbody td button.border-dashed:hover {
+  background: rgba(109,155,255,.08);
+  border-color: rgba(109,155,255,.3);
+  color: var(--color-brand-700);
+}
+
+html.dark table.w-full.border-collapse.text-\[12\.5px\] tbody td > div.flex.h-16 {
+  border-color: var(--color-border);
+  background: var(--color-surface-muted);
+}
