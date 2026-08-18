@@ -60,6 +60,46 @@ button, input, select, textarea { font: inherit; }
   border-color: var(--color-border-strong);
 }
 
+/* =========================================================
+   TIER B — Akademik hierarchy pass
+   Keep the existing component structure; improve separation
+   between page identity, workspace navigation, and content.
+   ========================================================= */
+
+main > .flex.flex-col.gap-6 > .flex.gap-1.rounded-xl.border.border-border.bg-surface-muted {
+  align-self: flex-start;
+  width: min(100%, 980px);
+  padding: 4px;
+  position: sticky;
+  top: calc(var(--shell-topbar-h) + 10px);
+  z-index: 10;
+  background: color-mix(in srgb, var(--color-surface-muted) 92%, transparent);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, .06);
+}
+
+main > .flex.flex-col.gap-6 > .flex.gap-1.rounded-xl.border.border-border.bg-surface-muted > button {
+  min-height: 40px;
+  white-space: nowrap;
+}
+
+main > .flex.flex-col.gap-6 > .flex.gap-1.rounded-xl.border.border-border.bg-surface-muted > button[aria-selected="true"] {
+  box-shadow: 0 1px 3px rgba(15, 23, 42, .08), 0 0 0 1px rgba(15, 23, 42, .04);
+}
+
+@media (max-width: 760px) {
+  main > .flex.flex-col.gap-6 > .flex.gap-1.rounded-xl.border.border-border.bg-surface-muted {
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+
+  main > .flex.flex-col.gap-6 > .flex.gap-1.rounded-xl.border.border-border.bg-surface-muted > button {
+    flex: 0 0 auto;
+    min-width: 150px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
