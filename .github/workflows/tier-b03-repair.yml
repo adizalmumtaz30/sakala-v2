@@ -21,26 +21,16 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - name: Restore known-good Akademik source
-        run: git checkout b2ebeb19d383b0ffdcbffadcf903edbff5f48d38 -- 'app/(shell)/akademik/AkademikWorkspace.tsx'
-      - name: Apply B-03 density refinement
+      - name: Remove parser-triggering section comment
         run: |
           python - <<'PY'
           from pathlib import Path
           p = Path('app/(shell)/akademik/AkademikWorkspace.tsx')
           s = p.read_text()
-          replacements = [
-              ('<div className="flex flex-col gap-6">\n      <div>\n        <h1 className="text-[20px] font-bold text-ink-900">Akademik</h1>\n        <p className="text-[13px] text-ink-500">', '<div className="flex flex-col gap-5">\n      <div className="space-y-1">\n        <h1 className="text-[20px] font-bold text-ink-900">Akademik</h1>\n        <p className="max-w-3xl text-[13px] text-ink-500">'),
-              ('<div className="flex gap-1 rounded-xl border border-border bg-surface-muted p-1">', '<div className="flex gap-0.5 rounded-xl border border-border bg-surface-muted p-0.5">'),
-              ('<div className="flex flex-col gap-6">\n          {/* Bagian 8.1 / 78 — School Profile */}', '<div className="flex flex-col gap-4">\n          {/* Bagian 8.1 / 78 — School Profile */'),
-              ('className="p-0">\n            <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-3">', 'className="p-0">\n            <div className="flex items-center justify-between gap-3 px-5 pt-4 pb-2.5">'),
-              ('className="mt-4 grid grid-cols-1 gap-3 border-t border-border pt-4 sm:grid-cols-2"', 'className="mt-3 grid grid-cols-1 gap-2.5 border-t border-border pt-3 sm:grid-cols-2"'),
-          ]
-          for old, new in replacements:
-              if old not in s:
-                  raise SystemExit(f'Missing expected source fragment: {old[:80]!r}')
-              s = s.replace(old, new, 1)
-          p.write_text(s)
+          target = '          {/* Bagian 8.2 / 77 — Active Academic Context */}\n'
+          if target not in s:
+              raise SystemExit('Expected B-03 source marker not found')
+          p.write_text(s.replace(target, '', 1))
           PY
       - name: Validate build
         run: npm ci && npm run build
@@ -50,5 +40,5 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add 'app/(shell)/akademik/AkademikWorkspace.tsx'
           git diff --cached --quiet && exit 0
-          git commit -m 'fix: complete TIER-B03 Akademik density refinement'
+          git commit -m 'fix: stabilize TIER-B03 Akademik workspace parser'
           git push
