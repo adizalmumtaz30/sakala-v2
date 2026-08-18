@@ -7,13 +7,13 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/fix-b03-source.mjs && next build",
     "start": "next start",
     "lint": "next lint"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",
-    "@supabase/supabase-js": "^2.112.2",
+    "@supabase/supabase-js": "^2.112.0",
     "lucide-react": "^0.400.0",
     "next": "16.2.7",
     "react": "^19.1.0",
