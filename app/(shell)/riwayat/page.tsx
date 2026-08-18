@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { listAcademicContexts } from "@/lib/application/academicContext.usecases";
 import { listAuditLog } from "@/lib/application/auditLog.usecases";
+import { listScheduleVersions } from "@/lib/application/scheduleVersion.usecases";
 import RiwayatWorkspace from "./RiwayatWorkspace";
 import { ErrorState } from "@/components/ui/primitives";
 
@@ -18,16 +19,18 @@ export default async function RiwayatPage() {
       offset: 0,
     });
 
+    const versions = activeContext ? await listScheduleVersions(supabase, activeContext.id) : [];
+
     return (
       <RiwayatWorkspace
         activeContext={activeContext}
         initialItems={items}
         total={total}
         pageSize={PAGE_SIZE}
+        initialVersions={versions}
       />
     );
   } catch {
-    // Bagian 15.3 — server-side fetch gagal, tetap render UI dengan error state.
     return (
       <div className="mx-auto max-w-3xl pt-10">
         <ErrorState message="Gagal memuat data Riwayat dari Supabase. Cek koneksi dan environment variable kamu." />

@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { listAuditLog } from "@/lib/application/auditLog.usecases";
+import { restoreScheduleVersion } from "@/lib/application/scheduleVersion.usecases";
 import type { AuditAction, AuditLogEntry } from "@/lib/domain/auditLog";
 
 export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -23,5 +24,19 @@ export async function loadAuditLogAction(
     return { ok: true, data: result };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Terjadi kesalahan yang tidak diketahui." };
+  }
+}
+
+export async function restoreScheduleVersionAction(
+  academicContextId: string | null,
+  versionId: string
+): Promise<ActionResult<{ versionId: string; restoredAssignments: number }>> {
+  try {
+    if (!academicContextId) return { ok: false, error: "Academic Context aktif tidak tersedia." };
+    const supabase = await createClient();
+    const result = await restoreScheduleVersion(supabase, academicContextId, versionId);
+    return { ok: true, data: result };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Gagal memulihkan versi jadwal." };
   }
 }
