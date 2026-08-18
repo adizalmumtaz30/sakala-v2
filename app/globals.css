@@ -3,37 +3,43 @@
 @tailwind utilities;
 
 :root {
-  --shell-sidebar-w: 236px;
-  --shell-topbar-h: 76px;
+  --shell-sidebar-w: 240px;
+  --shell-topbar-h: 68px;
   --easing: cubic-bezier(0.16, 0.8, 0.24, 1);
 }
 
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
 html, body {
   height: 100%;
-  background: #F6F7FA;
-  color: #12141A;
+  background: var(--color-canvas);
+  color: var(--color-ink-900);
 }
 
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+body {
+  font-variant-numeric: proportional-nums;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
-::-webkit-scrollbar-thumb {
-  background: #DBDEE6;
-  border-radius: 999px;
+
+button, input, select, textarea { font: inherit; }
+
+:where(button, a, input, select, textarea):focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+  box-shadow: var(--focus-ring);
 }
-::-webkit-scrollbar-track {
-  background: transparent;
-}
+
+:where(input, select, textarea) { border-radius: var(--radius-input); }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--color-border-strong); border-radius: 999px; }
+::-webkit-scrollbar-track { background: transparent; }
 
 .skeleton {
   position: relative;
   overflow: hidden;
-  background: #EEF0F4;
+  background: var(--color-surface-muted);
   border-radius: 10px;
 }
 .skeleton::after {
@@ -41,41 +47,25 @@ html, body {
   position: absolute;
   inset: 0;
   transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent);
   animation: shimmer 1.4s infinite var(--easing);
 }
-@keyframes shimmer {
-  100% { transform: translateX(100%); }
-}
+@keyframes shimmer { 100% { transform: translateX(100%); } }
 
 .card-hover {
   transition: box-shadow 180ms var(--easing), transform 180ms var(--easing), border-color 180ms var(--easing);
 }
 .card-hover:hover {
-  box-shadow: 0 12px 28px -14px rgba(18,20,26,0.14);
-  border-color: #DBDEE6;
+  box-shadow: var(--shadow-soft);
+  border-color: var(--color-border-strong);
 }
 
-/* Splash screen (Bagian 5.2 / 42 / 76) — dimatikan total lewat
-   prefers-reduced-motion di komponen (tidak dirender sama sekali, bukan
-   cuma dipercepat), jadi keyframes ini aman didefinisikan global. */
-@keyframes splashLogoIn {
-  from { opacity: 0; transform: scale(0.86); }
-  to { opacity: 1; transform: scale(1); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
-@keyframes splashFadeUp {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-@keyframes splashGlow {
-  0%, 100% { opacity: 0.55; transform: scale(1); }
-  50% { opacity: 0.9; transform: scale(1.08); }
-}
-@keyframes splashWire {
-  0%, 100% { opacity: 0.25; }
-  50% { opacity: 0.75; }
-}
-@keyframes splashNode {
-  0%, 100% { opacity: 0.35; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.4); }
-}
+
+@keyframes splashLogoIn { from { opacity: 0; transform: scale(.86); } to { opacity: 1; transform: scale(1); } }
+@keyframes splashFadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes splashGlow { 0%,100% { opacity:.55; transform:scale(1); } 50% { opacity:.9; transform:scale(1.08); } }
+@keyframes splashWire { 0%,100% { opacity:.25; } 50% { opacity:.75; } }
+@keyframes splashNode { 0%,100% { opacity:.35; transform:scale(1); } 50% { opacity:1; transform:scale(1.4); } }
