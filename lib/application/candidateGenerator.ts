@@ -11,6 +11,7 @@ import type { GenerationRequirement, RequirementGenerationOutcome } from "@/lib/
 import { validateGenerationRequirement } from "@/lib/domain/candidateGeneration";
 import { validateAssignmentCandidate } from "@/lib/application/conflictEngine";
 import type { ScheduleConflict } from "@/lib/domain/conflict";
+import type { SolverFailureReason } from "@/lib/application/schedulingSolver";
 import { solveWeeklySchedule } from "@/lib/application/schedulingSolver";
 
 export interface GeneratedCandidate {
@@ -21,7 +22,7 @@ export interface GeneratedCandidate {
 export interface GenerationResult {
   candidates: GeneratedCandidate[];
   outcomes: RequirementGenerationOutcome[];
-  solver: { complete: boolean; searchNodes: number; reason: string | null };
+  solver: { complete: boolean; searchNodes: number; reason: string | null; failures: SolverFailureReason[] };
 }
 
 function buildAvailableSlots(
@@ -42,10 +43,7 @@ function buildAvailableSlots(
   );
 }
 
-/**
- * Full weekly CSP preview. Database is read-only here. All requirements are
- * solved together so a later conflict can backtrack an earlier placement.
- */
+/** Full weekly CSP preview. Read-only: no committed/candidate row is mutated here. */
 export async function generateCandidatePreview(
   supabase: SupabaseClient,
   academicContextId: string,
@@ -53,7 +51,7 @@ export async function generateCandidatePreview(
   requirements: GenerationRequirement[]
 ): Promise<GenerationResult> {
   if (requirements.length === 0) {
-    return { candidates: [], outcomes: [], solver: { complete: true, searchNodes: 0, reason: null } };
+    return { candidates: [], outcomes: [], solver: { complete: true, searchNodes: 0, reason: null, failures: [] } };
   }
   for (const req of requirements) validateGenerationRequirement(req);
 
@@ -98,45 +96,44 @@ export async function generateCandidatePreview(
     }
   );
 
+  // Exact-JP invariant: an incomplete solve produces diagnostics only, never a partial candidate batch.
   const candidates: GeneratedCandidate[] = [];
-  for (const placement of solverResult.placements) {
-    const req = requirements.find((r) => r.id === placement.requirementId);
-    if (!req) continue;
-    const draft: ScheduleAssignmentDraft = {
-      academicContextId,
-      scheduleModelId,
-      classId: req.classId,
-      subjectId: req.subjectId,
-      teacherId: req.teacherId,
-      roomId: req.roomId,
-      day: placement.day,
-      periodStart: placement.period,
-      periodEnd: placement.period,
-      activityType: req.activityType,
-      status: "candidate",
-      source: "generated",
-      versionId: null,
-    };
-    validateScheduleAssignmentDraft(draft);
-    candidates.push({ requirementId: req.id, draft });
+  if (solverResult.complete) {
+    for (const placement of solverResult.placements) {
+      const req = requirements.find((r) => r.id === placement.requirementId);
+      if (!req) continue;
+      const draft: ScheduleAssignmentDraft = {
+        academicContextId,
+        scheduleModelId,
+        classId: req.classId,
+        subjectId: req.subjectId,
+        teacherId: req.teacherId,
+        roomId: req.roomId,
+        day: placement.day,
+        periodStart: placement.period,
+        periodEnd: placement.period,
+        activityType: req.activityType,
+        status: "candidate",
+        source: "generated",
+        versionId: null,
+      };
+      validateScheduleAssignmentDraft(draft);
+      candidates.push({ requirementId: req.id, draft });
+    }
   }
 
   const outcomes: RequirementGenerationOutcome[] = requirements.map((req) => {
     const result = solverResult.outcomes.find((o) => o.requirementId === req.id);
-    const placements = (result?.placements ?? []).map((p) => ({
-      day: p.day,
-      periodStart: p.period,
-      periodEnd: p.period,
-    }));
+    const placements = (result?.placements ?? []).map((p) => ({ day: p.day, periodStart: p.period, periodEnd: p.period }));
     return {
       requirementId: req.id,
       classId: req.classId,
       subjectId: req.subjectId,
       teacherId: req.teacherId,
       jpTarget: req.jpTarget,
-      placed: placements.length,
-      unplaced: req.jpTarget - placements.length,
-      placements,
+      placed: solverResult.complete ? placements.length : 0,
+      unplaced: solverResult.complete ? req.jpTarget - placements.length : req.jpTarget,
+      placements: solverResult.complete ? placements : [],
     };
   });
 
@@ -147,6 +144,7 @@ export async function generateCandidatePreview(
       complete: solverResult.complete,
       searchNodes: solverResult.searchNodes,
       reason: solverResult.reason,
+      failures: solverResult.failures,
     },
   };
 }
