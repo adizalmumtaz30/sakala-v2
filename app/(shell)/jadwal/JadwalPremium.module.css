@@ -1,0 +1,190 @@
+.workspace :global(table.w-full.border-collapse.text-\[12\.5px\]) {
+  border-collapse: separate;
+  border-spacing: 0;
+  background: rgba(255,255,255,.78);
+  box-shadow: 0 18px 55px -42px rgba(15,23,42,.32);
+}
+
+.workspace :global(table.w-full.border-collapse.text-\[12\.5px\] thead tr) {
+  background: linear-gradient(180deg, #fbfcfd 0%, #f6f7f9 100%);
+}
+
+.workspace :global(table.w-full.border-collapse.text-\[12\.5px\] thead th) {
+  height: 58px;
+  border-bottom: 1px solid #e5e7eb;
+  color: #596170;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .075em;
+  text-transform: uppercase;
+}
+
+.workspace :global(table.w-full.border-collapse.text-\[12\.5px\] thead th:not(:first-child)) {
+  position: relative;
+  transition: background-color 180ms cubic-bezier(.16,.8,.24,1), color 180ms cubic-bezier(.16,.8,.24,1);
+}
+
+.workspace :global(table.w-full.border-collapse.text-\[12\.5px\] thead th:not(:first-child)::after) {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 99px;
+  background: #d8dce4;
+  transform-origin: left;
+  transition: transform 180ms cubic-bezier(.16,.8,.24,1), background-color 180ms cubic-bezier(.16,.8,.24,1);
+}
+
+.workspace :global(table.w-full.border-collapse.text-\[12\.5px\] thead th:not(:first-child):hover) {
+  color: #20242c;
+  background: rgba(255,255,255,.72);
+}
+
+.workspace :global(table.w-full.border-collapse.text-\[12\.5px\] thead th:not(:first-child):hover::after) {
+  background: #8d94a2;
+  transform: scaleX(1.45);
+}
+
+.workspace :global(table.w-full.border-collapse.text-\[12\.5px\] tbody td) {
+  border-bottom: 1px solid #eef0f3;
+  padding: 7px 6px;
+  transition: background-color 180ms cubic-bezier(.16,.8,.24,1);
+}
+
+.workspace :global(table.w-full.border-collapse.text-\[12\.5px\] tbody td:first-child) {
+  width: 112px;
+  background: linear-gradient(90deg, #f7f8fa 0%, #fbfbfc 100%);
+  border-right: 1px solid #e7e9ee;
+}
+
+.workspace :global(table.w-full.border-collapse.text-\[12\.5px\] tbody tr:hover td:not(:first-child)) {
+  background: rgba(248,250,252,.72);
+}
+
+.workspace :global(table.w-full.border-collapse.text-\[12\.5px\] tbody td:first-child > div > div:first-child) {
+  color: #242934;
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: -.015em;
+}
+
+.workspace :global(table.w-full.border-collapse.text-\[12\.5px\] tbody td:first-child > div > div:last-child) {
+  margin-top: 3px;
+  color: #8a919d;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.workspace :global(table.w-full.border-collapse.text-\[12\.5px\] tbody td button) {
+  min-height: 76px;
+  border-radius: 14px;
+  border-color: rgba(211,215,223,.72);
+  box-shadow: 0 2px 7px -5px rgba(15,23,42,.18);
+  transition: transform 180ms cubic-bezier(.16,.8,.24,1), box-shadow 180ms cubic-bezier(.16,.8,.24,1), border-color 180ms cubic-bezier(.16,.8,.24,1), background-color 180ms cubic-bezier(.16,.8,.24,1);
+}
+
+.workspace :global(table.w-full.border-collapse.text-\[12\.5px\] tbody td button:not(.border-dashed)) {
+  position: relative;
+  overflow: hidden;
+  background: rgba(255,255,255,.92);
+}
+
+.workspace :global(table.w-full.border-collapse.text-\[12\.5px\] tbody td button:not(.border-dashed)::before) {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 11px;
+  bottom: 11px;
+  width: 2px;
+  border-radius: 99px;
+  background: currentColor;
+  opacity: .16;
+  transition: opacity 180ms cubic-bezier(.16,.8,.24,1), transform 180ms cubic-bezier(.16,.8,.24,1);
+}
+
+.workspace :global(table.w-full.border-collapse.text-\[12\.5px\] tbody td button:not(.border-dashed):hover) {
+  transform: translateY(-2px);
+  border-color: rgba(170,176,188,.82);
+  box-shadow: 0 15px 30px -20px rgba(15,23,42,.28);
+}
+
+.workspace :global(table.w-full.border-collapse.text-\[12\.5px\] tbody td button:not(.border-dashed):hover::before) {
+  opacity: .34;
+  transform: scaleY(1.05);
+}
+
+.workspace :global(table.w-full.border-collapse.text-\[12\.5px\] tbody td button.border-dashed) {
+  min-height: 76px;
+  border: 1px dashed transparent;
+  background: transparent;
+  box-shadow: none;
+  color: #a0a7b2;
+  opacity: .48;
+}
+
+.workspace :global(table.w-full.border-collapse.text-\[12\.5px\] tbody td button.border-dashed:hover) {
+  border-color: rgba(79,70,229,.22);
+  background: rgba(79,70,229,.035);
+  color: #5b54c7;
+  opacity: 1;
+}
+
+.workspace :global(table.w-full.border-collapse.text-\[12\.5px\] tbody td button.border-dashed svg) {
+  width: 14px;
+  height: 14px;
+  transition: transform 180ms cubic-bezier(.16,.8,.24,1);
+}
+
+.workspace :global(table.w-full.border-collapse.text-\[12\.5px\] tbody td button.border-dashed:hover svg) {
+  transform: scale(1.12);
+}
+
+.workspace :global(table.w-full.border-collapse.text-\[12\.5px\] tbody td button svg) {
+  flex: 0 0 auto;
+  stroke-width: 1.8;
+}
+
+.workspace :global(.rounded-lg.border.bg-white) {
+  border-radius: 16px;
+  box-shadow: 0 14px 32px -28px rgba(15,23,42,.34);
+}
+
+.workspace :global(button) {
+  transition: transform 160ms cubic-bezier(.16,.8,.24,1), box-shadow 160ms cubic-bezier(.16,.8,.24,1), background-color 160ms cubic-bezier(.16,.8,.24,1), border-color 160ms cubic-bezier(.16,.8,.24,1), color 160ms cubic-bezier(.16,.8,.24,1);
+}
+
+.workspace :global(button:not(:disabled):hover svg) {
+  transform: translateY(-.2px);
+}
+
+.workspace :global(button svg) {
+  transition: transform 160ms cubic-bezier(.16,.8,.24,1);
+}
+
+.workspace :global([aria-label]) svg {
+  opacity: .82;
+}
+
+.workspace :global(.border.rounded-xl.bg-white\/70) {
+  box-shadow: 0 10px 30px -26px rgba(15,23,42,.3);
+  backdrop-filter: blur(12px);
+}
+
+@media (max-width: 900px) {
+  .workspace :global(table.w-full.border-collapse.text-\[12\.5px\] thead th) {
+    height: 50px;
+  }
+  .workspace :global(table.w-full.border-collapse.text-\[12\.5px\] tbody td) {
+    padding: 5px 4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace :global(*) {
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
