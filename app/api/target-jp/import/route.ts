@@ -9,19 +9,37 @@ const columns: TemplateColumn[] = [
   { key: "Kelas", required: true, format: "Nama rombel atau tingkat, harus ditemukan", example: "7A" },
   { key: "KodeMapel", required: true, format: "Kode mata pelajaran", example: "BIND" },
   { key: "MataPelajaran", required: false, format: "Nama mapel sebagai fallback validasi", example: "Bahasa Indonesia" },
-  { key: "TargetJP", required: true, format: "Bilangan bulat >= 0", example: "5" },
+  { key: "TargetJP", required: true, format: "Bilangan bulat 0–10", example: "5" },
 ];
 
-export async function GET() {
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  if (url.searchParams.get("mode") === "data") {
+    try {
+      const supabase = await createClient();
+      const [{ data: contexts, error: ce }, { data: classes, error: ke }, { data: subjects, error: se }, { data: targets, error: te }] = await Promise.all([
+        supabase.from("academic_context").select("id,tahun_pelajaran,semester").order("tahun_pelajaran", { ascending: false }),
+        supabase.from("kelas").select("id,nama_rombel,tingkat,tahun_ajaran,semester").order("tingkat").order("nama_rombel"),
+        supabase.from("mata_pelajaran").select("id,nama,kode").order("nama"),
+        supabase.from("target_jp").select("academic_context_id,kelas_id,mata_pelajaran_id,target_jp"),
+      ]);
+      if (ce || ke || se || te) throw new Error(ce?.message || ke?.message || se?.message || te?.message || "Gagal membaca data Target JP.");
+      return NextResponse.json({ contexts: contexts ?? [], classes: classes ?? [], subjects: subjects ?? [], targets: targets ?? [] });
+    } catch (e) {
+      return NextResponse.json({ error: e instanceof Error ? e.message : "Gagal membaca data." }, { status: 500 });
+    }
+  }
+
   const buffer = buildTemplateWorkbook(columns, [
-    ["Contoh AcademicContext", "2026/2027 · Ganjil"],
-    ["Catatan", "Gunakan label Academic Context yang tersedia di SAKALA"],
-    ["Contoh", "7A", "BIND", "Bahasa Indonesia", "5"],
+    ["2026/2027 · Ganjil", "7A", "BIND", "Bahasa Indonesia", "5"],
+    ["2026/2027 · Ganjil", "7A", "MAT", "Matematika", "4"],
   ]);
-  return new NextResponse(bufferToBodyInit(buffer), { headers: {
-    "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "Content-Disposition": 'attachment; filename="Template_Target_JP_SAKALA_V2.3.xlsx"',
-  }});
+  return new NextResponse(bufferToBodyInit(buffer), {
+    headers: {
+      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "Content-Disposition": 'attachment; filename="Template_Target_JP_SAKALA_V2.3.xlsx"',
+    },
+  });
 }
 
 function text(v: unknown) { return String(v ?? "").trim(); }
@@ -29,6 +47,10 @@ function normalize(v: unknown) { return text(v).toLowerCase().replace(/\s+/g, " 
 function key(v: unknown) { return normalize(v).replace(/[·|]/g, " "); }
 
 async function parse(file: File) {
+  const maxBytes = 5 * 1024 * 1024;
+  if (file.size > maxBytes) throw new Error("File terlalu besar. Maksimal 5 MB.");
+  const name = file.name.toLowerCase();
+  if (![".xlsx", ".xls", ".csv"].some((ext) => name.endsWith(ext))) throw new Error("Format file harus XLSX, XLS, atau CSV.");
   const bytes = new Uint8Array(await file.arrayBuffer());
   const workbook = XLSX.read(bytes, { type: "array" });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -66,7 +88,7 @@ async function validate(rows: Record<string, unknown>[]) {
     if (!ctxLabel || !context) { result.status = "error"; result.message = "Academic Context tidak ditemukan."; return result; }
     if (!kelas) { result.status = "error"; result.message = "Kelas/rombel tidak ditemukan."; return result; }
     if (!subject) { result.status = "error"; result.message = "Mata Pelajaran/KodeMapel tidak ditemukan."; return result; }
-    if (!Number.isInteger(jp) || jp < 0) { result.status = "error"; result.message = "TargetJP harus bilangan bulat >= 0."; return result; }
+    if (!Number.isInteger(jp) || jp < 0 || jp > 10) { result.status = "error"; result.message = "TargetJP harus bilangan bulat 0–10."; return result; }
     const unique = `${context.id}:${kelas.id}:${subject.id}`;
     if (seen.has(unique)) { result.status = "error"; result.message = "Duplikasi Context + Kelas + Mata Pelajaran dalam file."; return result; }
     seen.add(unique);
