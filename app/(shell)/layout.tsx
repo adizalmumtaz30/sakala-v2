@@ -2,7 +2,6 @@ import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import CommandPalette from "@/components/layout/CommandPalette";
 import SplashScreen from "@/components/splash/SplashScreen";
-import ThemeToggle from "@/components/layout/ThemeToggle";
 import { createClient } from "@/lib/supabase/server";
 import { getSchoolProfile } from "@/lib/application/schoolProfile.usecases";
 import { getActiveAcademicContext } from "@/lib/application/academicContext.usecases";
@@ -31,7 +30,6 @@ export default async function ShellLayout({ children }: { children: React.ReactN
         <main className="flex-1 px-8 pb-16 pt-6">{children}</main>
       </div>
       <CommandPalette />
-      <ThemeToggle />
     </div>
   );
 }
