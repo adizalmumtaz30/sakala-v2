@@ -46,6 +46,7 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Modal from "@/components/ui/Modal";
 import { Card, Badge, EmptyState } from "@/components/ui/primitives";
+import JamPelajaranManager from "./JamPelajaranManager";
 
 type Tab = "profil" | "periode" | "jam" | "model";
 
@@ -631,7 +632,9 @@ export default function AkademikWorkspace({
         </Card>
       )}
 
-      {tab === "jam" && (
+      {tab === "jam" && <JamPelajaranManager activeContext={activeContext} initialJamList={jamList} />}
+
+      {false && tab === "jam" && (
         <Card className="p-0">
           <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-3">
             <div>
