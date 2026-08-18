@@ -9,7 +9,7 @@ import { listMataPelajaran } from "@/lib/application/mata-pelajaran.usecases";
 import { listRuangan } from "@/lib/application/ruangan.usecases";
 import { listScheduleAssignments } from "@/lib/application/scheduleAssignment.usecases";
 import JadwalWorkspace from "./JadwalWorkspace";
-import JadwalDragBehavior from "@/components/jadwal/JadwalDragBehavior";
+import JadwalPointerDrag from "@/components/jadwal/JadwalPointerDrag";
 import { ErrorState } from "@/components/ui/primitives";
 
 export default async function JadwalPage() {
@@ -19,19 +19,7 @@ export default async function JadwalPage() {
     const activeContext = contexts.find((c) => c.isActive) ?? null;
 
     if (!activeContext) {
-      return (
-        <JadwalWorkspace
-          activeContext={null}
-          scheduleModels={[]}
-          jamPelajaranList={[]}
-          slotTemplatesByModel={{}}
-          guruList={[]}
-          kelasList={[]}
-          mapelList={[]}
-          ruanganList={[]}
-          assignments={[]}
-        />
-      );
+      return <JadwalWorkspace activeContext={null} scheduleModels={[]} jamPelajaranList={[]} slotTemplatesByModel={{}} guruList={[]} kelasList={[]} mapelList={[]} ruanganList={[]} assignments={[]} />;
     }
 
     const [scheduleModels, jamPelajaranList, guruList, kelasList, mapelList, ruanganList, allAssignments] = await Promise.all([
@@ -46,17 +34,11 @@ export default async function JadwalPage() {
 
     const slotTemplateLists = await Promise.all(scheduleModels.map((m) => listSlotTemplate(supabase, m.id)));
     const slotTemplatesByModel: Record<string, Awaited<ReturnType<typeof listSlotTemplate>>> = {};
-    scheduleModels.forEach((m, i) => {
-      slotTemplatesByModel[m.id] = slotTemplateLists[i];
-    });
+    scheduleModels.forEach((m, i) => { slotTemplatesByModel[m.id] = slotTemplateLists[i]; });
 
     return (
       <>
-        <JadwalDragBehavior
-          academicContextId={activeContext.id}
-          scheduleModels={scheduleModels}
-          assignments={allAssignments}
-        />
+        <JadwalPointerDrag academicContextId={activeContext.id} scheduleModels={scheduleModels} assignments={allAssignments} />
         <JadwalWorkspace
           activeContext={activeContext}
           scheduleModels={scheduleModels}
@@ -71,10 +53,6 @@ export default async function JadwalPage() {
       </>
     );
   } catch {
-    return (
-      <div className="mx-auto max-w-3xl pt-10">
-        <ErrorState message="Gagal memuat data Jadwal dari Supabase. Cek koneksi dan environment variable kamu." />
-      </div>
-    );
+    return <div className="mx-auto max-w-3xl pt-10"><ErrorState message="Gagal memuat data Jadwal dari Supabase. Cek koneksi dan environment variable kamu." /></div>;
   }
 }
