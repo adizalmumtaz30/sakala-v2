@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, GraduationCap, Sparkles, CalendarDays, ChartNoAxesCombined, History, Bell, Bot, Compass } from "lucide-react";
+import { LayoutDashboard, Users, GraduationCap, Sparkles, CalendarDays, BarChart3, History, Bell, Bot, Compass } from "lucide-react";
 
 const coreNav = [
   { key: "dashboard", label: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -11,7 +11,7 @@ const coreNav = [
   { key: "akademik", label: "Akademik", href: "/akademik", icon: GraduationCap },
   { key: "jadwal-cerdas", label: "Jadwal Cerdas", href: "/jadwal-cerdas", icon: Sparkles },
   { key: "jadwal", label: "Jadwal", href: "/jadwal", icon: CalendarDays },
-  { key: "analitik", label: "Analitik", href: "/analitik", icon: ChartNoAxesCombined },
+  { key: "analitik", label: "Analitik", href: "/analitik", icon: BarChart3 },
   { key: "riwayat", label: "Riwayat", href: "/riwayat", icon: History },
   { key: "notifikasi", label: "Notifikasi", href: "/notifikasi", icon: Bell },
   { key: "ai", label: "AI", href: "/ai", icon: Bot },
