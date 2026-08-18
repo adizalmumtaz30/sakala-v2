@@ -413,15 +413,15 @@ export default function AkademikWorkspace({
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
+    <div className="flex flex-col gap-5">
+      <div className="space-y-1">
         <h1 className="text-[20px] font-bold text-ink-900">Akademik</h1>
-        <p className="text-[13px] text-ink-500">
+        <p className="max-w-3xl text-[13px] text-ink-500">
           Profil admin, konteks akademik, periode, dan jam pelajaran — dasar semua data & jadwal.
         </p>
       </div>
 
-      <div className="flex gap-1 rounded-xl border border-border bg-surface-muted p-1">
+      <div className="flex gap-0.5 rounded-xl border border-border bg-surface-muted p-0.5">
         <TabButton active={tab === "profil"} onClick={() => setTab("profil")} icon={<UserCog size={14} />}>
           Profil & Konteks
         </TabButton>
@@ -437,8 +437,8 @@ export default function AkademikWorkspace({
       </div>
 
       {tab === "profil" && (
-        <div className="flex flex-col gap-6">
-          {/* Bagian 8.1 / 78 — School Profile */}
+        <div className="flex flex-col gap-4">
+          {/* Bagian 8.1 / 78 — School Profile */
           <Card>
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3">
@@ -456,7 +456,7 @@ export default function AkademikWorkspace({
             </div>
 
             {profile ? (
-              <div className="mt-4 grid grid-cols-1 gap-3 border-t border-border pt-4 sm:grid-cols-2">
+              <div className="mt-3 grid grid-cols-1 gap-2.5 border-t border-border pt-3 sm:grid-cols-2">
                 <Field label="Nama" value={profile.nama} />
                 <Field label="Jabatan" value={profile.jabatan} />
                 <Field label="Nama Sekolah" value={profile.namaSekolah} />
@@ -482,7 +482,7 @@ export default function AkademikWorkspace({
 
           {/* Bagian 8.2 / 77 — Active Academic Context */}
           <Card className="p-0">
-            <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-3">
+            <div className="flex items-center justify-between gap-3 px-5 pt-4 pb-2.5">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-50 text-brand-700">
                   <GraduationCap size={18} />
