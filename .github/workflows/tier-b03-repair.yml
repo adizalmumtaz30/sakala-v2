@@ -21,18 +21,34 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - name: Remove parser-triggering JSX comment safely
+      - name: Repair B-03 malformed JSX comments
         run: |
           python - <<'PY'
           from pathlib import Path
           import re
           p = Path('app/(shell)/akademik/AkademikWorkspace.tsx')
           s = p.read_text(encoding='utf-8')
-          pattern = r'\{\s*/\*\s*Bagian 8\.2\s*/\s*77\s*[—-]\s*Active Academic Context\s*\*/\s*\}\s*'
-          repaired, count = re.subn(pattern, '', s, count=1)
-          if count != 1:
-              raise SystemExit('B-03 parser-triggering JSX comment not found')
-          p.write_text(repaired, encoding='utf-8')
+          original = s
+          s, n1 = re.subn(
+              r'(\{\s*/\*\s*Bagian 8\.1\s*/\s*78\s*[—-]\s*School Profile)\s*$',
+              r'\1 */}',
+              s,
+              count=1,
+              flags=re.MULTILINE,
+          )
+          s, n2 = re.subn(
+              r'\{\s*/\*\s*Bagian 8\.2\s*/\s*77\s*[—-]\s*Active Academic Context\s*\*/\s*\}\s*',
+              '',
+              s,
+              count=1,
+          )
+          if n1 != 1:
+              raise SystemExit(f'B-03 malformed 8.1 comment not repaired: matches={n1}')
+          if n2 != 1:
+              raise SystemExit(f'B-03 8.2 parser comment not found: matches={n2}')
+          if s == original:
+              raise SystemExit('B-03 repair produced no source change')
+          p.write_text(s, encoding='utf-8')
           PY
       - name: Validate build
         run: npm ci && npm run build
@@ -42,7 +58,7 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add 'app/(shell)/akademik/AkademikWorkspace.tsx'
           git diff --cached --quiet && exit 0
-          git commit -m 'fix: repair B-03 JSX parser blocker'
+          git commit -m 'fix: repair B-03 malformed JSX comment'
           git push
 
-# B-03 parser repair trigger v2
+# B-03 parser repair trigger v3
