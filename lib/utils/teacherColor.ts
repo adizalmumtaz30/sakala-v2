@@ -1,45 +1,37 @@
-// Teacher Identity Color (SAKALA V2.3 — Catatan Penyempurnaan #10 "Identitas
-// Warna untuk Setiap Guru"). Setiap guru mendapat warna identitas yang:
-// - di-assign otomatis (tidak perlu dipilih manual oleh operator)
-// - stabil & konsisten di seluruh halaman (Data Guru maupun kotak Jadwal),
-//   karena di-hash dari kodeGuru (identitas permanen, bukan dari nama yang
-//   bisa diedit)
-// - dipakai sebagai tint/accent dengan tint yang cukup terasa untuk menjaga
-//   identitas visual tanpa mengorbankan readability.
-// - palette cycling menjaga warna yang berurutan dalam hash space tidak mirip
-//   (disusun berselang-seling hue, bukan berurutan gradasi)
+// Teacher Identity Color (SAKALA V2.3 — Catatan Penyempurnaan #10 "Identitas Warna untuk Setiap Guru").
+// Warna ini adalah identitas visual UTAMA card slot pada Jadwal: stabil per guru,
+// mudah dipindai, tetapi tetap menjaga readability.
 
 export interface TeacherColor {
-  /** Tint premium yang terlihat jelas untuk background kotak jadwal / chip. */
+  /** Background card Jadwal — sengaja terlihat jelas, bukan hampir putih. */
   tint: string;
-  /** Warna accent lebih pekat — dipakai untuk border-left strip / dot / teks aksen. */
+  /** Accent strip / border / aksen. */
   accent: string;
-  /** Warna teks yang tetap kontras di atas tint. */
+  /** Warna teks sekunder yang kontras di atas tint. */
   text: string;
 }
 
-// 18 warna identitas premium. Tint sengaja dinaikkan satu tingkat dari versi
-// ultra-muted agar grid tetap hidup dan mudah dipindai, sementara accent tetap
-// cukup pekat untuk menjaga hierarchy dan aksesibilitas.
+// 18 warna premium yang cukup kuat untuk membuat card slot kembali "hidup".
+// Hue dibuat berjauhan agar jadwal mudah dipindai secara visual.
 const PALETTE: TeacherColor[] = [
-  { tint: "#E0E7FF", accent: "#4F46E5", text: "#3730A3" }, // indigo
-  { tint: "#FFEDD5", accent: "#EA580C", text: "#9A3412" }, // orange
-  { tint: "#CFFAFE", accent: "#0891B2", text: "#155E75" }, // cyan
-  { tint: "#FCE7F3", accent: "#DB2777", text: "#9D174D" }, // pink
-  { tint: "#DCFCE7", accent: "#16A34A", text: "#166534" }, // green
-  { tint: "#FEE2E2", accent: "#DC2626", text: "#991B1B" }, // red
-  { tint: "#F3E8FF", accent: "#9333EA", text: "#6B21A8" }, // purple
-  { tint: "#FEF3C7", accent: "#CA8A04", text: "#854D0E" }, // amber
-  { tint: "#E0F2FE", accent: "#0284C7", text: "#075985" }, // sky
-  { tint: "#FAE8FF", accent: "#C026D3", text: "#86198F" }, // fuchsia
-  { tint: "#ECFCCB", accent: "#65A30D", text: "#3F6212" }, // lime
-  { tint: "#FFE4E6", accent: "#E11D48", text: "#9F1239" }, // rose-deep
-  { tint: "#DBEAFE", accent: "#2563EB", text: "#1E40AF" }, // blue
-  { tint: "#FEF3C7", accent: "#D97706", text: "#92400E" }, // amber-deep
-  { tint: "#D1FAE5", accent: "#059669", text: "#065F46" }, // emerald
-  { tint: "#EDE9FE", accent: "#7C3AED", text: "#5B21B6" }, // violet
-  { tint: "#FEF3C7", accent: "#A16207", text: "#713F12" }, // gold
-  { tint: "#CCFBF1", accent: "#0D9488", text: "#115E59" }, // teal
+  { tint: "#C7D2FE", accent: "#4F46E5", text: "#312E81" }, // indigo
+  { tint: "#FED7AA", accent: "#EA580C", text: "#9A3412" }, // orange
+  { tint: "#A5F3FC", accent: "#0891B2", text: "#155E75" }, // cyan
+  { tint: "#FBCFE8", accent: "#DB2777", text: "#9D174D" }, // pink
+  { tint: "#BBF7D0", accent: "#16A34A", text: "#166534" }, // green
+  { tint: "#FECACA", accent: "#DC2626", text: "#991B1B" }, // red
+  { tint: "#E9D5FF", accent: "#9333EA", text: "#6B21A8" }, // purple
+  { tint: "#FDE68A", accent: "#CA8A04", text: "#854D0E" }, // amber
+  { tint: "#BAE6FD", accent: "#0284C7", text: "#075985" }, // sky
+  { tint: "#F5D0FE", accent: "#C026D3", text: "#86198F" }, // fuchsia
+  { tint: "#D9F99D", accent: "#65A30D", text: "#3F6212" }, // lime
+  { tint: "#FECDD3", accent: "#E11D48", text: "#9F1239" }, // rose
+  { tint: "#BFDBFE", accent: "#2563EB", text: "#1E40AF" }, // blue
+  { tint: "#FDE68A", accent: "#D97706", text: "#92400E" }, // amber-deep
+  { tint: "#A7F3D0", accent: "#059669", text: "#065F46" }, // emerald
+  { tint: "#DDD6FE", accent: "#7C3AED", text: "#5B21B6" }, // violet
+  { tint: "#FDE68A", accent: "#A16207", text: "#713F12" }, // gold
+  { tint: "#99F6E4", accent: "#0D9488", text: "#115E59" }, // teal
 ];
 
 /** Hash string sederhana, deterministik lintas render/sesi. */
@@ -52,10 +44,7 @@ function hashSeed(seed: string): number {
   return Math.abs(hash);
 }
 
-/**
- * Warna identitas guru, stabil per kodeGuru (fallback ke id kalau kodeGuru
- * belum tersedia). Dipakai konsisten di Data Guru dan kotak Jadwal.
- */
+/** Warna identitas guru, stabil per kodeGuru (fallback ke id). */
 export function teacherColor(kodeGuruOrId: string): TeacherColor {
   const seed = kodeGuruOrId || "?";
   const index = hashSeed(seed) % PALETTE.length;
