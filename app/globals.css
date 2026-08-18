@@ -56,9 +56,7 @@ html, body {
   border-color: #DBDEE6;
 }
 
-/* Premium Jadwal workspace — visual-only layer.
-   Scoped to the distinctive schedule table so no scheduling logic or other
-   application surfaces are affected. */
+/* Premium Jadwal workspace — visual-only layer. */
 table.w-full.border-collapse.text-\[12\.5px\] {
   border-collapse: separate;
   border-spacing: 0;
@@ -167,7 +165,6 @@ table.w-full.border-collapse.text-\[12\.5px\] tbody td button > span:nth-child(3
   opacity: 0.62;
 }
 
-/* Committed is useful metadata, not the visual headline. */
 table.w-full.border-collapse.text-\[12\.5px\] tbody td button > span:last-child {
   align-self: flex-start;
   margin-top: 4px;
@@ -176,7 +173,7 @@ table.w-full.border-collapse.text-\[12\.5px\] tbody td button > span:last-child 
   opacity: 0.55;
 }
 
-/* Empty slots become quiet interactive space; the affordance appears on hover. */
+/* Empty slots become quiet interactive space. */
 table.w-full.border-collapse.text-\[12\.5px\] tbody td button.border-dashed {
   min-height: 72px;
   border-color: transparent;
@@ -195,15 +192,192 @@ table.w-full.border-collapse.text-\[12\.5px\] tbody td button.border-dashed:hove
   box-shadow: inset 0 0 0 1px rgba(79,70,229,0.035);
 }
 
-/* Fixed activities are intentionally quieter than teaching cards. */
+/* Fixed activities are quieter than teaching cards. */
 table.w-full.border-collapse.text-\[12\.5px\] tbody td > div.flex.h-16 {
   border: 1px solid #ECEEF2;
   border-radius: 13px;
   background: #F7F8FA;
 }
 
-/* Responsive breathing room without changing scheduling behavior. */
+/* ---- Jadwal refinement pass: hierarchy, calm chrome, and interaction ---- */
+.mx-auto.flex.max-w-6xl.flex-col.gap-5.pb-16.pt-6:has(table.w-full.border-collapse.text-\[12\.5px\]) {
+  max-width: 88rem;
+  gap: 1rem;
+  padding-top: 1.25rem;
+}
+
+.mx-auto.flex.max-w-6xl.flex-col.gap-5.pb-16.pt-6:has(table.w-full.border-collapse.text-\[12\.5px\]) > div:has(> h1.text-\[20px\]) {
+  position: relative;
+  padding: 0.25rem 0.125rem 0.25rem;
+}
+
+.mx-auto.flex.max-w-6xl.flex-col.gap-5.pb-16.pt-6:has(table.w-full.border-collapse.text-\[12\.5px\]) > div:has(> h1.text-\[20px\]) > div {
+  gap: 0.45rem;
+  color: #8A909B;
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+}
+
+.mx-auto.flex.max-w-6xl.flex-col.gap-5.pb-16.pt-6:has(table.w-full.border-collapse.text-\[12\.5px\]) > div:has(> h1.text-\[20px\]) h1 {
+  margin-top: 0.2rem;
+  color: #171A21;
+  font-size: clamp(1.5rem, 2.3vw, 2rem);
+  line-height: 1.08;
+  font-weight: 720;
+  letter-spacing: -0.035em;
+}
+
+.mx-auto.flex.max-w-6xl.flex-col.gap-5.pb-16.pt-6:has(table.w-full.border-collapse.text-\[12\.5px\]) > div:has(> h1.text-\[20px\]) p {
+  margin-top: 0.2rem;
+  color: #7B818D;
+  font-size: 11.5px;
+}
+
+/* Compact control rail: less chrome, stronger schedule focus. */
+.mx-auto.flex.max-w-6xl.flex-col.gap-5.pb-16.pt-6:has(table.w-full.border-collapse.text-\[12\.5px\]) > div:has(> div.flex.flex-wrap.items-end) {
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 0.65rem;
+  border-color: #E8EAF0;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.78);
+  box-shadow: 0 4px 18px -18px rgba(18,20,26,0.32);
+  backdrop-filter: blur(10px);
+}
+
+.mx-auto.flex.max-w-6xl.flex-col.gap-5.pb-16.pt-6:has(table.w-full.border-collapse.text-\[12\.5px\]) > div:has(> div.flex.flex-wrap.items-end) label {
+  margin-bottom: 0.05rem;
+  color: #8A909B;
+  font-size: 9.5px;
+  font-weight: 650;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.mx-auto.flex.max-w-6xl.flex-col.gap-5.pb-16.pt-6:has(table.w-full.border-collapse.text-\[12\.5px\]) > div:has(> div.flex.flex-wrap.items-end) select,
+.mx-auto.flex.max-w-6xl.flex-col.gap-5.pb-16.pt-6:has(table.w-full.border-collapse.text-\[12\.5px\]) > div:has(> div.flex.flex-wrap.items-end) button {
+  height: 38px;
+  border-radius: 10px;
+}
+
+.mx-auto.flex.max-w-6xl.flex-col.gap-5.pb-16.pt-6:has(table.w-full.border-collapse.text-\[12\.5px\]) > div:has(> div.flex.flex-wrap.items-end) select {
+  min-width: 145px;
+  padding-left: 0.7rem;
+  padding-right: 0.7rem;
+  font-size: 12px;
+  background: #FFFFFF;
+}
+
+.mx-auto.flex.max-w-6xl.flex-col.gap-5.pb-16.pt-6:has(table.w-full.border-collapse.text-\[12\.5px\]) > div:has(> div.flex.flex-wrap.items-end) button {
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  font-size: 11.5px;
+}
+
+.mx-auto.flex.max-w-6xl.flex-col.gap-5.pb-16.pt-6:has(table.w-full.border-collapse.text-\[12\.5px\]) > div:has(> div.flex.flex-wrap.items-end) button.bg-brand-600 {
+  box-shadow: 0 5px 12px -8px rgba(79,70,229,0.65);
+}
+
+/* Make the grid feel like a spatial workspace, not a spreadsheet. */
+.mx-auto.flex.max-w-6xl.flex-col.gap-5.pb-16.pt-6:has(table.w-full.border-collapse.text-\[12\.5px\]) > div:has(> table.w-full) {
+  overflow: hidden;
+  border-color: #E7E9EE;
+  border-radius: 18px;
+  box-shadow: 0 14px 40px -34px rgba(18,20,26,0.28);
+}
+
+table.w-full.border-collapse.text-\[12\.5px\] thead th:not(:first-child) {
+  position: relative;
+  color: #343944;
+  font-size: 10.5px;
+  letter-spacing: 0.065em;
+}
+
+table.w-full.border-collapse.text-\[12\.5px\] thead th:not(:first-child)::after {
+  content: "";
+  position: absolute;
+  left: 0.75rem;
+  bottom: 0;
+  width: 20px;
+  height: 2px;
+  border-radius: 999px;
+  background: #D7DAE2;
+  transition: width 180ms var(--easing), background-color 180ms var(--easing);
+}
+
+table.w-full.border-collapse.text-\[12\.5px\] thead th:not(:first-child):hover::after {
+  width: 34px;
+  background: #B9BDC8;
+}
+
+/* Subtle row rhythm and more generous spatial breathing. */
+table.w-full.border-collapse.text-\[12\.5px\] tbody td:not(:first-child) {
+  padding-left: 0.4rem;
+  padding-right: 0.4rem;
+  background: rgba(255,255,255,0.28);
+}
+
+table.w-full.border-collapse.text-\[12\.5px\] tbody tr:hover td:not(:first-child) {
+  background: rgba(249,250,252,0.72);
+}
+
+/* Schedule cards: subject first, teacher second, metadata quiet. */
+table.w-full.border-collapse.text-\[12\.5px\] tbody td button:not(.border-dashed) {
+  min-height: 76px;
+  padding: 0.72rem 0.75rem;
+  border-color: rgba(214,217,224,0.78);
+  background: rgba(255,255,255,0.88);
+}
+
+table.w-full.border-collapse.text-\[12\.5px\] tbody td button:not(.border-dashed)::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 11px;
+  bottom: 11px;
+  width: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.16;
+  transition: opacity 180ms var(--easing), transform 180ms var(--easing);
+}
+
+table.w-full.border-collapse.text-\[12\.5px\] tbody td button:not(.border-dashed):hover::before {
+  opacity: 0.34;
+  transform: scaleY(1.05);
+}
+
+/* Empty space becomes an invitation only when the pointer enters it. */
+table.w-full.border-collapse.text-\[12\.5px\] tbody td button.border-dashed {
+  min-height: 76px;
+  margin: 0.05rem;
+  border: 1px dashed transparent;
+}
+
+table.w-full.border-collapse.text-\[12\.5px\] tbody td button.border-dashed span {
+  transition: opacity 160ms var(--easing), transform 160ms var(--easing);
+}
+
+table.w-full.border-collapse.text-\[12\.5px\] tbody td button.border-dashed:hover span {
+  transform: translateY(-1px);
+}
+
+/* Reduce status noise without removing status information. */
+table.w-full.border-collapse.text-\[12\.5px\] tbody td button [class*="text-emerald"],
+table.w-full.border-collapse.text-\[12\.5px\] tbody td button [class*="text-rose"],
+table.w-full.border-collapse.text-\[12\.5px\] tbody td button [class*="text-amber"] {
+  opacity: 0.58;
+}
+
 @media (max-width: 900px) {
+  .mx-auto.flex.max-w-6xl.flex-col.gap-5.pb-16.pt-6:has(table.w-full.border-collapse.text-\[12\.5px\]) {
+    padding-top: 0.9rem;
+  }
+  .mx-auto.flex.max-w-6xl.flex-col.gap-5.pb-16.pt-6:has(table.w-full.border-collapse.text-\[12\.5px\]) > div:has(> div.flex.flex-wrap.items-end) {
+    padding: 0.5rem;
+  }
   table.w-full.border-collapse.text-\[12\.5px\] thead th {
     height: 48px;
   }
@@ -215,7 +389,9 @@ table.w-full.border-collapse.text-\[12\.5px\] tbody td > div.flex.h-16 {
 
 @media (prefers-reduced-motion: reduce) {
   table.w-full.border-collapse.text-\[12\.5px\] tbody td button,
-  table.w-full.border-collapse.text-\[12\.5px\] tbody tr {
+  table.w-full.border-collapse.text-\[12\.5px\] tbody tr,
+  table.w-full.border-collapse.text-\[12\.5px\] thead th::after,
+  table.w-full.border-collapse.text-\[12\.5px\] tbody td button::before {
     transition: none;
   }
   table.w-full.border-collapse.text-\[12\.5px\] tbody td button:hover {
@@ -223,9 +399,7 @@ table.w-full.border-collapse.text-\[12\.5px\] tbody td > div.flex.h-16 {
   }
 }
 
-/* Splash screen (Bagian 5.2 / 42 / 76) — dimatikan total lewat
-   prefers-reduced-motion di komponen (tidak dirender sama sekali, bukan
-   cuma dipercepat), jadi keyframes ini aman didefinisikan global. */
+/* Splash screen */
 @keyframes splashLogoIn {
   from { opacity: 0; transform: scale(0.86); }
   to { opacity: 1; transform: scale(1); }
@@ -237,12 +411,4 @@ table.w-full.border-collapse.text-\[12\.5px\] tbody td > div.flex.h-16 {
 @keyframes splashGlow {
   0%, 100% { opacity: 0.55; transform: scale(1); }
   50% { opacity: 0.9; transform: scale(1.08); }
-}
-@keyframes splashWire {
-  0%, 100% { opacity: 0.25; }
-  50% { opacity: 0.75; }
-}
-@keyframes splashNode {
-  0%, 100% { opacity: 0.35; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.4); }
 }
