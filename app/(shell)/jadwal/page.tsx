@@ -37,7 +37,8 @@ export default async function JadwalPage() {
     scheduleModels.forEach((m, i) => { slotTemplatesByModel[m.id] = slotTemplateLists[i]; });
 
     return (
-      <>
+      <div data-sakala-jadwal-root>
+        {/* The pointer interaction binds to this single operational workspace. */}
         <JadwalPointerDrag academicContextId={activeContext.id} scheduleModels={scheduleModels} assignments={allAssignments} />
         <JadwalWorkspace
           activeContext={activeContext}
@@ -50,7 +51,7 @@ export default async function JadwalPage() {
           ruanganList={ruanganList}
           assignments={allAssignments}
         />
-      </>
+      </div>
     );
   } catch {
     return <div className="mx-auto max-w-3xl pt-10"><ErrorState message="Gagal memuat data Jadwal dari Supabase. Cek koneksi dan environment variable kamu." /></div>;
