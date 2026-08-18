@@ -2,12 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { GripVertical, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { GripVertical, AlertTriangle, CheckCircle2, MoreVertical, Trash2, Move } from "lucide-react";
 import type { ScheduleAssignment } from "@/lib/domain/scheduleAssignment";
 import type { ScheduleModel } from "@/lib/domain/scheduleModel";
 import type { JamPelajaran, HariSekolah } from "@/lib/domain/jamPelajaran";
 import { formatHari, URUTAN_HARI } from "@/lib/domain/jamPelajaran";
-import { moveAssignmentAction } from "@/app/(shell)/jadwal/actions";
+import { deleteAssignmentAction, moveAssignmentAction } from "@/app/(shell)/jadwal/actions";
 
 export default function JadwalDragDrop({
   scheduleModels,
@@ -29,15 +29,14 @@ export default function JadwalDragDrop({
   const [modelId, setModelId] = useState(activeModels[0]?.id ?? "");
   const [dragId, setDragId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [menuId, setMenuId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const model = activeModels.find((m) => m.id === modelId) ?? null;
   const days = model ? URUTAN_HARI.filter((d) => model.hariAktif.includes(d)) : [];
   const committed = useMemo(() => assignments.filter((a) => a.status === "committed" && a.scheduleModelId === modelId), [assignments, modelId]);
   const byCell = useMemo(() => {
     const map = new Map<string, ScheduleAssignment>();
-    for (const a of committed) {
-      for (let p = a.periodStart; p <= a.periodEnd; p++) map.set(`${a.day}:${p}`, a);
-    }
+    for (const a of committed) for (let p = a.periodStart; p <= a.periodEnd; p++) map.set(`${a.day}:${p}`, a);
     return map;
   }, [committed]);
   const maxPeriod = Math.max(0, ...days.flatMap((d) => jamPelajaranList.filter((j) => j.hari === d).map((j) => j.nomorUrut)));
@@ -56,19 +55,22 @@ export default function JadwalDragDrop({
         return;
       }
     }
-    setBusyId(source.id); setNotice(null);
+    setBusyId(source.id); setNotice(null); setMenuId(null);
     const result = await moveAssignmentAction(source.id, {
-      day,
-      periodStart: period,
-      periodEnd: period + span,
-      roomId: source.roomId ?? null,
-      classId: source.classId,
-      subjectId: source.subjectId,
-      teacherId: source.teacherId,
+      day, periodStart: period, periodEnd: period + span,
+      roomId: source.roomId ?? null, classId: source.classId, subjectId: source.subjectId, teacherId: source.teacherId,
     }, "Pindah melalui Drag & Drop");
     setBusyId(null); setDragId(null);
     if (!result.ok) setNotice(result.error);
     else { setNotice("Jadwal berhasil dipindahkan dan dibuatkan Schedule Version baru."); router.refresh(); }
+  }
+
+  async function remove(id: string) {
+    setBusyId(id); setNotice(null); setMenuId(null);
+    const result = await deleteAssignmentAction(id);
+    setBusyId(null);
+    if (!result.ok) setNotice(result.error);
+    else { setNotice(result.data.archived ? "Jadwal committed diarsipkan." : "Jadwal dihapus."); router.refresh(); }
   }
 
   if (!model) return null;
@@ -76,13 +78,8 @@ export default function JadwalDragDrop({
   return (
     <section className="mx-auto flex max-w-6xl flex-col gap-3 rounded-card border border-border bg-surface p-4 shadow-soft">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="mr-auto">
-          <h2 className="text-[14px] font-semibold text-ink-900">Drag &amp; Drop Jadwal</h2>
-          <p className="text-[11.5px] text-ink-500">Tarik kartu jadwal ke slot kosong. Conflict tetap diblokir server-side.</p>
-        </div>
-        <select value={modelId} onChange={(e) => setModelId(e.target.value)} className="h-10 rounded-xl border border-border bg-surface px-3 text-[12.5px]">
-          {activeModels.map((m) => <option key={m.id} value={m.id}>{m.namaModel}</option>)}
-        </select>
+        <div className="mr-auto"><h2 className="text-[14px] font-semibold text-ink-900">Drag &amp; Drop Jadwal</h2><p className="text-[11.5px] text-ink-500">Tarik kartu jadwal ke slot kosong. Conflict tetap diblokir server-side.</p></div>
+        <select value={modelId} onChange={(e) => setModelId(e.target.value)} className="h-10 rounded-xl border border-border bg-surface px-3 text-[12.5px]">{activeModels.map((m) => <option key={m.id} value={m.id}>{m.namaModel}</option>)}</select>
       </div>
       {notice && <div className="flex items-center gap-2 rounded-lg border border-border bg-surface-muted px-3 py-2 text-xs text-ink-700"><CheckCircle2 size={14} />{notice}</div>}
       <div className="overflow-x-auto rounded-xl border border-border">
@@ -94,16 +91,12 @@ export default function JadwalDragDrop({
             ...days.map((day) => {
               const a = byCell.get(`${day}:${period}`);
               const isStart = a?.periodStart === period && a.day === day;
-              return <div
-                key={`${day}-${period}`}
-                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
-                onDrop={(e) => { e.preventDefault(); void drop(day, period); }}
-                className={`min-h-[58px] border-b border-r border-border p-1.5 transition ${dragId ? "bg-brand-50/30" : ""}`}
-              >
+              return <div key={`${day}-${period}`} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }} onDrop={(e) => { e.preventDefault(); void drop(day, period); }} className={`relative min-h-[58px] border-b border-r border-border p-1.5 transition ${dragId ? "bg-brand-50/30" : ""}`}>
                 {a && isStart ? (
                   <div draggable={busyId !== a.id} onDragStart={(e) => { setDragId(a.id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", a.id); }} onDragEnd={() => setDragId(null)} className={`flex cursor-grab items-start gap-1 rounded-lg border border-border bg-surface px-2 py-1.5 shadow-sm active:cursor-grabbing ${busyId === a.id ? "opacity-50" : ""}`}>
                     <GripVertical size={14} className="mt-0.5 shrink-0 text-ink-400" />
-                    <div className="min-w-0"><div className="truncate text-[11px] font-semibold text-ink-900">{subjectNames[a.subjectId] ?? "Mapel"}</div><div className="truncate text-[10px] text-ink-500">{classNames[a.classId] ?? "Kelas"} · {teacherNames[a.teacherId] ?? "Guru"}</div>{a.periodEnd > a.periodStart && <div className="text-[9.5px] text-brand-700">{a.periodEnd - a.periodStart + 1} JP</div>}</div>
+                    <div className="min-w-0 pr-4"><div className="truncate text-[11px] font-semibold text-ink-900">{subjectNames[a.subjectId] ?? "Mapel"}</div><div className="truncate text-[10px] text-ink-500">{classNames[a.classId] ?? "Kelas"} · {teacherNames[a.teacherId] ?? "Guru"}</div>{a.periodEnd > a.periodStart && <div className="text-[9.5px] text-brand-700">{a.periodEnd - a.periodStart + 1} JP</div>}</div>
+                    <div className="absolute right-1 top-1"><button type="button" aria-label="Menu slot" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setMenuId(menuId === a.id ? null : a.id); }} className="rounded-md p-1 text-ink-400 hover:bg-surface-muted hover:text-ink-800"><MoreVertical size={14} /></button>{menuId === a.id && <div className="absolute right-0 z-20 mt-1 w-40 rounded-lg border border-border bg-surface p-1 shadow-lg"><button type="button" onClick={() => setNotice("Tarik kartu ini ke slot tujuan untuk memindahkannya.")} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-surface-muted"><Move size={13} />Pindah via Drag &amp; Drop</button><button type="button" disabled={busyId === a.id} onClick={() => { if (window.confirm("Arsipkan jadwal ini?")) void remove(a.id); }} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-rose hover:bg-surface-muted disabled:opacity-40"><Trash2 size={13} />Arsipkan / Hapus</button></div>}</div>
                   </div>
                 ) : a ? <div className="h-full rounded-lg bg-surface-muted" /> : <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-border text-[10px] text-ink-300">Drop</div>}
               </div>;
