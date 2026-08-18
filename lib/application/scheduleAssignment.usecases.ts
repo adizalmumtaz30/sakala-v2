@@ -1,7 +1,6 @@
 // Application layer — use case / orchestration. Memanggil Domain untuk validasi
 // struktural, Conflict Engine untuk validasi lintas-entity (Bagian 22/23), dan
-// Data Access untuk persistence. UI (Presentation, step 14/15 nanti) hanya
-// boleh memanggil layer ini — TIDAK PERNAH memanggil repository langsung.
+// Data Access untuk persistence. UI hanya boleh memanggil layer ini.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
@@ -21,7 +20,6 @@ export interface ValidationResult {
   hasBlockingConflict: boolean;
 }
 
-/** Bagian 68 — "BLOCKING CONFLICT wajib mencegah commit." */
 function toResult(conflicts: ScheduleConflict[]): ValidationResult {
   return { conflicts, hasBlockingConflict: conflicts.some((c) => c.blocking) };
 }
@@ -34,23 +32,14 @@ export async function getScheduleAssignment(supabase: SupabaseClient, id: string
   return scheduleAssignmentRepository.findById(supabase, id);
 }
 
-/**
- * Menjalankan validasi (struktural + Conflict Engine) TANPA menyimpan apa
- * pun — dipakai UI (step 14/15) untuk preview real-time sebelum user
- * menekan simpan/commit ("Conflict should be visible at slot/row/summary",
- * Bagian 23.3).
- */
+/** Preview-only validation. No database mutation. */
 export async function validateAssignment(supabase: SupabaseClient, draft: ScheduleAssignmentDraft, excludeId?: string): Promise<ValidationResult> {
   validateScheduleAssignmentDraft(draft);
   const conflicts = await validateAssignmentCandidate(supabase, draft, excludeId);
   return toResult(conflicts);
 }
 
-/**
- * Simpan assignment sebagai draft/candidate. TIDAK blocking pada conflict
- * severity warning/info (Bagian 23.1) — hanya error yang mencegah simpan,
- * supaya user tetap bisa menyusun rencana bertahap sebelum commit.
- */
+/** Save a non-committed draft/candidate. Committed rows have a dedicated commit path. */
 export async function saveAssignmentDraft(supabase: SupabaseClient, draft: ScheduleAssignmentDraft): Promise<{ assignment: ScheduleAssignment; conflicts: ScheduleConflict[] }> {
   if (draft.status === "committed") {
     throw new ScheduleAssignmentValidationError("status", "Gunakan commitAssignments untuk menyimpan status committed, bukan saveAssignmentDraft.");
@@ -73,6 +62,11 @@ export async function updateAssignmentDraft(
   if (draft.status === "committed") {
     throw new ScheduleAssignmentValidationError("status", "Gunakan commitAssignments untuk mengubah status ke committed, bukan updateAssignmentDraft.");
   }
+  const existing = await scheduleAssignmentRepository.findById(supabase, id);
+  if (!existing) throw new ScheduleAssignmentValidationError("id", "Assignment tidak ditemukan.");
+  if (existing.status === "committed") {
+    throw new ScheduleAssignmentValidationError("status", "Committed schedule tidak boleh dimutasi langsung. Buat candidate baru lalu commit secara eksplisit.");
+  }
   validateScheduleAssignmentDraft(draft);
   const conflicts = await validateAssignmentCandidate(supabase, draft, id);
   const blocking = conflicts.filter((c) => c.blocking);
@@ -87,17 +81,6 @@ export async function deleteAssignment(supabase: SupabaseClient, id: string): Pr
   return scheduleAssignmentRepository.remove(supabase, id);
 }
 
-/**
- * Bagian 28 (Delete Schedule) — Claude addition: spesifikasi tidak
- * membedakan hard-delete vs soft-delete secara eksplisit, tapi domain
- * sudah punya status "archived" (Bagian 21.2) khusus untuk kasus ini, dan
- * History (step 18) belum dibangun untuk menyimpan jejak hapus terpisah.
- * Assignment COMMITTED di-archive (tetap ada sebagai jejak, versionId
- * dipertahankan) supaya tidak menghilang tanpa bekas dari Schedule Version
- * yang sudah tercatat; assignment draft/candidate (belum pernah jadi bagian
- * histori resmi) di-hapus permanen seperti sebelumnya. Flag untuk direview
- * saat step 18 dibangun.
- */
 export async function archiveOrDeleteAssignment(supabase: SupabaseClient, id: string): Promise<{ archived: boolean }> {
   const existing = await scheduleAssignmentRepository.findById(supabase, id);
   if (!existing) {
@@ -130,14 +113,7 @@ export async function archiveOrDeleteAssignment(supabase: SupabaseClient, id: st
   return { archived: false };
 }
 
-/**
- * Bagian 26 (Add Schedule Workflow) — orkestrasi "Review → Validate → Save
- * Draft / Commit" dalam satu pemanggilan. Selalu disimpan sebagai draft
- * dulu (lewat saveAssignmentDraft, yang sudah menegakkan blocking conflict),
- * lalu — kalau user memilih Commit, bukan Save Draft — langsung di-commit
- * lewat commitAssignments (satu-satunya jalur status "committed", Bagian
- * 21.3/68) supaya tetap tercatat sebagai Schedule Version baru.
- */
+/** Review → Validate → Save Draft/Candidate → optional explicit Commit. */
 export async function addAssignment(
   supabase: SupabaseClient,
   draft: ScheduleAssignmentDraft,
@@ -150,23 +126,16 @@ export async function addAssignment(
   }
   const result = await commitAssignments(supabase, draft.academicContextId, [saved.assignment.id], label ?? "Tambah jadwal manual", null);
   const committed = await scheduleAssignmentRepository.findById(supabase, saved.assignment.id);
-  // Bagian 22.5 (JP_MISMATCH) hanya dievaluasi Conflict Engine saat status
-  // sudah "committed" — pakai conflictsByAssignment hasil commit (bukan
-  // saved.conflicts yang masih level draft) supaya reconciliation JP ikut
-  // terlihat oleh pemanggil, bukan cuma dihitung lalu dibuang.
   return { assignment: committed ?? saved.assignment, conflicts: result.conflictsByAssignment[saved.assignment.id] ?? saved.conflicts, versionId: result.versionId };
 }
 
 /**
- * Bagian 27 (Move/Edit Schedule) — "Validate → Confirm → Commit → Create
- * history". Tidak ada jalur backend terpisah untuk "edit assignment
- * committed di tempat" — itu akan melanggar Bagian 21.3 (candidate tidak
- * boleh mengubah committed sebelum explicit commit). Sebagai gantinya,
- * assignment dikembalikan ke "draft" dengan field baru (divalidasi ulang
- * penuh oleh Conflict Engine, excludeId supaya tidak konflik dengan dirinya
- * sendiri), lalu langsung di-commit ulang lewat commitAssignments — ini
- * secara alami menghasilkan Schedule Version baru sebagai "history" tanpa
- * butuh tabel riwayat terpisah (step 18 belum dibangun).
+ * Move/Edit Schedule.
+ *
+ * IMPORTANT: committed rows are immutable history. Moving a committed row
+ * creates a NEW candidate row; the old committed row is never mutated before
+ * explicit commit. If commit=true, the new candidate is committed through the
+ * same single commit path and the previous active version is superseded.
  */
 export async function moveAssignment(
   supabase: SupabaseClient,
@@ -178,6 +147,7 @@ export async function moveAssignment(
   if (!existing) {
     throw new ScheduleAssignmentValidationError("id", "Assignment tidak ditemukan.");
   }
+
   const draft: ScheduleAssignmentDraft = {
     academicContextId: existing.academicContextId,
     scheduleModelId: existing.scheduleModelId,
@@ -189,33 +159,30 @@ export async function moveAssignment(
     periodStart: changes.periodStart,
     periodEnd: changes.periodEnd,
     activityType: existing.activityType,
-    status: "draft",
+    status: "candidate",
     source: existing.source,
     versionId: null,
   };
-  await updateAssignmentDraft(supabase, id, draft);
-  const result = await commitAssignments(supabase, existing.academicContextId, [id], label ?? "Pindah jadwal", "Dipindahkan via Jadwal Operational Workspace");
-  const moved = await scheduleAssignmentRepository.findById(supabase, id);
+
+  // Committed source rows are copied, never mutated. Non-committed rows can
+  // still be edited in place while they remain outside the committed history.
+  const candidate = existing.status === "committed"
+    ? await saveAssignmentDraft(supabase, draft)
+    : await updateAssignmentDraft(supabase, existing.id, draft);
+
+  const result = await commitAssignments(supabase, existing.academicContextId, [candidate.assignment.id], label ?? "Pindah jadwal", "Dipindahkan via Jadwal Operational Workspace");
+  const moved = await scheduleAssignmentRepository.findById(supabase, candidate.assignment.id);
   if (!moved) {
     throw new ScheduleAssignmentValidationError("id", "Assignment tidak ditemukan setelah dipindahkan.");
   }
-  // Sama seperti addAssignment() — conflictsByAssignment hasil commit
-  // dikembalikan supaya JP_MISMATCH (dan non-blocking conflict lain) ikut
-  // terlihat setelah pindah jadwal, bukan cuma dihitung lalu dibuang.
-  return { assignment: moved, versionId: result.versionId, conflicts: result.conflictsByAssignment[id] ?? [] };
+  return { assignment: moved, versionId: result.versionId, conflicts: result.conflictsByAssignment[candidate.assignment.id] ?? [] };
 }
 
-
 /**
- * Bagian 21.3 / 68 — "CANDIDATE tidak boleh mengubah COMMITTED SCHEDULE
- * sebelum explicit commit." commitAssignments() adalah SATU-SATUNYA jalur
- * yang boleh mengubah status assignment jadi "committed": membuat satu
- * Schedule Version baru, lalu memindahkan seluruh assignmentIds yang
- * diberikan ke status committed + versionId tersebut — atomik dari sisi
- * pemanggil (semua assignment tervalidasi dulu sebelum ada satu pun yang
- * ditulis). Assignment dengan blocking conflict (termasuk INACTIVE_ENTITY
- * yang di-escalate jadi error khusus status committed) MENCEGAH seluruh
- * commit — tidak ada commit sebagian.
+ * CANDIDATE → COMMITTED is the only legal transition into committed state.
+ * All assignments are validated first; if any blocking conflict exists the
+ * whole operation stops before a new version is created. Committed rows are
+ * rejected as input, preventing accidental re-commit or silent mutation.
  */
 export async function commitAssignments(
   supabase: SupabaseClient,
@@ -228,27 +195,43 @@ export async function commitAssignments(
     throw new ScheduleAssignmentValidationError("assignmentIds", "Pilih minimal satu assignment untuk di-commit.");
   }
 
+  const uniqueIds = [...new Set(assignmentIds)];
   const conflictsByAssignment: Record<string, ScheduleConflict[]> = {};
-  let hasBlocking = false;
+  const assignments: ScheduleAssignment[] = [];
 
-  for (const id of assignmentIds) {
+  for (const id of uniqueIds) {
     const existing = await scheduleAssignmentRepository.findById(supabase, id);
     if (!existing) {
       throw new ScheduleAssignmentValidationError("assignmentIds", `Assignment ${id} tidak ditemukan.`);
     }
+    if (existing.academicContextId !== academicContextId) {
+      throw new ScheduleAssignmentValidationError("academicContextId", "Semua assignment yang di-commit wajib berada dalam Academic Context yang sama.");
+    }
+    if (existing.status === "committed") {
+      throw new ScheduleAssignmentValidationError("status", "Committed schedule bersifat immutable. Buat candidate baru untuk perubahan lalu commit candidate tersebut.");
+    }
+    if (existing.status !== "candidate" && existing.status !== "draft") {
+      throw new ScheduleAssignmentValidationError("status", `Assignment ${id} tidak berada pada status candidate/draft yang dapat di-commit.`);
+    }
+
     const draftForCommitCheck = { ...existing, status: "committed" as const };
     const conflicts = await validateAssignmentCandidate(supabase, draftForCommitCheck, id);
     conflictsByAssignment[id] = conflicts;
-    if (conflicts.some((c) => c.blocking)) hasBlocking = true;
+    assignments.push(existing);
   }
 
-  if (hasBlocking) {
+  const blocking = Object.values(conflictsByAssignment).some((conflicts) => conflicts.some((c) => c.blocking));
+  if (blocking) {
     throw new ScheduleAssignmentValidationError(
       "conflict",
       "Ada assignment dengan blocking conflict — commit dibatalkan untuk seluruh batch. Perbaiki semua conflict severity Error sebelum commit ulang."
     );
   }
 
+  // Only now create the committed version. The previous active version is
+  // superseded after the new version exists, so candidate review never alters
+  // the current committed version.
+  const previousActive = await scheduleVersionRepository.findActiveByContext(supabase, academicContextId);
   const version = await scheduleVersionRepository.create(supabase, {
     academicContextId,
     label,
@@ -257,17 +240,15 @@ export async function commitAssignments(
     changeSummary,
   });
 
-  for (const id of assignmentIds) {
-    await scheduleAssignmentRepository.setStatus(supabase, id, "committed", version.id);
+  if (previousActive && previousActive.id !== version.id) {
+    await scheduleVersionRepository.setStatus(supabase, previousActive.id, "superseded");
   }
 
-  // Bagian 34 (History/Audit) — commit adalah satu-satunya jalur assignment
-  // menjadi "committed" (lihat catatan di atas fungsi ini), jadi ini titik
-  // yang tepat untuk mencatat jejak "create"/"move"/"commit" schedule
-  // sekaligus (addAssignment dan moveAssignment sama-sama berakhir di sini).
-  // Best-effort — kegagalan pencatatan audit tidak membatalkan commit yang
-  // sudah berhasil.
-  for (const id of assignmentIds) {
+  for (const assignment of assignments) {
+    await scheduleAssignmentRepository.setStatus(supabase, assignment.id, "committed", version.id);
+  }
+
+  for (const id of uniqueIds) {
     const committed = await scheduleAssignmentRepository.findById(supabase, id);
     await recordAuditEvent({
       supabase,
