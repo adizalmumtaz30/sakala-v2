@@ -1,0 +1,35 @@
+name: B-03 One-Time Comment Brace Fix
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix-once:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fix duplicated JSX comment brace
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('app/(shell)/akademik/AkademikWorkspace.tsx')
+          s = p.read_text()
+          old = '{/* Bagian 8.2 / 77 — Active Academic Context */}}'
+          new = '{/* Bagian 8.2 / 77 — Active Academic Context */}'
+          if old not in s:
+              raise SystemExit('Expected duplicated B-03 comment brace not found; refusing mutation')
+          p.write_text(s.replace(old, new, 1))
+          PY
+      - name: Remove one-time workflow and commit
+        run: |
+          git config user.name 'adizalmumtaz30'
+          git config user.email 'adizalmumtaz30@gmail.com'
+          rm -f .github/workflows/b03-comment-brace-fix-once.yml
+          git add 'app/(shell)/akademik/AkademikWorkspace.tsx' .github/workflows/b03-comment-brace-fix-once.yml
+          git commit -m 'fix: correct B-03 comment brace'
+          git push
