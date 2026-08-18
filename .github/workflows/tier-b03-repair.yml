@@ -1,4 +1,4 @@
-name: TIER-B03 Repair
+name: TIER-B03 Verify
 
 on:
   push:
@@ -8,46 +8,33 @@ on:
       - 'app/(shell)/akademik/AkademikWorkspace.tsx'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  repair:
-    if: github.actor != 'github-actions[bot]'
+  verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
-      - name: Repair B-03 JSX markers in source
+      - name: Verify B-03 source markers are valid
         run: |
           python - <<'PY'
           from pathlib import Path
           p = Path('app/(shell)/akademik/AkademikWorkspace.tsx')
           s = p.read_text(encoding='utf-8')
-          original = s
-          lines = s.splitlines(keepends=True)
-          lines = [
-              line for line in lines
-              if 'Bagian 8.1 / 78' not in line and 'Bagian 8.2 / 77' not in line
+          forbidden = [
+              '{/* Bagian 8.1 / 78 — School Profile */}}',
+              '{/* Bagian 8.2 / 77 — Active Academic Context */}}',
           ]
-          s = ''.join(lines)
-          if s == original:
-              raise SystemExit('B-03 source cleanup found no target marker')
-          p.write_text(s, encoding='utf-8')
+          for marker in forbidden:
+              if marker in s:
+                  raise SystemExit(f'Invalid JSX marker found: {marker}')
+          print('B-03 JSX marker verification PASS')
           PY
-      - name: Validate build
+      - name: Production build verification
         run: npm ci && npm run build
-      - name: Commit repaired source
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add 'app/(shell)/akademik/AkademikWorkspace.tsx'
-          git diff --cached --quiet && exit 0
-          git commit -m 'fix: remove malformed B-03 JSX markers from source'
-          git push
-
-# B-03 source cleanup trigger v5
