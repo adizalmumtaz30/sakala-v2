@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { buildTemplateWorkbook, type TemplateColumn } from "@/lib/import/template";
+import { buildControlledTemplateWorkbook, type ControlledTemplateColumn } from "@/lib/import/controlled-template";
 import { bufferToBodyInit } from "@/lib/utils/response";
 
-// Template resmi Guru (Bagian 19-22): kolom wajib hanya NamaLengkap, sisanya opsional.
-const columns: TemplateColumn[] = [
+// Guru: template khusus Guru. Hanya struktur/format yang wajib dikontrol.
+const columns: ControlledTemplateColumn[] = [
   { key: "NamaLengkap", required: true, format: "Teks, minimal 3 karakter", example: "Ahmad Fauzan" },
   { key: "KodeGuru", required: false, format: "Kosongkan agar dibuat otomatis oleh SAKALA", example: "" },
   { key: "NIP", required: false, format: "Teks", example: "" },
@@ -11,24 +11,14 @@ const columns: TemplateColumn[] = [
   { key: "Email", required: false, format: "Alamat email", example: "ahmad@sekolah.sch.id" },
   { key: "NomorTelepon", required: false, format: "Teks", example: "" },
   { key: "StatusAktif", required: false, format: '"aktif" atau "nonaktif" (default aktif)', example: "aktif" },
-  {
-    key: "JenisKelamin",
-    required: false,
-    format: '"L" (Laki-laki) atau "P" (Perempuan) — dipakai untuk varian ilustrasi avatar',
-    example: "",
-  },
+  { key: "JenisKelamin", required: false, format: '"L" (Laki-laki) atau "P" (Perempuan)', example: "" },
 ];
 
 export async function GET() {
-  const buffer = buildTemplateWorkbook(columns, [
-    ["Referensi StatusAktif"],
-    ["aktif"],
-    ["nonaktif"],
-    [],
-    ["Referensi JenisKelamin"],
-    ["L"],
-    ["P"],
-  ]);
+  const buffer = buildControlledTemplateWorkbook(columns, [
+    ["Referensi StatusAktif"], ["aktif"], ["nonaktif"], [],
+    ["Referensi JenisKelamin"], ["L"], ["P"],
+  ], { module: "guru", label: "Guru", schemaVersion: "2.3" });
 
   return new NextResponse(bufferToBodyInit(buffer), {
     headers: {
