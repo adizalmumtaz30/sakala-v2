@@ -9,10 +9,6 @@ type Result = { row: number; status: "valid" | "warning" | "error"; message: str
 type Master = { id: string; label: string; code?: string };
 type Target = { academic_context_id: string; kelas_id: string; mata_pelajaran_id: string; target_jp: number };
 
-auto: {
-  // label used only to keep the component definition below visually grouped
-}
-
 export default function TargetJPPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [results, setResults] = useState<Result[]>([]);
@@ -63,7 +59,7 @@ export default function TargetJPPage() {
   function onDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault(); setDragActive(false);
     const file = event.dataTransfer.files?.[0];
-    if (file) upload(file);
+    if (file) void upload(file);
   }
 
   async function commit() {
@@ -82,7 +78,8 @@ export default function TargetJPPage() {
     if (!manualContext || !manualClass || !manualSubject) return setMessage("Pilih Academic Context, Kelas, dan Mata Pelajaran terlebih dahulu.");
     setBusy(true); setMessage("");
     try {
-      const res = await fetch("/api/target-jp/import", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: [{ AcademicContext: contexts.find(c => c.id === manualContext)?.label ?? "", Kelas: classes.find(c => c.id === manualClass)?.label ?? "", KodeMapel: subjects.find(s => s.id === manualSubject)?.code ?? "", MataPelajaran: subjects.find(s => s.id === manualSubject)?.label ?? "", TargetJP: String(manualJp) }] }) });
+      const subject = subjects.find(s => s.id === manualSubject);
+      const res = await fetch("/api/target-jp/import", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: [{ AcademicContext: contexts.find(c => c.id === manualContext)?.label ?? "", Kelas: classes.find(c => c.id === manualClass)?.label ?? "", KodeMapel: subject?.code ?? "", MataPelajaran: subject?.label ?? "", TargetJP: String(manualJp) }] }) });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Gagal menyimpan Target JP");
       setMessage(`Target JP ${manualJp} JP berhasil disimpan.`);
@@ -109,7 +106,7 @@ export default function TargetJPPage() {
             <a href="/api/target-jp/import/template" className="rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-surface-muted">Download Template</a>
             <label className="cursor-pointer rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-700">
               {busy ? "Memproses…" : "Pilih File"}
-              <input type="file" accept=".xlsx,.xls,.csv" className="hidden" disabled={busy} onChange={e => e.target.files?.[0] && upload(e.target.files[0])} />
+              <input type="file" accept=".xlsx,.xls,.csv" className="hidden" disabled={busy} onChange={e => e.target.files?.[0] && void upload(e.target.files[0])} />
             </label>
           </div>
         </div>
@@ -144,7 +141,7 @@ export default function TargetJPPage() {
           {Array.from({ length: 11 }, (_, n) => n).map(n => (
             <button key={n} type="button" onClick={() => setManualJp(n)} className={`h-10 min-w-12 rounded-lg border px-3 text-sm font-semibold ${manualJp === n ? "border-brand-600 bg-brand-600 text-white" : "border-border bg-surface text-ink-700 hover:bg-surface-muted"}`}>{n}</button>
           ))}
-          <button type="button" disabled={busy} onClick={saveManual} className="ml-auto rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40">Simpan Target JP</button>
+          <button type="button" disabled={busy} onClick={() => void saveManual()} className="ml-auto rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40">Simpan Target JP</button>
         </div>
       </section>
 
@@ -154,7 +151,7 @@ export default function TargetJPPage() {
         <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-soft">
           <div className="flex items-center justify-between border-b border-border px-5 py-4">
             <div><h2 className="font-semibold text-ink-900">Validation Preview</h2><p className="text-xs text-ink-500">{valid} valid · {errors} error · {results.length} baris</p></div>
-            <button disabled={busy || errors > 0 || valid === 0} onClick={commit} className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">Confirm Import</button>
+            <button disabled={busy || errors > 0 || valid === 0} onClick={() => void commit()} className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">Confirm Import</button>
           </div>
           <div className="max-h-[520px] overflow-auto">
             <table className="w-full text-left text-sm"><thead className="sticky top-0 bg-surface-muted"><tr><th className="px-4 py-3">Baris</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Data</th><th className="px-4 py-3">Keterangan</th></tr></thead>
