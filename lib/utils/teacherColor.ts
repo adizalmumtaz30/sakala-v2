@@ -4,13 +4,13 @@
 // - stabil & konsisten di seluruh halaman (Data Guru maupun kotak Jadwal),
 //   karena di-hash dari kodeGuru (identitas permanen, bukan dari nama yang
 //   bisa diedit)
-// - dipakai sebagai tint/accent (bukan warna solid kuat) supaya readability
-//   tetap diutamakan di atas identitas warna (Bagian 10.6)
+// - dipakai sebagai tint/accent dengan tint yang cukup terasa untuk menjaga
+//   identitas visual tanpa mengorbankan readability.
 // - palette cycling menjaga warna yang berurutan dalam hash space tidak mirip
 //   (disusun berselang-seling hue, bukan berurutan gradasi)
 
 export interface TeacherColor {
-  /** Tint lembut untuk background kotak jadwal / chip. */
+  /** Tint premium yang terlihat jelas untuk background kotak jadwal / chip. */
   tint: string;
   /** Warna accent lebih pekat — dipakai untuk border-left strip / dot / teks aksen. */
   accent: string;
@@ -18,28 +18,28 @@ export interface TeacherColor {
   text: string;
 }
 
-// 18 warna premium, muted, saling berjauhan hue-nya secara berselang-seling
-// (bukan diurutkan berdampingan) supaya index yang berdekatan hasil hash
-// tetap mudah dibedakan.
+// 18 warna identitas premium. Tint sengaja dinaikkan satu tingkat dari versi
+// ultra-muted agar grid tetap hidup dan mudah dipindai, sementara accent tetap
+// cukup pekat untuk menjaga hierarchy dan aksesibilitas.
 const PALETTE: TeacherColor[] = [
-  { tint: "#EEF2FF", accent: "#4F46E5", text: "#3730A3" }, // indigo
-  { tint: "#FFF7ED", accent: "#EA580C", text: "#9A3412" }, // orange
-  { tint: "#ECFEFF", accent: "#0891B2", text: "#155E75" }, // cyan
-  { tint: "#FDF2F8", accent: "#DB2777", text: "#9D174D" }, // pink
-  { tint: "#F0FDF4", accent: "#16A34A", text: "#166534" }, // green
-  { tint: "#FEF2F2", accent: "#DC2626", text: "#991B1B" }, // red (non-conflict, cukup jauh dari rose alert)
-  { tint: "#FAF5FF", accent: "#9333EA", text: "#6B21A8" }, // purple
-  { tint: "#FEFCE8", accent: "#CA8A04", text: "#854D0E" }, // amber
-  { tint: "#F0F9FF", accent: "#0284C7", text: "#075985" }, // sky
-  { tint: "#FDF4FF", accent: "#C026D3", text: "#86198F" }, // fuchsia
-  { tint: "#F7FEE7", accent: "#65A30D", text: "#3F6212" }, // lime
-  { tint: "#FFF1F2", accent: "#E11D48", text: "#9F1239" }, // rose-deep
-  { tint: "#EFF6FF", accent: "#2563EB", text: "#1E40AF" }, // blue
-  { tint: "#FFFBEB", accent: "#D97706", text: "#92400E" }, // amber-deep
-  { tint: "#ECFDF5", accent: "#059669", text: "#065F46" }, // emerald
-  { tint: "#F5F3FF", accent: "#7C3AED", text: "#5B21B6" }, // violet
-  { tint: "#FDFCEA", accent: "#A16207", text: "#713F12" }, // gold
-  { tint: "#F0FDFA", accent: "#0D9488", text: "#115E59" }, // teal
+  { tint: "#E0E7FF", accent: "#4F46E5", text: "#3730A3" }, // indigo
+  { tint: "#FFEDD5", accent: "#EA580C", text: "#9A3412" }, // orange
+  { tint: "#CFFAFE", accent: "#0891B2", text: "#155E75" }, // cyan
+  { tint: "#FCE7F3", accent: "#DB2777", text: "#9D174D" }, // pink
+  { tint: "#DCFCE7", accent: "#16A34A", text: "#166534" }, // green
+  { tint: "#FEE2E2", accent: "#DC2626", text: "#991B1B" }, // red
+  { tint: "#F3E8FF", accent: "#9333EA", text: "#6B21A8" }, // purple
+  { tint: "#FEF3C7", accent: "#CA8A04", text: "#854D0E" }, // amber
+  { tint: "#E0F2FE", accent: "#0284C7", text: "#075985" }, // sky
+  { tint: "#FAE8FF", accent: "#C026D3", text: "#86198F" }, // fuchsia
+  { tint: "#ECFCCB", accent: "#65A30D", text: "#3F6212" }, // lime
+  { tint: "#FFE4E6", accent: "#E11D48", text: "#9F1239" }, // rose-deep
+  { tint: "#DBEAFE", accent: "#2563EB", text: "#1E40AF" }, // blue
+  { tint: "#FEF3C7", accent: "#D97706", text: "#92400E" }, // amber-deep
+  { tint: "#D1FAE5", accent: "#059669", text: "#065F46" }, // emerald
+  { tint: "#EDE9FE", accent: "#7C3AED", text: "#5B21B6" }, // violet
+  { tint: "#FEF3C7", accent: "#A16207", text: "#713F12" }, // gold
+  { tint: "#CCFBF1", accent: "#0D9488", text: "#115E59" }, // teal
 ];
 
 /** Hash string sederhana, deterministik lintas render/sesi. */
