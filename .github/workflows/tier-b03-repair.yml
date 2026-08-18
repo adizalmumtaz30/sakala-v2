@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/tier-b03-repair.yml'
+      - 'app/(shell)/akademik/AkademikWorkspace.tsx'
 
 permissions:
   contents: write
@@ -21,48 +22,32 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - name: Repair B-03 malformed JSX comments
+      - name: Repair B-03 JSX markers in source
         run: |
           python - <<'PY'
           from pathlib import Path
-          import re
           p = Path('app/(shell)/akademik/AkademikWorkspace.tsx')
           s = p.read_text(encoding='utf-8')
           original = s
-
-          # These markers were emitted without the final JSX expression brace.
-          s, n1 = re.subn(
-              r'\{\s*/\*\s*Bagian 8\.1\s*/\s*78\s*[—-]\s*School Profile\s*\*/\s*(?!\})',
-              '{/* Bagian 8.1 / 78 — School Profile */}',
-              s,
-              count=1,
-          )
-
-          # Remove the non-functional section marker entirely; it is not UI content.
-          s, n2 = re.subn(
-              r'\{\s*/\*\s*Bagian 8\.2\s*/\s*77\s*[—-]\s*Active Academic Context\s*\*/\s*\}',
-              '',
-              s,
-              count=1,
-          )
-
-          if n1 != 1:
-              raise SystemExit(f'B-03 malformed 8.1 comment not repaired: matches={n1}')
-          if n2 != 1:
-              raise SystemExit(f'B-03 8.2 marker not found: matches={n2}')
+          lines = s.splitlines(keepends=True)
+          lines = [
+              line for line in lines
+              if 'Bagian 8.1 / 78' not in line and 'Bagian 8.2 / 77' not in line
+          ]
+          s = ''.join(lines)
           if s == original:
-              raise SystemExit('B-03 repair produced no source change')
+              raise SystemExit('B-03 source cleanup found no target marker')
           p.write_text(s, encoding='utf-8')
           PY
       - name: Validate build
         run: npm ci && npm run build
-      - name: Commit repaired B-03
+      - name: Commit repaired source
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add 'app/(shell)/akademik/AkademikWorkspace.tsx'
           git diff --cached --quiet && exit 0
-          git commit -m 'fix: repair B-03 malformed JSX comment'
+          git commit -m 'fix: remove malformed B-03 JSX markers from source'
           git push
 
-# B-03 parser repair trigger v4
+# B-03 source cleanup trigger v5
