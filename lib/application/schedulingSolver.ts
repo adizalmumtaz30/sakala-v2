@@ -36,6 +36,13 @@ export interface SolverPlacement extends SolverSlot {
   requirementId: string;
 }
 
+export interface SolverFailureReason {
+  requirementId: string;
+  code: "NO_SLOT" | "TEACHER_BUSY" | "CLASS_BUSY" | "ROOM_BUSY" | "DAILY_CAP" | "ROOM_REQUIRED" | "SEARCH_LIMIT";
+  message: string;
+  affectedSlots: number;
+}
+
 export interface SolverOutcome {
   requirementId: string;
   placed: number;
@@ -47,6 +54,7 @@ export interface SolverResult {
   complete: boolean;
   placements: SolverPlacement[];
   outcomes: SolverOutcome[];
+  failures: SolverFailureReason[];
   searchNodes: number;
   reason: string | null;
 }
@@ -61,18 +69,27 @@ type Unit = {
   ordinal: number;
 };
 
+type State = {
+  teacherBusy: Set<string>;
+  classBusy: Set<string>;
+  roomBusy: Set<string>;
+  classDayCount: Map<string, number>;
+  subjectDayCount: Map<string, number>;
+  placedByUnit: Map<string, SolverSlot>;
+};
+
+const DAY_ORDER: Record<HariSekolah, number> = {
+  senin: 0,
+  selasa: 1,
+  rabu: 2,
+  kamis: 3,
+  jumat: 4,
+  sabtu: 5,
+  minggu: 6,
+};
+
 function key(id: string, day: HariSekolah, period: number): string {
   return `${id}:${day}:${period}`;
-}
-
-function occupancyKeys(item: SolverOccupancy): string[] {
-  const keys: string[] = [];
-  for (let p = item.periodStart; p <= item.periodEnd; p += 1) {
-    keys.push(key(item.teacherId, item.day, p));
-    keys.push(key(`class:${item.classId}`, item.day, p));
-    if (item.roomId) keys.push(key(`room:${item.roomId}`, item.day, p));
-  }
-  return keys;
 }
 
 function slotKey(slot: SolverSlot): string {
@@ -80,280 +97,275 @@ function slotKey(slot: SolverSlot): string {
 }
 
 function compareSlots(a: SolverSlot, b: SolverSlot): number {
-  const dayOrder: Record<HariSekolah, number> = {
-    senin: 0,
-    selasa: 1,
-    rabu: 2,
-    kamis: 3,
-    jumat: 4,
-    sabtu: 5,
-    minggu: 6,
-  };
-  return dayOrder[a.day] - dayOrder[b.day] || a.period - b.period;
+  return DAY_ORDER[a.day] - DAY_ORDER[b.day] || a.period - b.period;
 }
 
-/**
- * Full constraint solver for weekly scheduling.
- *
- * Hard constraints:
- * - only active teaching slots are supplied by the caller;
- * - teacher, class and (when enabled) room cannot overlap;
- * - class daily period cap is enforced;
- * - every requested JP is an individual scheduling unit;
- * - all requirements are solved together, with bounded backtracking and
- *   forward checking, so a late conflict can force an earlier choice to move.
- *
- * Soft objective, used only to order candidates:
- * - spread the same subject across days;
- * - balance each class across active days;
- * - avoid unnecessary consecutive periods for the same subject.
- */
+function cloneState(state: State): State {
+  return {
+    teacherBusy: new Set(state.teacherBusy),
+    classBusy: new Set(state.classBusy),
+    roomBusy: new Set(state.roomBusy),
+    classDayCount: new Map(state.classDayCount),
+    subjectDayCount: new Map(state.subjectDayCount),
+    placedByUnit: new Map(state.placedByUnit),
+  };
+}
+
+function reserve(state: State, unit: Unit, slot: SolverSlot, roomEnabled: boolean): void {
+  state.teacherBusy.add(key(unit.teacherId, slot.day, slot.period));
+  state.classBusy.add(key(`class:${unit.classId}`, slot.day, slot.period));
+  if (roomEnabled && unit.roomId) state.roomBusy.add(key(`room:${unit.roomId}`, slot.day, slot.period));
+  const classDay = `${unit.classId}:${slot.day}`;
+  state.classDayCount.set(classDay, (state.classDayCount.get(classDay) ?? 0) + 1);
+  const subjectDay = `${unit.classId}:${unit.subjectId}:${slot.day}`;
+  state.subjectDayCount.set(subjectDay, (state.subjectDayCount.get(subjectDay) ?? 0) + 1);
+  state.placedByUnit.set(unit.unitId, slot);
+}
+
+function isFree(state: State, unit: Unit, slot: SolverSlot, options: SolverOptions): boolean {
+  if (state.teacherBusy.has(key(unit.teacherId, slot.day, slot.period))) return false;
+  if (state.classBusy.has(key(`class:${unit.classId}`, slot.day, slot.period))) return false;
+  if (options.roomMode !== "tidak_dipakai" && unit.roomId && state.roomBusy.has(key(`room:${unit.roomId}`, slot.day, slot.period))) return false;
+  if ((state.classDayCount.get(`${unit.classId}:${slot.day}`) ?? 0) >= options.maxPeriodsPerClassPerDay) return false;
+  return true;
+}
+
+function explainEmptyDomain(unit: Unit, slots: SolverSlot[], state: State, options: SolverOptions): SolverFailureReason[] {
+  const failures: SolverFailureReason[] = [];
+  if (options.roomMode === "wajib" && !unit.roomId) {
+    failures.push({ requirementId: unit.requirementId, code: "ROOM_REQUIRED", message: `Requirement ${unit.requirementId} membutuhkan ruangan karena mode ruangan = wajib.`, affectedSlots: slots.length });
+    return failures;
+  }
+  let teacherBusy = 0;
+  let classBusy = 0;
+  let roomBusy = 0;
+  let dailyCap = 0;
+  for (const slot of slots) {
+    if (state.teacherBusy.has(key(unit.teacherId, slot.day, slot.period))) teacherBusy += 1;
+    else if (state.classBusy.has(key(`class:${unit.classId}`, slot.day, slot.period))) classBusy += 1;
+    else if (options.roomMode !== "tidak_dipakai" && unit.roomId && state.roomBusy.has(key(`room:${unit.roomId}`, slot.day, slot.period))) roomBusy += 1;
+    else if ((state.classDayCount.get(`${unit.classId}:${slot.day}`) ?? 0) >= options.maxPeriodsPerClassPerDay) dailyCap += 1;
+  }
+  const max = Math.max(1, slots.length);
+  if (teacherBusy === slots.length) failures.push({ requirementId: unit.requirementId, code: "TEACHER_BUSY", message: `Semua ${max} slot kandidat berbenturan dengan guru ${unit.teacherId}.`, affectedSlots: teacherBusy });
+  if (classBusy === slots.length) failures.push({ requirementId: unit.requirementId, code: "CLASS_BUSY", message: `Semua ${max} slot kandidat berbenturan dengan kelas ${unit.classId}.`, affectedSlots: classBusy });
+  if (roomBusy === slots.length) failures.push({ requirementId: unit.requirementId, code: "ROOM_BUSY", message: `Semua ${max} slot kandidat berbenturan dengan ruangan ${unit.roomId}.`, affectedSlots: roomBusy });
+  if (dailyCap > 0) failures.push({ requirementId: unit.requirementId, code: "DAILY_CAP", message: `${dailyCap} slot ditolak karena batas JP harian kelas ${unit.classId} tercapai.`, affectedSlots: dailyCap });
+  if (failures.length === 0) failures.push({ requirementId: unit.requirementId, code: "NO_SLOT", message: `Tidak ada slot yang memenuhi seluruh constraint untuk requirement ${unit.requirementId}.`, affectedSlots: slots.length });
+  return failures;
+}
+
+function buildInitialState(existing: SolverOccupancy[], roomEnabled: boolean): State {
+  const state: State = {
+    teacherBusy: new Set(),
+    classBusy: new Set(),
+    roomBusy: new Set(),
+    classDayCount: new Map(),
+    subjectDayCount: new Map(),
+    placedByUnit: new Map(),
+  };
+  for (const item of existing) {
+    for (let period = item.periodStart; period <= item.periodEnd; period += 1) {
+      state.teacherBusy.add(key(item.teacherId, item.day, period));
+      state.classBusy.add(key(`class:${item.classId}`, item.day, period));
+      if (roomEnabled && item.roomId) state.roomBusy.add(key(`room:${item.roomId}`, item.day, period));
+      const classDay = `${item.classId}:${item.day}`;
+      state.classDayCount.set(classDay, (state.classDayCount.get(classDay) ?? 0) + 1);
+    }
+  }
+  return state;
+}
+
 export function solveWeeklySchedule(requirements: SolverRequirement[], options: SolverOptions): SolverResult {
   const maxSearchNodes = options.maxSearchNodes ?? 200_000;
-  const activeDaySet = new Set(options.activeDays);
-  const slots = options.slots.filter((s) => activeDaySet.has(s.day)).sort(compareSlots);
+  const activeDays = new Set(options.activeDays);
+  const slots = options.slots.filter((slot) => activeDays.has(slot.day)).sort(compareSlots);
   const roomEnabled = options.roomMode !== "tidak_dipakai";
 
-  if (requirements.length === 0) {
-    return { complete: true, placements: [], outcomes: [], searchNodes: 0, reason: null };
-  }
-  if (slots.length === 0) {
-    return {
-      complete: false,
-      placements: [],
-      outcomes: requirements.map((r) => ({ requirementId: r.id, placed: 0, unplaced: r.jpTarget, placements: [] })),
-      searchNodes: 0,
-      reason: "Tidak ada slot pembelajaran aktif yang dapat digunakan.",
-    };
-  }
+  const emptyResult = (reason: string): SolverResult => ({
+    complete: false,
+    placements: [],
+    outcomes: requirements.map((r) => ({ requirementId: r.id, placed: 0, unplaced: Math.max(0, r.jpTarget), placements: [] })),
+    failures: requirements.map((r) => ({ requirementId: r.id, code: "NO_SLOT", message: reason, affectedSlots: slots.length })),
+    searchNodes: 0,
+    reason,
+  });
 
-  const units: Unit[] = [];
-  for (const req of requirements) {
-    if (!Number.isInteger(req.jpTarget) || req.jpTarget < 1) {
-      return {
-        complete: false,
-        placements: [],
-        outcomes: requirements.map((r) => ({ requirementId: r.id, placed: 0, unplaced: Math.max(0, r.jpTarget), placements: [] })),
-        searchNodes: 0,
-        reason: `Target JP tidak valid untuk requirement ${req.id}.`,
-      };
-    }
-    for (let ordinal = 0; ordinal < req.jpTarget; ordinal += 1) {
-      units.push({
-        unitId: `${req.id}#${ordinal + 1}`,
-        requirementId: req.id,
-        classId: req.classId,
-        subjectId: req.subjectId,
-        teacherId: req.teacherId,
-        roomId: req.roomId,
-        ordinal,
-      });
-    }
+  if (requirements.length === 0) return { complete: true, placements: [], outcomes: [], failures: [], searchNodes: 0, reason: null };
+  if (options.maxPeriodsPerClassPerDay < 1) return emptyResult("Batas maksimum JP per hari harus minimal 1.");
+  if (slots.length === 0) return emptyResult("Tidak ada slot pembelajaran aktif yang dapat digunakan.");
+
+  const normalized = [...requirements].sort((a, b) => a.id.localeCompare(b.id));
+  for (const req of normalized) {
+    if (!Number.isInteger(req.jpTarget) || req.jpTarget < 1) return emptyResult(`Target JP tidak valid untuk requirement ${req.id}.`);
+    if (options.roomMode === "wajib" && !req.roomId) return emptyResult(`Requirement ${req.id} tidak memiliki ruangan pada mode ruangan wajib.`);
   }
 
-  const teacherBusy = new Set<string>();
-  const classBusy = new Set<string>();
-  const roomBusy = new Set<string>();
-  const classDayCount = new Map<string, number>();
-  const subjectDayCount = new Map<string, number>();
-  const placedByUnit = new Map<string, SolverSlot>();
+  const units: Unit[] = normalized.flatMap((req) =>
+    Array.from({ length: req.jpTarget }, (_, index) => ({
+      unitId: `${req.id}#${index + 1}`,
+      requirementId: req.id,
+      classId: req.classId,
+      subjectId: req.subjectId,
+      teacherId: req.teacherId,
+      roomId: req.roomId,
+      ordinal: index,
+    }))
+  );
 
-  for (const existing of options.existing) {
-    for (const occupied of occupancyKeys(existing)) {
-      if (occupied.startsWith("class:")) classBusy.add(occupied);
-      else if (occupied.startsWith("room:")) roomBusy.add(occupied);
-      else teacherBusy.add(occupied);
-    }
-    for (let p = existing.periodStart; p <= existing.periodEnd; p += 1) {
-      const classDayKey = `${existing.classId}:${existing.day}`;
-      classDayCount.set(classDayKey, (classDayCount.get(classDayKey) ?? 0) + 1);
-    }
-  }
-
-  const requirementById = new Map(requirements.map((r) => [r.id, r]));
-  const domainCache = new Map<string, SolverSlot[]>();
-
-  const isFree = (unit: Unit, slot: SolverSlot): boolean => {
-    const teacherKey = key(unit.teacherId, slot.day, slot.period);
-    const classKey = key(`class:${unit.classId}`, slot.day, slot.period);
-    const roomKey = unit.roomId ? key(`room:${unit.roomId}`, slot.day, slot.period) : null;
-    if (teacherBusy.has(teacherKey) || classBusy.has(classKey)) return false;
-    if (roomEnabled && roomKey && roomBusy.has(roomKey)) return false;
-    const classDayKey = `${unit.classId}:${slot.day}`;
-    if ((classDayCount.get(classDayKey) ?? 0) >= options.maxPeriodsPerClassPerDay) return false;
-    return true;
+  const initial = buildInitialState(options.existing, roomEnabled);
+  const candidateDomain = (unit: Unit, state: State): SolverSlot[] => slots.filter((slot) => isFree(state, unit, slot, options));
+  const score = (unit: Unit, slot: SolverSlot, state: State): number => {
+    const subjectDay = state.subjectDayCount.get(`${unit.classId}:${unit.subjectId}:${slot.day}`) ?? 0;
+    const classDay = state.classDayCount.get(`${unit.classId}:${slot.day}`) ?? 0;
+    return subjectDay * 100 + classDay * 10;
   };
 
-  const scoreSlot = (unit: Unit, slot: SolverSlot): number => {
-    let score = 0;
-    const subjectDayKey = `${unit.classId}:${unit.subjectId}:${slot.day}`;
-    const classDayKey = `${unit.classId}:${slot.day}`;
-    const sameSubjectDay = subjectDayCount.get(subjectDayKey) ?? 0;
-    const classDayLoad = classDayCount.get(classDayKey) ?? 0;
-    score += sameSubjectDay * 100;
-    score += classDayLoad * 8;
-
-    const previous = placedByUnit.get(unit.unitId);
-    if (previous && previous.day === slot.day && Math.abs(previous.period - slot.period) === 1) score += 15;
-
-    const neighbors = slots.filter((candidate) => candidate.day === slot.day && Math.abs(candidate.period - slot.period) === 1);
-    if (neighbors.some((neighbor) => {
-      const match = [...placedByUnit.entries()].find(([, p]) => slotKey(p) === slotKey(neighbor));
-      if (!match) return false;
-      const matchedUnit = units.find((u) => u.unitId === match[0]);
-      return matchedUnit?.classId === unit.classId && matchedUnit.subjectId === unit.subjectId;
-    })) score += 20;
-
-    return score;
-  };
-
-  const buildDomain = (unit: Unit): SolverSlot[] => {
-    const cached = domainCache.get(unit.unitId);
-    if (cached) return cached;
-    const domain = slots.filter((slot) => isFree(unit, slot));
-    domain.sort((a, b) => scoreSlot(unit, a) - scoreSlot(unit, b) || compareSlots(a, b));
-    domainCache.set(unit.unitId, domain);
-    return domain;
-  };
-
-  const assign = (unit: Unit, slot: SolverSlot) => {
-    const teacherKey = key(unit.teacherId, slot.day, slot.period);
-    const classKey = key(`class:${unit.classId}`, slot.day, slot.period);
-    teacherBusy.add(teacherKey);
-    classBusy.add(classKey);
-    if (roomEnabled && unit.roomId) roomBusy.add(key(`room:${unit.roomId}`, slot.day, slot.period));
-    const classDayKey = `${unit.classId}:${slot.day}`;
-    classDayCount.set(classDayKey, (classDayCount.get(classDayKey) ?? 0) + 1);
-    const subjectDayKey = `${unit.classId}:${unit.subjectId}:${slot.day}`;
-    subjectDayCount.set(subjectDayKey, (subjectDayCount.get(subjectDayKey) ?? 0) + 1);
-    placedByUnit.set(unit.unitId, slot);
-  };
-
-  const unassign = (unit: Unit, slot: SolverSlot) => {
-    const teacherKey = key(unit.teacherId, slot.day, slot.period);
-    const classKey = key(`class:${unit.classId}`, slot.day, slot.period);
-    teacherBusy.delete(teacherKey);
-    classBusy.delete(classKey);
-    if (roomEnabled && unit.roomId) roomBusy.delete(key(`room:${unit.roomId}`, slot.day, slot.period));
-    const classDayKey = `${unit.classId}:${slot.day}`;
-    const classCount = (classDayCount.get(classDayKey) ?? 1) - 1;
-    if (classCount > 0) classDayCount.set(classDayKey, classCount); else classDayCount.delete(classDayKey);
-    const subjectDayKey = `${unit.classId}:${unit.subjectId}:${slot.day}`;
-    const subjectCount = (subjectDayCount.get(subjectDayKey) ?? 1) - 1;
-    if (subjectCount > 0) subjectDayCount.set(subjectDayKey, subjectCount); else subjectDayCount.delete(subjectDayKey);
-    placedByUnit.delete(unit.unitId);
-  };
-
-  const remainingUnits = new Set(units.map((u) => u.unitId));
   let searchNodes = 0;
+  let bestState: State | null = null;
+  let bestPlaced = 0;
+  let terminalFailures: SolverFailureReason[] = [];
 
-  const forwardCheck = (): boolean => {
-    for (const unit of units) {
-      if (!remainingUnits.has(unit.unitId)) continue;
-      if (buildDomain(unit).length === 0) return false;
+  const search = (state: State, remaining: Unit[]): boolean => {
+    if (remaining.length === 0) {
+      bestState = state;
+      return true;
     }
-    return true;
-  };
-
-  const chooseNextUnit = (): Unit | null => {
-    let best: Unit | null = null;
-    let bestSize = Number.POSITIVE_INFINITY;
-    for (const unit of units) {
-      if (!remainingUnits.has(unit.unitId)) continue;
-      const size = buildDomain(unit).length;
-      if (size < bestSize) {
-        best = unit;
-        bestSize = size;
-        if (size <= 1) break;
-      }
-    }
-    return best;
-  };
-
-  const search = (): boolean => {
-    if (remainingUnits.size === 0) return true;
     if (searchNodes >= maxSearchNodes) return false;
     searchNodes += 1;
 
-    const unit = chooseNextUnit();
-    if (!unit) return true;
-    const domain = buildDomain(unit);
-    if (domain.length === 0) return false;
+    const domains = remaining.map((unit) => ({ unit, domain: candidateDomain(unit, state) }));
+    const empty = domains.find((entry) => entry.domain.length === 0);
+    if (empty) {
+      terminalFailures = explainEmptyDomain(empty.unit, slots, state, options);
+      bestPlaced = Math.max(bestPlaced, units.length - remaining.length);
+      return false;
+    }
 
-    for (const slot of domain) {
+    domains.sort((a, b) => a.domain.length - b.domain.length || a.unit.unitId.localeCompare(b.unit.unitId));
+    const selected = domains[0];
+    const orderedSlots = [...selected.domain].sort((a, b) => score(selected.unit, a, state) - score(selected.unit, b, state) || compareSlots(a, b));
+
+    for (const slot of orderedSlots) {
       if (searchNodes >= maxSearchNodes) return false;
-      if (!isFree(unit, slot)) continue;
-      assign(unit, slot);
-      remainingUnits.delete(unit.unitId);
-      domainCache.clear();
-
-      if (forwardCheck() && search()) return true;
-
-      remainingUnits.add(unit.unitId);
-      unassign(unit, slot);
-      domainCache.clear();
+      const next = cloneState(state);
+      reserve(next, selected.unit, slot, roomEnabled);
+      const nextRemaining = remaining.filter((u) => u.unitId !== selected.unit.unitId);
+      const feasible = search(next, nextRemaining);
+      if (feasible) return true;
+      bestPlaced = Math.max(bestPlaced, units.length - nextRemaining.length);
     }
     return false;
   };
 
-  const complete = search();
+  const complete = search(initial, units);
+  const finalState = complete ? bestState : null;
   const placements: SolverPlacement[] = [];
-  for (const unit of units) {
-    const slot = placedByUnit.get(unit.unitId);
-    if (slot) placements.push({ requirementId: unit.requirementId, day: slot.day, period: slot.period });
+  if (finalState) {
+    for (const unit of units) {
+      const slot = finalState.placedByUnit.get(unit.unitId);
+      if (slot) placements.push({ requirementId: unit.requirementId, day: slot.day, period: slot.period });
+    }
   }
 
-  const outcomes: SolverOutcome[] = requirements.map((req) => {
-    const reqPlacements = placements.filter((p) => p.requirementId === req.id);
+  const outcomes = normalized.map((req) => {
+    const reqPlacements = placements.filter((placement) => placement.requirementId === req.id);
     return { requirementId: req.id, placed: reqPlacements.length, unplaced: req.jpTarget - reqPlacements.length, placements: reqPlacements };
   });
 
-  let reason: string | null = null;
-  if (!complete) {
-    const capacityFailures = outcomes.filter((o) => o.unplaced > 0).map((o) => `${o.requirementId}: kurang ${o.unplaced} JP`);
-    reason = searchNodes >= maxSearchNodes
-      ? `Batas pencarian solver tercapai (${maxSearchNodes.toLocaleString("id-ID")} node) sebelum solusi lengkap ditemukan.`
-      : `Tidak ada solusi yang memenuhi seluruh hard constraint. ${capacityFailures.join("; ")}`;
-  }
+  if (complete) return { complete: true, placements, outcomes, failures: [], searchNodes, reason: null };
 
-  return { complete, placements, outcomes, searchNodes, reason };
+  const failures = searchNodes >= maxSearchNodes
+    ? normalized.map((req) => ({ requirementId: req.id, code: "SEARCH_LIMIT" as const, message: `Batas pencarian ${maxSearchNodes.toLocaleString("id-ID")} node tercapai sebelum semua JP dapat ditempatkan.`, affectedSlots: slots.length }))
+    : terminalFailures.length > 0 ? terminalFailures : normalized.map((req) => ({ requirementId: req.id, code: "NO_SLOT" as const, message: `Tidak ditemukan kombinasi slot yang memenuhi seluruh constraint.`, affectedSlots: slots.length }));
+
+  return {
+    complete: false,
+    // Partial placements are diagnostic only. Candidate generation must reject them when incomplete.
+    placements: [],
+    outcomes: normalized.map((req) => ({ requirementId: req.id, placed: 0, unplaced: req.jpTarget, placements: [] })),
+    failures,
+    searchNodes,
+    reason: searchNodes >= maxSearchNodes
+      ? `Batas pencarian solver tercapai (${maxSearchNodes.toLocaleString("id-ID")} node). Jadwal tidak dianggap feasible.`
+      : `Tidak ada solusi yang memenuhi seluruh hard constraint. ${failures.map((f) => f.message).join(" ")}`,
+  };
 }
 
-/** Deterministic regression fixture used by the production diagnostic endpoint. */
-export function runSchedulingSolverSelfTest(): { passed: boolean; details: string[] } {
-  const slots: SolverSlot[] = [];
-  for (const day of ["senin", "selasa", "rabu"] as HariSekolah[]) {
-    for (let period = 1; period <= 4; period += 1) slots.push({ day, period });
-  }
-  const result = solveWeeklySchedule(
-    [
-      { id: "r1", classId: "7A", subjectId: "math", teacherId: "t1", roomId: "r1", jpTarget: 3 },
-      { id: "r2", classId: "7A", subjectId: "indo", teacherId: "t2", roomId: "r2", jpTarget: 3 },
-      { id: "r3", classId: "8A", subjectId: "math", teacherId: "t1", roomId: "r3", jpTarget: 3 },
-    ],
-    { activeDays: ["senin", "selasa", "rabu"], slots, existing: [], roomMode: "wajib", maxPeriodsPerClassPerDay: 4 }
-  );
+function assert(condition: boolean, label: string): void {
+  if (!condition) throw new Error(`Scheduling solver regression failed: ${label}`);
+}
 
-  const conflictFree = result.complete && result.placements.length === 9;
-  const teacherSlots = new Set(result.placements.map((p) => `${p.day}:${p.period}`));
-  const noTeacherOverlap = teacherSlots.size === result.placements.length;
+function baseSlots(days: HariSekolah[] = ["senin", "selasa", "rabu"]): SolverSlot[] {
+  return days.flatMap((day) => [1, 2, 3, 4].map((period) => ({ day, period })));
+}
 
-  const impossible = solveWeeklySchedule(
-    [{ id: "impossible", classId: "7A", subjectId: "math", teacherId: "t1", roomId: null, jpTarget: 5 }],
-    { activeDays: ["senin"], slots: [
-      { day: "senin", period: 1 },
-      { day: "senin", period: 2 },
-    ], existing: [], roomMode: "tidak_dipakai", maxPeriodsPerClassPerDay: 2 }
-  );
-
-  const impossibleDetected = !impossible.complete && impossible.outcomes[0]?.unplaced === 5;
-  return {
-    passed: conflictFree && noTeacherOverlap && impossibleDetected,
-    details: [
-      `complete-fixture=${conflictFree ? "PASS" : "FAIL"}`,
-      `teacher-overlap-check=${noTeacherOverlap ? "PASS" : "FAIL"}`,
-      `infeasible-fixture=${impossibleDetected ? "PASS" : "FAIL"}`,
-      `search-nodes=${result.searchNodes}`,
-    ],
+export function runSchedulingSolverRegression(): { passed: boolean; details: string[] } {
+  const details: string[] = [];
+  const run = (label: string, fn: () => void) => {
+    try { fn(); details.push(`${label}=PASS`); } catch (error) { details.push(`${label}=FAIL:${error instanceof Error ? error.message : String(error)}`); }
   };
+
+  run("feasible-exact-jp", () => {
+    const result = solveWeeklySchedule([
+      { id: "a", classId: "7A", subjectId: "math", teacherId: "t1", roomId: "r1", jpTarget: 3 },
+      { id: "b", classId: "8A", subjectId: "indo", teacherId: "t2", roomId: "r2", jpTarget: 2 },
+    ], { activeDays: ["senin", "selasa", "rabu"], slots: baseSlots(), existing: [], roomMode: "wajib", maxPeriodsPerClassPerDay: 4 });
+    assert(result.complete && result.outcomes.every((o) => o.unplaced === 0), "exact JP");
+  });
+
+  run("teacher-clash", () => {
+    const result = solveWeeklySchedule([
+      { id: "a", classId: "7A", subjectId: "math", teacherId: "t1", roomId: "r1", jpTarget: 2 },
+      { id: "b", classId: "8A", subjectId: "indo", teacherId: "t1", roomId: "r2", jpTarget: 2 },
+    ], { activeDays: ["senin"], slots: [{ day: "senin", period: 1 }, { day: "senin", period: 2 }, { day: "senin", period: 3 }, { day: "senin", period: 4 }], existing: [], roomMode: "wajib", maxPeriodsPerClassPerDay: 4 });
+    assert(result.complete, "teacher clash solved without overlap");
+    const used = result.placements.map((p) => { const r = p.requirementId === "a" ? "t1" : "t1"; return `${r}:${slotKey(p)}`; });
+    assert(new Set(used).size === used.length, "teacher uniqueness");
+  });
+
+  run("class-clash", () => {
+    const result = solveWeeklySchedule([
+      { id: "a", classId: "7A", subjectId: "math", teacherId: "t1", roomId: "r1", jpTarget: 2 },
+      { id: "b", classId: "7A", subjectId: "indo", teacherId: "t2", roomId: "r2", jpTarget: 2 },
+    ], { activeDays: ["senin"], slots: baseSlots(["senin"]), existing: [], roomMode: "wajib", maxPeriodsPerClassPerDay: 4 });
+    assert(result.complete, "class clash solved");
+    const used = result.placements.map((p) => `7A:${slotKey(p)}`);
+    assert(new Set(used).size === used.length, "class uniqueness");
+  });
+
+  run("room-clash", () => {
+    const result = solveWeeklySchedule([
+      { id: "a", classId: "7A", subjectId: "math", teacherId: "t1", roomId: "r1", jpTarget: 2 },
+      { id: "b", classId: "8A", subjectId: "indo", teacherId: "t2", roomId: "r1", jpTarget: 2 },
+    ], { activeDays: ["senin"], slots: baseSlots(["senin"]), existing: [], roomMode: "wajib", maxPeriodsPerClassPerDay: 4 });
+    assert(result.complete, "room clash solved");
+    const used = result.placements.map((p) => `r1:${slotKey(p)}`);
+    assert(new Set(used).size === used.length, "room uniqueness");
+  });
+
+  run("daily-cap", () => {
+    const result = solveWeeklySchedule([{ id: "a", classId: "7A", subjectId: "math", teacherId: "t1", roomId: "r1", jpTarget: 3 }], { activeDays: ["senin"], slots: baseSlots(["senin"]), existing: [], roomMode: "wajib", maxPeriodsPerClassPerDay: 2 });
+    assert(!result.complete && result.failures.some((f) => f.code === "DAILY_CAP" || f.code === "NO_SLOT"), "daily cap detected");
+  });
+
+  run("insufficient-slots", () => {
+    const result = solveWeeklySchedule([{ id: "a", classId: "7A", subjectId: "math", teacherId: "t1", roomId: null, jpTarget: 3 }], { activeDays: ["senin"], slots: [{ day: "senin", period: 1 }, { day: "senin", period: 2 }], existing: [], roomMode: "tidak_dipakai", maxPeriodsPerClassPerDay: 4 });
+    assert(!result.complete && result.outcomes[0].unplaced === 3, "insufficient slots detected");
+  });
+
+  run("existing-occupancy", () => {
+    const result = solveWeeklySchedule([{ id: "a", classId: "7A", subjectId: "math", teacherId: "t1", roomId: "r1", jpTarget: 1 }], { activeDays: ["senin"], slots: baseSlots(["senin"]), existing: [{ teacherId: "t1", classId: "8A", roomId: "r1", day: "senin", periodStart: 1, periodEnd: 1 }], roomMode: "wajib", maxPeriodsPerClassPerDay: 4 });
+    assert(result.complete && result.placements[0].period !== 1, "existing occupancy respected");
+  });
+
+  run("backtracking", () => {
+    const result = solveWeeklySchedule([
+      { id: "a", classId: "7A", subjectId: "math", teacherId: "t1", roomId: "r1", jpTarget: 2 },
+      { id: "b", classId: "8A", subjectId: "indo", teacherId: "t1", roomId: "r2", jpTarget: 2 },
+    ], { activeDays: ["senin", "selasa"], slots: [{ day: "senin", period: 1 }, { day: "senin", period: 2 }, { day: "selasa", period: 1 }, { day: "selasa", period: 2 }], existing: [], roomMode: "wajib", maxPeriodsPerClassPerDay: 2 });
+    assert(result.complete && result.placements.length === 4, "backtracking finds complete solution");
+  });
+
+  return { passed: details.length > 0 && details.every((detail) => detail.includes("=PASS")), details };
 }
