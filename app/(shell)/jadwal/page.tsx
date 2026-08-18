@@ -9,6 +9,7 @@ import { listMataPelajaran } from "@/lib/application/mata-pelajaran.usecases";
 import { listRuangan } from "@/lib/application/ruangan.usecases";
 import { listScheduleAssignments } from "@/lib/application/scheduleAssignment.usecases";
 import JadwalWorkspace from "./JadwalWorkspace";
+import JadwalDragDrop from "@/components/jadwal/JadwalDragDrop";
 import { ErrorState } from "@/components/ui/primitives";
 
 export default async function JadwalPage() {
@@ -49,21 +50,34 @@ export default async function JadwalPage() {
       slotTemplatesByModel[m.id] = slotTemplateLists[i];
     });
 
+    const classNames = Object.fromEntries(kelasList.map((k) => [k.id, `${k.tingkat} ${k.namaRombel}`]));
+    const subjectNames = Object.fromEntries(mapelList.map((m) => [m.id, m.nama]));
+    const teacherNames = Object.fromEntries(guruList.map((g) => [g.id, g.namaGuru]));
+
     return (
-      <JadwalWorkspace
-        activeContext={activeContext}
-        scheduleModels={scheduleModels}
-        jamPelajaranList={jamPelajaranList}
-        slotTemplatesByModel={slotTemplatesByModel}
-        guruList={guruList}
-        kelasList={kelasList}
-        mapelList={mapelList}
-        ruanganList={ruanganList}
-        assignments={allAssignments}
-      />
+      <div className="space-y-4">
+        <JadwalDragDrop
+          scheduleModels={scheduleModels}
+          jamPelajaranList={jamPelajaranList}
+          assignments={allAssignments}
+          classNames={classNames}
+          subjectNames={subjectNames}
+          teacherNames={teacherNames}
+        />
+        <JadwalWorkspace
+          activeContext={activeContext}
+          scheduleModels={scheduleModels}
+          jamPelajaranList={jamPelajaranList}
+          slotTemplatesByModel={slotTemplatesByModel}
+          guruList={guruList}
+          kelasList={kelasList}
+          mapelList={mapelList}
+          ruanganList={ruanganList}
+          assignments={allAssignments}
+        />
+      </div>
     );
   } catch {
-    // Bagian 15.3 — server-side fetch gagal, tetap render UI dengan error state.
     return (
       <div className="mx-auto max-w-3xl pt-10">
         <ErrorState message="Gagal memuat data Jadwal dari Supabase. Cek koneksi dan environment variable kamu." />
