@@ -83,7 +83,26 @@ main > .flex.flex-col.gap-6 > .flex.gap-1.rounded-xl.border.border-border.bg-sur
   white-space: nowrap;
 }
 
-main > .flex.flex-col.gap-6 > .flex.gap-1.rounded-xl.border.border-border.bg-surface-muted > button[aria-selected="true"] {
+/* B-02: establish a clear primary-to-secondary navigation rhythm. */
+main > .flex.flex-col.gap-6 > .flex.gap-1.rounded-xl.border.border-border.bg-surface-muted > button:first-child {
+  flex: 1.2 1 0%;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+main > .flex.flex-col.gap-6 > .flex.gap-1.rounded-xl.border.border-border.bg-surface-muted > button:not(:first-child) {
+  flex: 1 1 0%;
+  opacity: .86;
+}
+
+main > .flex.flex-col.gap-6 > .flex.gap-1.rounded-xl.border.border-border.bg-surface-muted > button:not(:first-child):hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--color-surface) 68%, transparent);
+}
+
+main > .flex.flex-col.gap-6 > .flex.gap-1.rounded-xl.border.border-border.bg-surface-muted > button[class~="bg-surface"] {
+  opacity: 1;
+  font-weight: 600;
   box-shadow: 0 1px 3px rgba(15, 23, 42, .08), 0 0 0 1px rgba(15, 23, 42, .04);
 }
 
@@ -97,6 +116,10 @@ main > .flex.flex-col.gap-6 > .flex.gap-1.rounded-xl.border.border-border.bg-sur
   main > .flex.flex-col.gap-6 > .flex.gap-1.rounded-xl.border.border-border.bg-surface-muted > button {
     flex: 0 0 auto;
     min-width: 150px;
+  }
+
+  main > .flex.flex-col.gap-6 > .flex.gap-1.rounded-xl.border.border-border.bg-surface-muted > button:first-child {
+    flex-basis: 160px;
   }
 }
 
