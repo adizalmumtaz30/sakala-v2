@@ -1,0 +1,41 @@
+name: B-06 Jam Pelajaran
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/changelog/TIER-B-06.md
+
+permissions:
+  contents: write
+
+jobs:
+  implement:
+    if: ${{ !contains(github.event.head_commit.message, 'feat: complete B-06 Jam Pelajaran interaction') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Upgrade Jam Ke picker
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          p = Path('app/(shell)/akademik/JamPelajaranManager.tsx')
+          s = p.read_text()
+          old = '''<div className="flex flex-col gap-1.5">\n              <label className="text-[12.5px] font-medium text-ink-700">Jam Ke</label>\n              <input aria-label="Jam Ke" type="number" min={1} max={MAX_JAM_KE} step={1} value={jamKe} onChange={(e) => { const next = Number(e.target.value); setJamKe(next); setError(Number.isInteger(next) && isDuplicate(hari, next) ? `Jam Ke ${next} pada ${formatHari(hari)} sudah digunakan.` : null); }} className={`h-11 w-full rounded-xl border bg-surface px-3 text-[13.5px] outline-none ${isDuplicate(hari, jamKe) ? "border-rose" : "border-border"}`} />\n              {isDuplicate(hari, jamKe) && <p className="text-[11.5px] text-rose">Jam Ke ini sudah ada untuk {formatHari(hari)}.</p>}\n              <datalist id="jam-ke-options">{Array.from({ length: MAX_JAM_KE }, (_, i) => <option key={i + 1} value={i + 1} label={`Jam Ke ${i + 1}`} />)}</datalist>\n            </div>'''
+          new = '''<div className="flex flex-col gap-1.5">\n              <label className="text-[12.5px] font-medium text-ink-700">Jam Ke</label>\n              <div className="grid grid-cols-[1fr_auto] gap-2">\n                <input aria-label="Jam Ke" type="number" min={1} max={MAX_JAM_KE} step={1} value={jamKe} onChange={(e) => { const next = Number(e.target.value); setJamKe(next); setError(Number.isInteger(next) && isDuplicate(hari, next) ? `Jam Ke ${next} pada ${formatHari(hari)} sudah digunakan.` : null); }} className={`h-11 w-full rounded-xl border bg-surface px-3 text-[13.5px] outline-none ${isDuplicate(hari, jamKe) ? "border-rose" : "border-border"}`} />\n                <select aria-label="Pilih Jam Ke" value={jamKe} onChange={(e) => { const next = Number(e.target.value); setJamKe(next); setError(isDuplicate(hari, next) ? `Jam Ke ${next} pada ${formatHari(hari)} sudah digunakan.` : null); }} className="h-11 w-24 rounded-xl border border-border bg-surface px-2 text-[13px] font-medium text-ink-700 outline-none">\n                  {Array.from({ length: MAX_JAM_KE }, (_, i) => i + 1).map((n) => <option key={n} value={n}>Jam {n}</option>)}\n                </select>\n              </div>\n              <p className="text-[11px] text-ink-400">Ketik angka atau pilih dari daftar. Jam Ke yang sudah terisi akan ditolak.</p>\n              {isDuplicate(hari, jamKe) && <p className="text-[11.5px] text-rose">Jam Ke ini sudah ada untuk {formatHari(hari)}.</p>}\n            </div>'''
+          if old not in s:
+              raise SystemExit('expected Jam Ke block not found')
+          p.write_text(s.replace(old, new, 1))
+          PY
+
+      - name: Commit B-06 implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "app/(shell)/akademik/JamPelajaranManager.tsx"
+          git diff --cached --quiet || git commit -m "feat: complete B-06 Jam Pelajaran interaction"
+          git push
