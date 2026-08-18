@@ -128,17 +128,24 @@
   letter-spacing: -.01em;
 }
 
-/* Keep cards clean: hierarchy does the work. */
+/* Teacher name: strong secondary hierarchy with reliable contrast on solid colors. */
 .workspace :global(table.w-full.border-collapse.text-\[12\.5px\] tbody td button:not(.border-dashed) > span:nth-child(2)) {
+  color: rgba(255, 255, 255, .96) !important;
   font-size: 10.5px;
   line-height: 1.35;
-  font-weight: 550;
+  font-weight: 600 !important;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, .12);
 }
 
+/* Class / room metadata: deliberately brighter than before so it remains readable
+   on every solid teacher color without competing with the subject name. */
 .workspace :global(table.w-full.border-collapse.text-\[12\.5px\] tbody td button:not(.border-dashed) > span:nth-child(3)) {
+  color: rgba(255, 255, 255, .94) !important;
   font-size: 9.5px;
   line-height: 1.3;
-  font-weight: 500;
+  font-weight: 650 !important;
+  letter-spacing: .005em;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, .14);
 }
 
 .workspace :global(table.w-full.border-collapse.text-\[12\.5px\] tbody td button.border-dashed) {
