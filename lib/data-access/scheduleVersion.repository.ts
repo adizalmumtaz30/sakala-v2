@@ -43,6 +43,20 @@ export const scheduleVersionRepository = {
     return (data as Row[]).map(rowToEntity);
   },
 
+  async findActiveByContext(supabase: SupabaseClient, academicContextId: string): Promise<ScheduleVersion | null> {
+    const { data, error } = await supabase
+      .from("schedule_version")
+      .select(SELECT_COLUMNS)
+      .eq("academic_context_id", academicContextId)
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data ? rowToEntity(data as Row) : null;
+  },
+
   async findById(supabase: SupabaseClient, id: string): Promise<ScheduleVersion | null> {
     const { data, error } = await supabase.from("schedule_version").select(SELECT_COLUMNS).eq("id", id).maybeSingle();
     if (error) throw error;
