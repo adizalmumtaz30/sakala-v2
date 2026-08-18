@@ -29,23 +29,27 @@ jobs:
           p = Path('app/(shell)/akademik/AkademikWorkspace.tsx')
           s = p.read_text(encoding='utf-8')
           original = s
+
+          # These markers were emitted without the final JSX expression brace.
           s, n1 = re.subn(
-              r'(\{\s*/\*\s*Bagian 8\.1\s*/\s*78\s*[—-]\s*School Profile)\s*$',
-              r'\1 */}',
+              r'\{\s*/\*\s*Bagian 8\.1\s*/\s*78\s*[—-]\s*School Profile\s*\*/\s*(?!\})',
+              '{/* Bagian 8.1 / 78 — School Profile */}',
               s,
               count=1,
-              flags=re.MULTILINE,
           )
+
+          # Remove the non-functional section marker entirely; it is not UI content.
           s, n2 = re.subn(
-              r'\{\s*/\*\s*Bagian 8\.2\s*/\s*77\s*[—-]\s*Active Academic Context\s*\*/\s*\}\s*',
+              r'\{\s*/\*\s*Bagian 8\.2\s*/\s*77\s*[—-]\s*Active Academic Context\s*\*/\s*\}',
               '',
               s,
               count=1,
           )
+
           if n1 != 1:
               raise SystemExit(f'B-03 malformed 8.1 comment not repaired: matches={n1}')
           if n2 != 1:
-              raise SystemExit(f'B-03 8.2 parser comment not found: matches={n2}')
+              raise SystemExit(f'B-03 8.2 marker not found: matches={n2}')
           if s == original:
               raise SystemExit('B-03 repair produced no source change')
           p.write_text(s, encoding='utf-8')
@@ -61,4 +65,4 @@ jobs:
           git commit -m 'fix: repair B-03 malformed JSX comment'
           git push
 
-# B-03 parser repair trigger v3
+# B-03 parser repair trigger v4
