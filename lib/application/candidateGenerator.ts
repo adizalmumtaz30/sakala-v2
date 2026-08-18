@@ -1,23 +1,3 @@
-// Application layer — orchestration Jadwal Cerdas (Bagian 24/87). Menjalankan
-// tahap Load Context → Select Scope → Load Constraints → Normalize →
-// Generate Candidate → Validate → Conflict Detection dari pipeline; tahap
-// Candidate Review/Commit ditangani scheduleAssignment.usecases.ts yang
-// sudah ada (commitAssignments), dipanggil dari Presentation (step 14 UI).
-//
-// generateCandidatePreview() TIDAK menulis ke database — murni in-memory
-// (Bagian 68: "Candidate tidak boleh mengubah committed schedule sebelum
-// commit" — di sini malah belum menyentuh DB sama sekali sampai user
-// eksplisit menekan "Simpan sebagai Candidate", lihat saveGeneratedCandidates).
-//
-// ALGORITMA (keputusan Claude, bukan dispesifikasikan detail-nya oleh
-// dokumen): greedy round-robin per hari aktif Schedule Model, satu JP =
-// satu unit periode (periodStart = periodEnd), menghormati occupancy
-// guru/kelas/ruangan dari assignment aktif yang sudah ada + assignment yang
-// baru saja ditempatkan dalam batch yang sama. BUKAN true optimal constraint
-// solver (tidak backtrack lintas requirement, tidak reshuffle assignment
-// yang sudah ditempatkan requirement sebelumnya) — cukup untuk baseline,
-// di-flag untuk direview/ditingkatkan nanti kalau perlu.
-
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { HariSekolah } from "@/lib/domain/jamPelajaran";
 import { jamPelajaranRepository } from "@/lib/data-access/jamPelajaran.repository";
@@ -31,6 +11,7 @@ import type { GenerationRequirement, RequirementGenerationOutcome } from "@/lib/
 import { validateGenerationRequirement } from "@/lib/domain/candidateGeneration";
 import { validateAssignmentCandidate } from "@/lib/application/conflictEngine";
 import type { ScheduleConflict } from "@/lib/domain/conflict";
+import { solveWeeklySchedule } from "@/lib/application/schedulingSolver";
 
 export interface GeneratedCandidate {
   requirementId: string;
@@ -40,39 +21,30 @@ export interface GeneratedCandidate {
 export interface GenerationResult {
   candidates: GeneratedCandidate[];
   outcomes: RequirementGenerationOutcome[];
+  solver: { complete: boolean; searchNodes: number; reason: string | null };
 }
 
 function buildAvailableSlots(
   hariAktif: HariSekolah[],
   jamPelajaranList: { hari: HariSekolah; nomorUrut: number; jenis: string; status: string }[],
   slotTemplates: { hari: HariSekolah; nomorUrut: number; jenisSlot: string }[]
-): Map<HariSekolah, number[]> {
+): { day: HariSekolah; period: number }[] {
   const fixedSet = new Set(
-    slotTemplates.filter((s) => isFixedSlot(s.jenisSlot as Parameters<typeof isFixedSlot>[0])).map((s) => `${s.hari}:${s.nomorUrut}`)
+    slotTemplates
+      .filter((s) => isFixedSlot(s.jenisSlot as Parameters<typeof isFixedSlot>[0]))
+      .map((s) => `${s.hari}:${s.nomorUrut}`)
   );
-  const slotsByDay = new Map<HariSekolah, number[]>();
-  for (const day of hariAktif) {
-    const periods = jamPelajaranList
+  return hariAktif.flatMap((day) =>
+    jamPelajaranList
       .filter((jp) => jp.hari === day && jp.jenis === "pembelajaran" && jp.status === "aktif")
       .filter((jp) => !fixedSet.has(`${day}:${jp.nomorUrut}`))
-      .map((jp) => jp.nomorUrut)
-      .sort((a, b) => a - b);
-    slotsByDay.set(day, periods);
-  }
-  return slotsByDay;
-}
-
-function rotate<T>(arr: T[], n: number): T[] {
-  if (arr.length === 0) return arr;
-  const k = n % arr.length;
-  return [...arr.slice(k), ...arr.slice(0, k)];
+      .map((jp) => ({ day, period: jp.nomorUrut }))
+  );
 }
 
 /**
- * Preview murni — TIDAK menulis apa pun ke database. Dipanggil dari Server
- * Action generateCandidatesAction untuk ditampilkan di UI sebelum user
- * menekan "Simpan sebagai Candidate" (Bagian 24.2: Generate Candidate →
- * Validate → Conflict Detection → Candidate Review).
+ * Full weekly CSP preview. Database is read-only here. All requirements are
+ * solved together so a later conflict can backtrack an earlier placement.
  */
 export async function generateCandidatePreview(
   supabase: SupabaseClient,
@@ -81,7 +53,7 @@ export async function generateCandidatePreview(
   requirements: GenerationRequirement[]
 ): Promise<GenerationResult> {
   if (requirements.length === 0) {
-    return { candidates: [], outcomes: [] };
+    return { candidates: [], outcomes: [], solver: { complete: true, searchNodes: 0, reason: null } };
   }
   for (const req of requirements) validateGenerationRequirement(req);
 
@@ -92,83 +64,71 @@ export async function generateCandidatePreview(
     scheduleAssignmentRepository.findByContext(supabase, academicContextId),
   ]);
 
-  if (!scheduleModel) {
-    throw new Error("Schedule Model tidak ditemukan.");
-  }
+  if (!scheduleModel) throw new Error("Schedule Model tidak ditemukan.");
   if (scheduleModel.academicContextId !== academicContextId) {
     throw new Error("Schedule Model yang dipilih berasal dari konteks akademik yang berbeda.");
   }
 
-  const slotsByDay = buildAvailableSlots(scheduleModel.hariAktif, jamPelajaranList, slotTemplates);
-
-  // Occupancy tracker — mulai dari assignment aktif (draft/candidate/committed)
-  // yang sudah ada, lalu ditambah tiap kali generator menempatkan assignment
-  // baru dalam batch ini supaya tidak saling bentrok satu sama lain.
+  const slots = buildAvailableSlots(scheduleModel.hariAktif, jamPelajaranList, slotTemplates);
   const activeExisting = existingAssignments.filter((a) => a.status !== "archived" && a.status !== "cancelled");
-  const teacherOccupied = new Set<string>();
-  const classOccupied = new Set<string>();
-  const roomOccupied = new Set<string>();
-  for (const a of activeExisting) {
-    for (let p = a.periodStart; p <= a.periodEnd; p += 1) {
-      teacherOccupied.add(`${a.teacherId}:${a.day}:${p}`);
-      classOccupied.add(`${a.classId}:${a.day}:${p}`);
-      if (a.roomId) roomOccupied.add(`${a.roomId}:${a.day}:${p}`);
+
+  const solverResult = solveWeeklySchedule(
+    requirements.map((r) => ({
+      id: r.id,
+      classId: r.classId,
+      subjectId: r.subjectId,
+      teacherId: r.teacherId,
+      roomId: r.roomId,
+      jpTarget: r.jpTarget,
+    })),
+    {
+      activeDays: scheduleModel.hariAktif,
+      slots,
+      existing: activeExisting.map((a) => ({
+        teacherId: a.teacherId,
+        classId: a.classId,
+        roomId: a.roomId,
+        day: a.day,
+        periodStart: a.periodStart,
+        periodEnd: a.periodEnd,
+      })),
+      roomMode: scheduleModel.modeRuangan,
+      maxPeriodsPerClassPerDay: scheduleModel.maksJamPerHari,
+      maxSearchNodes: 250_000,
     }
+  );
+
+  const candidates: GeneratedCandidate[] = [];
+  for (const placement of solverResult.placements) {
+    const req = requirements.find((r) => r.id === placement.requirementId);
+    if (!req) continue;
+    const draft: ScheduleAssignmentDraft = {
+      academicContextId,
+      scheduleModelId,
+      classId: req.classId,
+      subjectId: req.subjectId,
+      teacherId: req.teacherId,
+      roomId: req.roomId,
+      day: placement.day,
+      periodStart: placement.period,
+      periodEnd: placement.period,
+      activityType: req.activityType,
+      status: "candidate",
+      source: "generated",
+      versionId: null,
+    };
+    validateScheduleAssignmentDraft(draft);
+    candidates.push({ requirementId: req.id, draft });
   }
 
-  const days = scheduleModel.hariAktif;
-  const candidates: GeneratedCandidate[] = [];
-  const outcomes: RequirementGenerationOutcome[] = [];
-
-  requirements.forEach((req, reqIndex) => {
-    const placements: { day: HariSekolah; period: number }[] = [];
-    // Rotasi hari mulai per requirement supaya beban tidak selalu numpuk di
-    // hari pertama saat banyak requirement diproses berurutan (heuristik
-    // sederhana, bukan true load-balancing solver).
-    const dayOrder = rotate(days, reqIndex % Math.max(days.length, 1));
-
-    let remaining = req.jpTarget;
-    for (const day of dayOrder) {
-      if (remaining <= 0) break;
-      const periods = slotsByDay.get(day) ?? [];
-      for (const period of periods) {
-        if (remaining <= 0) break;
-        const tKey = `${req.teacherId}:${day}:${period}`;
-        const cKey = `${req.classId}:${day}:${period}`;
-        const rKey = req.roomId ? `${req.roomId}:${day}:${period}` : null;
-        if (teacherOccupied.has(tKey)) continue;
-        if (classOccupied.has(cKey)) continue;
-        if (rKey && roomOccupied.has(rKey)) continue;
-
-        teacherOccupied.add(tKey);
-        classOccupied.add(cKey);
-        if (rKey) roomOccupied.add(rKey);
-        placements.push({ day, period });
-        remaining -= 1;
-      }
-    }
-
-    for (const placement of placements) {
-      const draft: ScheduleAssignmentDraft = {
-        academicContextId,
-        scheduleModelId,
-        classId: req.classId,
-        subjectId: req.subjectId,
-        teacherId: req.teacherId,
-        roomId: req.roomId,
-        day: placement.day,
-        periodStart: placement.period,
-        periodEnd: placement.period,
-        activityType: req.activityType,
-        status: "candidate",
-        source: "generated",
-        versionId: null,
-      };
-      validateScheduleAssignmentDraft(draft);
-      candidates.push({ requirementId: req.id, draft });
-    }
-
-    outcomes.push({
+  const outcomes: RequirementGenerationOutcome[] = requirements.map((req) => {
+    const result = solverResult.outcomes.find((o) => o.requirementId === req.id);
+    const placements = (result?.placements ?? []).map((p) => ({
+      day: p.day,
+      periodStart: p.period,
+      periodEnd: p.period,
+    }));
+    return {
       requirementId: req.id,
       classId: req.classId,
       subjectId: req.subjectId,
@@ -176,30 +136,28 @@ export async function generateCandidatePreview(
       jpTarget: req.jpTarget,
       placed: placements.length,
       unplaced: req.jpTarget - placements.length,
-      placements: placements.map((p) => ({ day: p.day, periodStart: p.period, periodEnd: p.period })),
-    });
+      placements,
+    };
   });
 
-  return { candidates, outcomes };
+  return {
+    candidates,
+    outcomes,
+    solver: {
+      complete: solverResult.complete,
+      searchNodes: solverResult.searchNodes,
+      reason: solverResult.reason,
+    },
+  };
 }
 
-/**
- * Simpan hasil preview ke database sebagai baris status="candidate" —
- * transisi eksplisit dari "Generate Candidate" ke "Candidate Review"
- * (Bagian 24.2/68 — tidak ada silent mutation, user yang menekan tombol).
- * Tiap draft divalidasi ULANG lewat Conflict Engine sebelum insert (state DB
- * bisa berubah antara preview dan klik simpan) — draft dengan blocking
- * conflict DILEWATI (bukan membatalkan seluruh batch), supaya sisanya yang
- * bersih tetap tersimpan; yang dilewati dilaporkan ke pemanggil untuk
- * ditampilkan ke user.
- */
+/** Save is still an explicit transition. Blocking conflicts are never written. */
 export async function saveGeneratedCandidates(
   supabase: SupabaseClient,
   drafts: ScheduleAssignmentDraft[]
 ): Promise<{ saved: ScheduleAssignment[]; skipped: { draft: ScheduleAssignmentDraft; conflicts: ScheduleConflict[] }[] }> {
   const saved: ScheduleAssignment[] = [];
   const skipped: { draft: ScheduleAssignmentDraft; conflicts: ScheduleConflict[] }[] = [];
-
   for (const draft of drafts) {
     const conflicts = await validateAssignmentCandidate(supabase, draft);
     const blocking = conflicts.filter((c) => c.blocking);
@@ -207,14 +165,10 @@ export async function saveGeneratedCandidates(
       skipped.push({ draft, conflicts: blocking });
       continue;
     }
-    const created = await scheduleAssignmentRepository.create(supabase, draft);
-    saved.push(created);
+    saved.push(await scheduleAssignmentRepository.create(supabase, draft));
   }
-
   return { saved, skipped };
 }
-
-// --- OPTIMIZATION (Bagian 24.4/87) ---
 
 export interface OptimizationChange {
   assignmentId: string;
@@ -247,14 +201,7 @@ function assignmentToDraft(a: ScheduleAssignment): ScheduleAssignmentDraft {
   };
 }
 
-/**
- * Optimasi (Bagian 24.4) — HANYA memproses assignment candidate yang SAAT
- * INI punya blocking conflict (bukan re-generate semuanya dari nol):
- * mencoba memindahkan tiap assignment bermasalah ke slot lain yang bebas
- * dalam hari aktif Schedule Model yang sama, sambil mempertahankan
- * assignment yang sudah bersih di posisinya. Preview saja — TIDAK menulis
- * ke database (lihat applyOptimization untuk penerapan eksplisit).
- */
+/** Preview-only repair of currently conflicting candidate assignments. */
 export async function optimizeCandidateBatch(
   supabase: SupabaseClient,
   academicContextId: string,
@@ -271,102 +218,60 @@ export async function optimizeCandidateBatch(
 
   const target = allAssignments.filter((a) => candidateIds.includes(a.id));
   const others = allAssignments.filter((a) => a.status !== "archived" && a.status !== "cancelled" && !candidateIds.includes(a.id));
-
-  // Conflict awal per candidate — pakai Conflict Engine asli (akurat, sama
-  // seperti yang dipakai Candidate Review).
   const beforeConflicts: Record<string, ScheduleConflict[]> = {};
-  for (const a of target) {
-    beforeConflicts[a.id] = await validateAssignmentCandidate(supabase, assignmentToDraft(a), a.id);
-  }
+  for (const a of target) beforeConflicts[a.id] = await validateAssignmentCandidate(supabase, assignmentToDraft(a), a.id);
   const beforeConflictCount = Object.values(beforeConflicts).reduce((sum, c) => sum + c.filter((x) => x.blocking).length, 0);
 
-  const slotsByDay = buildAvailableSlots(scheduleModel.hariAktif, jamPelajaranList, slotTemplates);
-
-  const teacherOccupied = new Set<string>();
-  const classOccupied = new Set<string>();
-  const roomOccupied = new Set<string>();
-  for (const a of others) {
+  const slots = buildAvailableSlots(scheduleModel.hariAktif, jamPelajaranList, slotTemplates);
+  const occupied = new Set<string>();
+  const reserve = (a: ScheduleAssignment) => {
     for (let p = a.periodStart; p <= a.periodEnd; p += 1) {
-      teacherOccupied.add(`${a.teacherId}:${a.day}:${p}`);
-      classOccupied.add(`${a.classId}:${a.day}:${p}`);
-      if (a.roomId) roomOccupied.add(`${a.roomId}:${a.day}:${p}`);
+      occupied.add(`${a.teacherId}:${a.day}:${p}`);
+      occupied.add(`class:${a.classId}:${a.day}:${p}`);
+      if (a.roomId && scheduleModel.modeRuangan !== "tidak_dipakai") occupied.add(`room:${a.roomId}:${a.day}:${p}`);
     }
-  }
-
-  const problematic = target.filter((a) => beforeConflicts[a.id].some((c) => c.blocking));
-  const clean = target.filter((a) => !beforeConflicts[a.id].some((c) => c.blocking));
-  // Assignment target yang bersih tetap dikunci di posisinya.
-  for (const a of clean) {
-    for (let p = a.periodStart; p <= a.periodEnd; p += 1) {
-      teacherOccupied.add(`${a.teacherId}:${a.day}:${p}`);
-      classOccupied.add(`${a.classId}:${a.day}:${p}`);
-      if (a.roomId) roomOccupied.add(`${a.roomId}:${a.day}:${p}`);
-    }
-  }
+  };
+  others.forEach(reserve);
+  target.filter((a) => !beforeConflicts[a.id]?.some((c) => c.blocking)).forEach(reserve);
 
   const changes: OptimizationChange[] = [];
-  const relocated = new Map<string, { day: HariSekolah; period: number }>();
-
-  for (const a of problematic) {
-    let placed = false;
-    for (const day of scheduleModel.hariAktif) {
-      const periods = slotsByDay.get(day) ?? [];
-      for (const period of periods) {
-        const tKey = `${a.teacherId}:${day}:${period}`;
-        const cKey = `${a.classId}:${day}:${period}`;
-        const rKey = a.roomId ? `${a.roomId}:${day}:${period}` : null;
-        if (teacherOccupied.has(tKey) || classOccupied.has(cKey) || (rKey && roomOccupied.has(rKey))) continue;
-        teacherOccupied.add(tKey);
-        classOccupied.add(cKey);
-        if (rKey) roomOccupied.add(rKey);
-        relocated.set(a.id, { day, period });
-        changes.push({
-          assignmentId: a.id,
-          from: { day: a.day, periodStart: a.periodStart, periodEnd: a.periodEnd },
-          to: { day, periodStart: period, periodEnd: period },
-        });
-        placed = true;
-        break;
-      }
-      if (placed) break;
+  for (const a of target.filter((x) => beforeConflicts[x.id]?.some((c) => c.blocking))) {
+    let moved: OptimizationChange["to"] = null;
+    for (const slot of slots) {
+      const keys = [
+        `${a.teacherId}:${slot.day}:${slot.period}`,
+        `class:${a.classId}:${slot.day}:${slot.period}`,
+        ...(a.roomId && scheduleModel.modeRuangan !== "tidak_dipakai" ? [`room:${a.roomId}:${slot.day}:${slot.period}`] : []),
+      ];
+      if (keys.some((k) => occupied.has(k))) continue;
+      moved = { day: slot.day, periodStart: slot.period, periodEnd: slot.period };
+      keys.forEach((k) => occupied.add(k));
+      break;
     }
-    if (!placed) {
-      changes.push({ assignmentId: a.id, from: { day: a.day, periodStart: a.periodStart, periodEnd: a.periodEnd }, to: null });
-    }
+    changes.push({ assignmentId: a.id, from: { day: a.day, periodStart: a.periodStart, periodEnd: a.periodEnd }, to: moved });
   }
 
-  // Conflict SETELAH relokasi — divalidasi ulang lewat Conflict Engine asli
-  // terhadap draft yang sudah dipindah (untuk yang gagal direlokasi, posisi
-  // lama dipakai lagi supaya conflict lama tetap terlihat di summary).
   const remainingConflicts: Record<string, ScheduleConflict[]> = {};
   for (const a of target) {
-    const moved = relocated.get(a.id);
-    const draft = moved
-      ? { ...assignmentToDraft(a), day: moved.day, periodStart: moved.period, periodEnd: moved.period }
-      : assignmentToDraft(a);
+    const change = changes.find((c) => c.assignmentId === a.id)?.to;
+    const draft = change ? { ...assignmentToDraft(a), ...change } : assignmentToDraft(a);
     remainingConflicts[a.id] = await validateAssignmentCandidate(supabase, draft, a.id);
   }
   const afterConflictCount = Object.values(remainingConflicts).reduce((sum, c) => sum + c.filter((x) => x.blocking).length, 0);
-
   return { beforeConflictCount, afterConflictCount, changes, remainingConflicts };
 }
 
-/**
- * Menerapkan hasil optimizeCandidateBatch ke database — dipanggil TERPISAH,
- * hanya setelah user eksplisit memilih "Apply Optimization" (Bagian 24.4:
- * "User must explicitly choose: Keep Current / Apply Optimization").
- */
+/** Apply is deliberately separate from preview; never silently mutates committed state. */
 export async function applyOptimization(supabase: SupabaseClient, changes: OptimizationChange[]): Promise<void> {
   for (const change of changes) {
     if (!change.to) continue;
     const existing = await scheduleAssignmentRepository.findById(supabase, change.assignmentId);
     if (!existing) continue;
-    const draft: ScheduleAssignmentDraft = {
+    await scheduleAssignmentRepository.update(supabase, change.assignmentId, {
       ...assignmentToDraft(existing),
       day: change.to.day,
       periodStart: change.to.periodStart,
       periodEnd: change.to.periodEnd,
-    };
-    await scheduleAssignmentRepository.update(supabase, change.assignmentId, draft);
+    });
   }
 }
