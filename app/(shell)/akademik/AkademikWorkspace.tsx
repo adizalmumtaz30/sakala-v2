@@ -438,7 +438,7 @@ export default function AkademikWorkspace({
 
       {tab === "profil" && (
         <div className="flex flex-col gap-4">
-          {/* Bagian 8.1 / 78 — School Profile */
+          {/* Bagian 8.1 / 78 — School Profile */}
           <Card>
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3">
@@ -480,7 +480,7 @@ export default function AkademikWorkspace({
             )}
           </Card>
 
-          {/* Bagian 8.2 / 77 — Active Academic Context */}
+          {/* Bagian 8.2 / 77 — Active Academic Context */}}
           <Card className="p-0">
             <div className="flex items-center justify-between gap-3 px-5 pt-4 pb-2.5">
               <div className="flex items-center gap-3">
