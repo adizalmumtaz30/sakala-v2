@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Upload, Download, X, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Upload, Download, X, CheckCircle2, AlertTriangle, FileSpreadsheet } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { parseSpreadsheetFile } from "@/lib/import/parse-spreadsheet";
 
@@ -20,19 +20,11 @@ interface ImportModalProps {
   description: string;
   templateUrl: string;
   templateFilename: string;
-  /** Validasi baris hasil parse (server action) — dipanggil setelah file diparse. */
   onValidate: (rows: Record<string, string>[]) => Promise<ImportRowResult[]>;
-  /** Commit baris yang valid (server action) — server RE-VALIDATE, tidak percaya client. */
   onCommit: (rows: Record<string, string>[]) => Promise<{ imported: number; skipped: number }>;
-  /** Dipanggil setelah commit sukses, supaya list induk bisa refresh. */
   onImported: () => void;
 }
 
-/**
- * Import flow generik (Bagian 24): Upload -> Detect -> Parse -> Preview -> Confirm -> Import.
- * Reusable lintas modul master data (Guru, Mapel, ...) — bedanya hanya di onValidate/onCommit
- * yang dikirim tiap modul, supaya aturan bisnis tetap ada di domain masing-masing entity.
- */
 export default function ImportModal({
   open,
   onClose,
@@ -49,6 +41,7 @@ export default function ImportModal({
   const [rawRows, setRawRows] = useState<Record<string, string>[]>([]);
   const [results, setResults] = useState<ImportRowResult[]>([]);
   const [isBusy, setIsBusy] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
   const [summary, setSummary] = useState<{ imported: number; skipped: number } | null>(null);
 
@@ -59,6 +52,7 @@ export default function ImportModal({
     setResults([]);
     setParseError(null);
     setSummary(null);
+    setIsDragging(false);
   }
 
   function handleClose() {
@@ -71,10 +65,14 @@ export default function ImportModal({
     setFileName(file.name);
     setIsBusy(true);
     try {
+      const isSupported = /\.(xlsx|csv)$/i.test(file.name);
+      if (!isSupported) {
+        setParseError("Format file belum didukung. Gunakan file XLSX atau CSV dari Template SAKALA.");
+        return;
+      }
       const { rows } = await parseSpreadsheetFile(file);
       if (rows.length === 0) {
-        setParseError("Sheet DATA kosong atau tidak ditemukan. Gunakan Template SAKALA.");
-        setIsBusy(false);
+        setParseError("Belum ada data yang ditemukan. Pastikan sheet DATA terisi dan gunakan Template SAKALA.");
         return;
       }
       setRawRows(rows);
@@ -82,7 +80,7 @@ export default function ImportModal({
       setResults(validated);
       setStage("preview");
     } catch {
-      setParseError("Format file tidak sesuai. Gunakan Template SAKALA (.xlsx).");
+      setParseError("File belum dapat dibaca. Gunakan Template SAKALA (.xlsx) atau file CSV dengan format yang sesuai.");
     } finally {
       setIsBusy(false);
     }
@@ -90,8 +88,9 @@ export default function ImportModal({
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
+    setIsDragging(false);
     const file = e.dataTransfer.files?.[0];
-    if (file) handleFile(file);
+    if (file) void handleFile(file);
   }
 
   async function handleConfirm() {
@@ -109,7 +108,7 @@ export default function ImportModal({
   const issueCount = results.length - validCount;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/30 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/30 p-4 backdrop-blur-sm">
       <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-xl2 border border-border bg-surface p-6 shadow-float">
         <div className="mb-1 flex items-center justify-between">
           <h2 className="text-[16px] font-semibold text-ink-900">{title}</h2>
@@ -122,13 +121,22 @@ export default function ImportModal({
         {stage === "upload" && (
           <div className="flex flex-col gap-4">
             <div
+              onDragEnter={(e) => { e.preventDefault(); setIsDragging(true); }}
               onDragOver={(e) => e.preventDefault()}
+              onDragLeave={(e) => { if (e.currentTarget === e.target) setIsDragging(false); }}
               onDrop={handleDrop}
-              className="flex flex-col items-center gap-2 rounded-xl2 border-2 border-dashed border-border py-10 text-center transition-colors hover:border-brand-600/40"
+              className={`flex flex-col items-center gap-2 rounded-xl2 border-2 border-dashed py-10 text-center transition-colors ${
+                isDragging ? "border-brand-600 bg-brand-600/5" : "border-border hover:border-brand-600/40"
+              }`}
+              aria-label="Area unggah file"
             >
-              <Upload size={26} className="text-ink-300" />
-              <p className="text-[13.5px] font-medium text-ink-900">Tarik file ke sini</p>
-              <p className="text-[12px] text-ink-400">atau</p>
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-600/10 text-brand-700">
+                <FileSpreadsheet size={24} />
+              </div>
+              <p className="text-[13.5px] font-semibold text-ink-900">
+                {isDragging ? "Lepaskan file di sini" : "Tarik file ke sini"}
+              </p>
+              <p className="text-[12px] text-ink-400">atau pilih file dari perangkat Anda</p>
               <label className="cursor-pointer">
                 <span className="inline-flex h-9 items-center rounded-xl border border-border bg-surface px-3 text-[12.5px] font-medium text-ink-900 hover:bg-surface-muted">
                   Pilih File
@@ -137,21 +145,21 @@ export default function ImportModal({
                   type="file"
                   accept=".xlsx,.csv"
                   className="hidden"
-                  onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+                  onChange={(e) => e.target.files?.[0] && void handleFile(e.target.files[0])}
                 />
               </label>
-              <p className="text-[11px] text-ink-400">XLSX / CSV</p>
+              <p className="text-[11px] text-ink-400">XLSX atau CSV</p>
             </div>
 
             {parseError && <p className="text-[12.5px] text-rose">{parseError}</p>}
-            {isBusy && <p className="text-[12.5px] text-ink-500">Memproses {fileName}...</p>}
+            {isBusy && <p className="text-[12.5px] text-ink-500">Memeriksa {fileName}...</p>}
 
             <a
               href={templateUrl}
               download={templateFilename}
               className="flex items-center justify-center gap-1.5 text-[12.5px] font-medium text-brand-700 hover:underline"
             >
-              <Download size={14} /> Download Template SAKALA
+              <Download size={14} /> Unduh Template SAKALA
             </a>
           </div>
         )}
@@ -160,7 +168,7 @@ export default function ImportModal({
           <div className="flex flex-1 flex-col gap-3 overflow-hidden">
             <div className="flex flex-wrap items-center gap-3 text-[12.5px]">
               <span className="flex items-center gap-1 font-medium text-emerald">
-                <CheckCircle2 size={14} /> {validCount} valid
+                <CheckCircle2 size={14} /> {validCount} data siap diimpor
               </span>
               {issueCount > 0 && (
                 <span className="flex items-center gap-1 font-medium text-amber">
@@ -174,7 +182,7 @@ export default function ImportModal({
               <table className="w-full text-left text-[12.5px]">
                 <thead className="sticky top-0 bg-surface-muted">
                   <tr>
-                    <th className="px-3 py-2 font-medium text-ink-500">#</th>
+                    <th className="px-3 py-2 font-medium text-ink-500">No.</th>
                     <th className="px-3 py-2 font-medium text-ink-500">Data</th>
                     <th className="px-3 py-2 font-medium text-ink-500">Status</th>
                   </tr>
@@ -189,14 +197,12 @@ export default function ImportModal({
                       </td>
                       <td className="px-3 py-2">
                         {r.status === "valid" ? (
-                          <span className="text-emerald">✓ Valid</span>
+                          <span className="text-emerald">✓ Siap</span>
                         ) : (
                           <span className="text-amber">
-                            ⚠{" "}
+                            ⚠ Perlu diperbaiki
                             {r.issues.map((issue, i) => (
-                              <span key={i} className="block">
-                                {issue.column}: {issue.message}
-                              </span>
+                              <span key={i} className="block">{issue.column}: {issue.message}</span>
                             ))}
                           </span>
                         )}
@@ -208,12 +214,8 @@ export default function ImportModal({
             </div>
 
             <div className="flex justify-end gap-2 pt-1">
-              <Button variant="secondary" onClick={reset}>
-                Ganti File
-              </Button>
-              <Button onClick={handleConfirm} loading={isBusy} disabled={validCount === 0}>
-                Import {validCount} Data
-              </Button>
+              <Button variant="secondary" onClick={reset}>Ganti File</Button>
+              <Button onClick={handleConfirm} loading={isBusy} disabled={validCount === 0}>Impor {validCount} Data</Button>
             </div>
           </div>
         )}
@@ -223,11 +225,9 @@ export default function ImportModal({
             <CheckCircle2 size={32} className="text-emerald" />
             <p className="text-[14px] font-semibold text-ink-900">{summary.imported} data berhasil diimpor</p>
             {summary.skipped > 0 && (
-              <p className="text-[12.5px] text-ink-500">{summary.skipped} baris dilewati karena tidak valid.</p>
+              <p className="text-[12.5px] text-ink-500">{summary.skipped} baris dilewati karena belum valid.</p>
             )}
-            <Button className="mt-2" onClick={handleClose}>
-              Selesai
-            </Button>
+            <Button className="mt-2" onClick={handleClose}>Selesai</Button>
           </div>
         )}
       </div>
