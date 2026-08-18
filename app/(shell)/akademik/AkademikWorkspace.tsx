@@ -1,1 +1,1 @@
-// B-03 verified source — no mutation during build.
+// RESTORE REQUIRED: use healthy 40578c45 snapshot; this placeholder must not be deployed.
