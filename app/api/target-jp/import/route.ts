@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { createClient } from "@/lib/supabase/server";
-import { buildTemplateWorkbook, type TemplateColumn } from "@/lib/import/template";
+import { buildControlledTemplateWorkbook, type ControlledTemplateColumn } from "@/lib/import/controlled-template";
 import { bufferToBodyInit } from "@/lib/utils/response";
 
-const columns: TemplateColumn[] = [
-  { key: "AcademicContext", required: true, format: "Tahun Pelajaran + Semester, harus cocok dengan Academic Context", example: "2026/2027 · Ganjil" },
-  { key: "Kelas", required: true, format: "Nama rombel atau tingkat, harus ditemukan", example: "7A" },
-  { key: "KodeMapel", required: true, format: "Kode mata pelajaran", example: "BIND" },
+const columns: ControlledTemplateColumn[] = [
+  { key: "AcademicContext", required: true, format: "Pilih/ikuti Academic Context SAKALA", example: "2026/2027 · Ganjil" },
+  { key: "Kelas", required: true, format: "Pilih/ikuti Kelas Master SAKALA", example: "7A" },
+  { key: "KodeMapel", required: true, format: "Kode Mata Pelajaran Master SAKALA", example: "BIND" },
   { key: "MataPelajaran", required: false, format: "Nama mapel sebagai fallback validasi", example: "Bahasa Indonesia" },
   { key: "TargetJP", required: true, format: "Bilangan bulat 0–10", example: "5" },
 ];
@@ -25,15 +25,13 @@ export async function GET(request: Request) {
       ]);
       if (ce || ke || se || te) throw new Error(ce?.message || ke?.message || se?.message || te?.message || "Gagal membaca data Target JP.");
       return NextResponse.json({ contexts: contexts ?? [], classes: classes ?? [], subjects: subjects ?? [], targets: targets ?? [] });
-    } catch (e) {
-      return NextResponse.json({ error: e instanceof Error ? e.message : "Gagal membaca data." }, { status: 500 });
-    }
+    } catch (e) { return NextResponse.json({ error: e instanceof Error ? e.message : "Gagal membaca data." }, { status: 500 }); }
   }
 
-  const buffer = buildTemplateWorkbook(columns, [
+  const buffer = buildControlledTemplateWorkbook(columns, [
     ["2026/2027 · Ganjil", "7A", "BIND", "Bahasa Indonesia", "5"],
     ["2026/2027 · Ganjil", "7A", "MAT", "Matematika", "4"],
-  ]);
+  ], { module: "target-jp", label: "Target JP", schemaVersion: "2.3" });
   return new NextResponse(bufferToBodyInit(buffer), {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -66,14 +64,12 @@ async function validate(rows: Record<string, unknown>[]) {
     supabase.from("mata_pelajaran").select("id,nama,kode"),
   ]);
   if (ce || ke || se) throw new Error(ce?.message || ke?.message || se?.message || "Gagal membaca master data.");
-
   const contextMap = new Map((contexts ?? []).map(c => [key(`${c.tahun_pelajaran} · ${c.semester}`), c]));
   const classMap = new Map<string, any>();
   for (const c of classes ?? []) { classMap.set(normalize(c.nama_rombel), c); classMap.set(normalize(c.tingkat), c); }
   const subjectByCode = new Map((subjects ?? []).filter(s => s.kode).map(s => [normalize(s.kode), s]));
   const subjectByName = new Map((subjects ?? []).map(s => [normalize(s.nama), s]));
   const seen = new Set<string>();
-
   return rows.map((raw, i) => {
     const ctxLabel = text(raw.AcademicContext ?? raw.academic_context ?? raw.TahunPelajaran);
     const kelasLabel = text(raw.Kelas ?? raw.kelas ?? raw.Rombel);
@@ -99,27 +95,20 @@ async function validate(rows: Record<string, unknown>[]) {
 
 export async function POST(request: Request) {
   try {
-    const form = await request.formData();
-    const file = form.get("file");
+    const form = await request.formData(); const file = form.get("file");
     if (!(file instanceof File)) return NextResponse.json({ error: "File wajib diunggah." }, { status: 400 });
-    const rows = await parse(file);
-    if (!rows.length) return NextResponse.json({ error: "File tidak memiliki data." }, { status: 400 });
-    const results = await validate(rows);
-    return NextResponse.json({ rows, results });
+    const rows = await parse(file); if (!rows.length) return NextResponse.json({ error: "File tidak memiliki data." }, { status: 400 });
+    const results = await validate(rows); return NextResponse.json({ rows, results });
   } catch (e) { return NextResponse.json({ error: e instanceof Error ? e.message : "Gagal memproses file." }, { status: 500 }); }
 }
 
 export async function PUT(request: Request) {
   try {
-    const body = await request.json();
-    const rows = Array.isArray(body.rows) ? body.rows : [];
-    const results = await validate(rows);
-    const invalid = results.filter((r: any) => r.status !== "valid");
+    const body = await request.json(); const rows = Array.isArray(body.rows) ? body.rows : [];
+    const results = await validate(rows); const invalid = results.filter((r: any) => r.status !== "valid");
     if (invalid.length) return NextResponse.json({ error: `Import diblokir: ${invalid.length} baris tidak valid.`, results: invalid }, { status: 400 });
-    const supabase = await createClient();
-    const payload = results.map((r: any) => r.data);
+    const supabase = await createClient(); const payload = results.map((r: any) => r.data);
     const { error } = await supabase.from("target_jp").upsert(payload, { onConflict: "academic_context_id,kelas_id,mata_pelajaran_id" });
-    if (error) throw new Error(error.message);
-    return NextResponse.json({ upserted: payload.length });
+    if (error) throw new Error(error.message); return NextResponse.json({ upserted: payload.length });
   } catch (e) { return NextResponse.json({ error: e instanceof Error ? e.message : "Import gagal." }, { status: 500 }); }
 }
