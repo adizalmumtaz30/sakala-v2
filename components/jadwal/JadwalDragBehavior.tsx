@@ -40,7 +40,7 @@ export default function JadwalDragBehavior({
 
     const getWorkspace = () => Array.from(root.querySelectorAll("div")).find((el) => {
       const heading = el.querySelector("h1");
-      return heading?.textContent?.trim() === "Jadwal";
+      return heading?.textContent?.trim() === "Jadwal" && !!el.querySelector("table");
     }) as HTMLElement | undefined;
 
     const getModelId = (workspace: HTMLElement) => {
@@ -57,9 +57,12 @@ export default function JadwalDragBehavior({
       return (active?.textContent?.trim().toLowerCase() as ViewBy) || "kelas";
     };
 
-    const getEntityId = (workspace: HTMLElement) => {
-      const selects = Array.from(workspace.querySelectorAll("select"));
-      return (selects[2] as HTMLSelectElement | undefined)?.value || (selects[1] as HTMLSelectElement | undefined)?.value || "";
+    const getEntityId = (workspace: HTMLElement, viewBy: ViewBy) => {
+      const entityIds = new Set(
+        assignments.flatMap((a) => viewBy === "kelas" ? [a.classId] : viewBy === "guru" ? [a.teacherId] : a.roomId ? [a.roomId] : [])
+      );
+      const selects = Array.from(workspace.querySelectorAll("select")) as HTMLSelectElement[];
+      return selects.find((select) => entityIds.has(select.value))?.value ?? "";
     };
 
     const getGridCells = (workspace: HTMLElement) => {
@@ -87,7 +90,7 @@ export default function JadwalDragBehavior({
 
     const currentScopedAssignments = (workspace: HTMLElement, modelId: string) => {
       const viewBy = getViewBy(workspace);
-      const entityId = getEntityId(workspace);
+      const entityId = getEntityId(workspace, viewBy);
       return assignments.filter((a) =>
         a.status === "committed" &&
         a.scheduleModelId === modelId &&
