@@ -6,6 +6,8 @@ import { BrainCircuit, CheckCircle2, ExternalLink, ShieldAlert } from "lucide-re
 import { adoptCurriculumItemsAction, listCurriculumIntelligenceAction } from "./curriculum-actions";
 import type { CurriculumInstitution } from "@/lib/domain/curriculumIntelligence";
 
+// Curriculum Intelligence launcher: production entry point for official curriculum review.
+
 type Source = { id: string; institution: string; name: string; official_url: string; status: string };
 type Version = { id: string; source_id: string; curriculum_name: string; regulation_number: string | null; regulation_year: number | null; regulation_title: string | null; effective_status: string; document_url: string | null; verification_status: string };
 type Item = { id: string; curriculum_version_id: string; subject_name: string; class_level: string; allocation_unit: string | null; official_allocation: number | null; weekly_target: number | null; derivation_status: string; extraction_status: string };
