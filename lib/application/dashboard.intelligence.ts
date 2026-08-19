@@ -16,6 +16,43 @@ function todayIndex(){
   return ({monday:0,tuesday:1,wednesday:2,thursday:3,friday:4,saturday:5,sunday:0} as Record<string,number>)[d]??0;
 }
 
+const ENTITY_LABEL:Record<string,string>={
+  jadwal:"Jadwal",
+  schedule:"Jadwal",
+  schedule_assignment:"Jadwal",
+  guru:"Guru",
+  mata_pelajaran:"Mata Pelajaran",
+  kelas:"Kelas",
+  ruangan:"Ruangan",
+  target_jp:"Target JP",
+  pembagian_mengajar:"Pembagian Mengajar",
+  akademik:"Akademik",
+};
+const ACTION_LABEL:Record<string,string>={
+  create:"Menambahkan",
+  created:"Menambahkan",
+  insert:"Menambahkan",
+  update:"Memperbarui",
+  updated:"Memperbarui",
+  edit:"Memperbarui",
+  delete:"Menghapus",
+  deleted:"Menghapus",
+  remove:"Menghapus",
+  import:"Mengimpor",
+  commit:"Menetapkan",
+  committed:"Menetapkan",
+};
+
+function humanizeActivity(action:string, entityType:string, entityLabel:string|null){
+  const actionKey=action.trim().toLowerCase().replace(/[- ]+/g,"_");
+  const entityKey=entityType.trim().toLowerCase().replace(/[- ]+/g,"_");
+  const verb=ACTION_LABEL[actionKey]??"Mengubah";
+  const entity=ENTITY_LABEL[entityKey]??entityType.replace(/_/g," ").replace(/\b\w/g,c=>c.toUpperCase());
+  const label=entityLabel?.trim();
+  const meaningfulLabel=label && !/^\d+$/.test(label) && label.length<=80 ? label : null;
+  return meaningfulLabel ? `${verb} ${entity} · ${meaningfulLabel}` : `${verb} ${entity}`;
+}
+
 export async function getDashboardIntelligence(supabase:SupabaseClient, contextId:string, guruList:any[], mapelList:any[], kelasList:any[], ruanganList:any[]){
   const [assignments,jam,audit]=await Promise.all([
     scheduleAssignmentRepository.findByContext(supabase,contextId),
@@ -32,13 +69,13 @@ export async function getDashboardIntelligence(supabase:SupabaseClient, contextI
   const totals=new Map<HariSekolah,number>();
   for(const a of committed) totals.set(a.day,(totals.get(a.day)??0)+(a.periodEnd-a.periodStart+1));
   const max=Math.max(...DAYS.map(d=>totals.get(d)??0),1);
-  const heatmap= DAYS.map(day=>{const total=totals.get(day)??0; const r=total/max; const level=(total===0?0:r<=.25?1:r<=.5?2:r<=.75?3:4) as 0|1|2|3|4; return {day,label:LABEL[day],total,level};});
+  const heatmap=DAYS.map(day=>{const total=totals.get(day)??0;const r=total/max;const level=(total===0?0:r<=.25?1:r<=.5?2:r<=.75?3:4) as 0|1|2|3|4;return {day,label:LABEL[day],total,level};});
 
   const current=todayIndex();
   const upcoming=committed.map(a=>({a,distance:(DAYS.indexOf(a.day)-current+7)%7})).sort((x,y)=>x.distance-y.distance||x.a.periodStart-y.a.periodStart).slice(0,6).map(({a})=>{
     const s=slots.get(`${a.day}:${a.periodStart}`);
     return {id:a.id,dayLabel:LABEL[a.day],time:s?`${s.waktuMulai}–${s.waktuSelesai}`:`Jam ke-${a.periodStart}`,subject:mapel.get(a.subjectId)??"Mata pelajaran",teacher:guru.get(a.teacherId)??"Guru",className:kelas.get(a.classId)??"Kelas",room:a.roomId?ruang.get(a.roomId)??null:null};
   });
-  const recentActivity=audit.items.map(i=>({id:i.id,action:i.action,entityType:i.entityType,entityLabel:i.entityLabel,createdAt:i.createdAt}));
+  const recentActivity=audit.items.map(i=>({id:i.id,action:humanizeActivity(i.action,i.entityType,i.entityLabel),entityType:i.entityType,entityLabel:null,createdAt:i.createdAt}));
   return {heatmap,upcomingAgenda:upcoming,recentActivity};
 }
