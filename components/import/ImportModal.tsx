@@ -109,14 +109,19 @@ export default function ImportModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/30 p-4 backdrop-blur-sm">
-      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-xl2 border border-border bg-surface p-6 shadow-float">
+      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-xl2 border border-border bg-surface p-6 shadow-float" role="dialog" aria-modal="true" aria-labelledby="import-dialog-title">
         <div className="mb-1 flex items-center justify-between">
-          <h2 className="text-[16px] font-semibold text-ink-900">{title}</h2>
-          <button onClick={handleClose} className="rounded-lg p-1 text-ink-400 hover:bg-surface-muted" aria-label="Tutup">
+          <h2 id="import-dialog-title" className="text-[16px] font-semibold text-ink-900">{title}</h2>
+          <button onClick={handleClose} className="rounded-lg p-1.5 text-ink-400 outline-none hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-brand-600/40" aria-label="Tutup impor">
             <X size={18} />
           </button>
         </div>
-        <p className="mb-4 text-[12.5px] text-ink-500">{description}</p>
+        <p className="mb-3 text-[12.5px] text-ink-500">{description}</p>
+        <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-brand-600/15 bg-brand-600/[0.04] px-3 py-2 text-[11.5px] text-ink-600">
+          <span className="font-semibold text-ink-800">Format SAKALA</span>
+          <span>Gunakan template sesuai halaman ini.</span>
+          <span>Validasi dilakukan sebelum data disimpan.</span>
+        </div>
 
         {stage === "upload" && (
           <div className="flex flex-col gap-4">
@@ -131,48 +136,49 @@ export default function ImportModal({
               aria-label="Area unggah file"
             >
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-600/10 text-brand-700">
-                <FileSpreadsheet size={24} />
+                <FileSpreadsheet size={24} aria-hidden="true" />
               </div>
               <p className="text-[13.5px] font-semibold text-ink-900">
                 {isDragging ? "Lepaskan file di sini" : "Tarik file ke sini"}
               </p>
               <p className="text-[12px] text-ink-400">atau pilih file dari perangkat Anda</p>
               <label className="cursor-pointer">
-                <span className="inline-flex h-9 items-center rounded-xl border border-border bg-surface px-3 text-[12.5px] font-medium text-ink-900 hover:bg-surface-muted">
+                <span className="inline-flex h-9 items-center rounded-xl border border-border bg-surface px-3 text-[12.5px] font-medium text-ink-900 hover:bg-surface-muted focus-within:ring-2 focus-within:ring-brand-600/40">
                   Pilih File
                 </span>
                 <input
                   type="file"
                   accept=".xlsx,.csv"
-                  className="hidden"
+                  className="sr-only"
+                  aria-label="Pilih file XLSX atau CSV"
                   onChange={(e) => e.target.files?.[0] && void handleFile(e.target.files[0])}
                 />
               </label>
               <p className="text-[11px] text-ink-400">XLSX atau CSV</p>
             </div>
 
-            {parseError && <p className="text-[12.5px] text-rose">{parseError}</p>}
-            {isBusy && <p className="text-[12.5px] text-ink-500">Memeriksa {fileName}...</p>}
+            {parseError && <p role="alert" className="text-[12.5px] text-rose">{parseError}</p>}
+            {isBusy && <p className="text-[12.5px] text-ink-500" aria-live="polite">Memeriksa {fileName}...</p>}
 
             <a
               href={templateUrl}
               download={templateFilename}
-              className="flex items-center justify-center gap-1.5 text-[12.5px] font-medium text-brand-700 hover:underline"
+              className="flex items-center justify-center gap-1.5 rounded-lg py-1 text-[12.5px] font-medium text-brand-700 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-brand-600/40"
             >
-              <Download size={14} /> Unduh Template SAKALA
+              <Download size={14} aria-hidden="true" /> Unduh Template SAKALA khusus halaman ini
             </a>
           </div>
         )}
 
         {stage === "preview" && (
           <div className="flex flex-1 flex-col gap-3 overflow-hidden">
-            <div className="flex flex-wrap items-center gap-3 text-[12.5px]">
+            <div className="flex flex-wrap items-center gap-3 text-[12.5px]" aria-live="polite">
               <span className="flex items-center gap-1 font-medium text-emerald">
-                <CheckCircle2 size={14} /> {validCount} data siap diimpor
+                <CheckCircle2 size={14} aria-hidden="true" /> {validCount} data siap diimpor
               </span>
               {issueCount > 0 && (
                 <span className="flex items-center gap-1 font-medium text-amber">
-                  <AlertTriangle size={14} /> {issueCount} perlu diperbaiki
+                  <AlertTriangle size={14} aria-hidden="true" /> {issueCount} perlu diperbaiki
                 </span>
               )}
               <span className="text-ink-400">· {results.length} baris ditemukan di {fileName}</span>
@@ -222,7 +228,7 @@ export default function ImportModal({
 
         {stage === "done" && summary && (
           <div className="flex flex-col items-center gap-2 py-8 text-center">
-            <CheckCircle2 size={32} className="text-emerald" />
+            <CheckCircle2 size={32} className="text-emerald" aria-hidden="true" />
             <p className="text-[14px] font-semibold text-ink-900">{summary.imported} data berhasil diimpor</p>
             {summary.skipped > 0 && (
               <p className="text-[12.5px] text-ink-500">{summary.skipped} baris dilewati karena belum valid.</p>
