@@ -1,0 +1,44 @@
+name: Repair Academic Launcher JSX
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor == 'adizalmumtaz30' || github.actor == 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Repair launcher placement
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('app/(shell)/akademik/AkademikWorkspace.tsx')
+          s = p.read_text(encoding='utf-8')
+          old = '''\n\n          <div data-sakala-curriculum-launcher className="border-t border-border px-5 py-4">\n            <Link\n              href="/akademik/mata-pelajaran?generate=1"\n              className="group flex items-center justify-between gap-4 rounded-xl border border-brand-200 bg-brand-50/60 px-4 py-3.5 transition hover:border-brand-300 hover:bg-brand-50"\n            >\n              <div className="flex min-w-0 items-center gap-3">\n                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-100 text-brand-700">\n                  <span aria-hidden="true" className="text-base">🧠</span>\n                </div>\n                <div className="min-w-0">\n                  <p className="text-[13px] font-semibold text-ink-900">Generate Kurikulum</p>\n                  <p className="text-[12px] text-ink-500">Buat kurikulum dari sumber regulasi resmi tanpa mengubah kurikulum sekolah secara otomatis.</p>\n                </div>\n              </div>\n              <span className="shrink-0 text-[12px] font-semibold text-brand-700 transition group-hover:translate-x-0.5">Buka →</span>\n            </Link>\n          </div>\n          </Card>\n        </div>\n      )}'''
+          new = '''\n          </Card>\n\n          <a\n            href="/akademik/mata-pelajaran?generate=1"\n            className="group flex items-center justify-between gap-4 rounded-xl border border-brand-200 bg-brand-50/60 px-4 py-3.5 transition hover:border-brand-300 hover:bg-brand-50"\n            data-sakala-curriculum-launcher\n          >\n            <div className="flex min-w-0 items-center gap-3">\n              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-100 text-brand-700">\n                <span aria-hidden="true" className="text-base">🧠</span>\n              </div>\n              <div className="min-w-0">\n                <p className="text-[13px] font-semibold text-ink-900">Generate Kurikulum</p>\n                <p className="text-[12px] text-ink-500">Buat kurikulum dari sumber regulasi resmi tanpa mengubah kurikulum sekolah secara otomatis.</p>\n              </div>\n            </div>\n            <span className="shrink-0 text-[12px] font-semibold text-brand-700 transition group-hover:translate-x-0.5">Buka →</span>\n          </a>\n        </div>\n      )}'''
+          if old not in s:
+              raise SystemExit('Expected launcher block not found; refusing unsafe mutation')
+          s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+      - name: Verify build
+        run: |
+          npm install
+          npm run build
+      - name: Commit verified repair and remove workflow
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add 'app/(shell)/akademik/AkademikWorkspace.tsx'
+          git rm .github/workflows/fix-academic-launcher-parser.yml
+          git commit -m 'fix: repair curriculum launcher JSX structure'
+          git push origin HEAD:main
