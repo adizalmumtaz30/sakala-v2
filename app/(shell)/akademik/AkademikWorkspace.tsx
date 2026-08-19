@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import {
   Plus,
   CheckCircle2,
@@ -547,6 +548,25 @@ export default function AkademikWorkspace({
                 </tbody>
               </table>
             )}
+
+
+          <div data-sakala-curriculum-launcher className="border-t border-border px-5 py-4">
+            <Link
+              href="/akademik/mata-pelajaran?generate=1"
+              className="group flex items-center justify-between gap-4 rounded-xl border border-brand-200 bg-brand-50/60 px-4 py-3.5 transition hover:border-brand-300 hover:bg-brand-50"
+            >
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-100 text-brand-700">
+                  <span aria-hidden="true" className="text-base">🧠</span>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[13px] font-semibold text-ink-900">Generate Kurikulum</p>
+                  <p className="text-[12px] text-ink-500">Buat kurikulum dari sumber regulasi resmi tanpa mengubah kurikulum sekolah secara otomatis.</p>
+                </div>
+              </div>
+              <span className="shrink-0 text-[12px] font-semibold text-brand-700 transition group-hover:translate-x-0.5">Buka →</span>
+            </Link>
+          </div>
           </Card>
         </div>
       )}
