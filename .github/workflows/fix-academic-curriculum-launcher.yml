@@ -1,0 +1,56 @@
+name: Fix Academic Curriculum Launcher
+
+on:
+  push:
+    branches:
+      - fix/academic-curriculum-launcher
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch AkademikWorkspace
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("app/(shell)/akademik/AkademikWorkspace.tsx")
+          text = path.read_text(encoding="utf-8")
+
+          if "from \"next/link\"" not in text:
+              text = text.replace(
+                  'import { useState, useTransition } from "react";\n',
+                  'import { useState, useTransition } from "react";\nimport Link from "next/link";\n',
+                  1,
+              )
+
+          if "data-sakala-curriculum-launcher" not in text:
+              marker = '          {/* Bagian 8.2 / 77 — Active Academic Context */}'
+              start = text.index(marker)
+              card_end = text.index('          </Card>\n        </div>\n      )}', start)
+
+              launcher = '''\n\n          <div data-sakala-curriculum-launcher className="border-t border-border px-5 py-4">\n            <Link\n              href="/akademik/mata-pelajaran?generate=1"\n              className="group flex items-center justify-between gap-4 rounded-xl border border-brand-200 bg-brand-50/60 px-4 py-3.5 transition hover:border-brand-300 hover:bg-brand-50"\n            >\n              <div className="flex min-w-0 items-center gap-3">\n                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-100 text-brand-700">\n                  <span aria-hidden="true" className="text-base">🧠</span>\n                </div>\n                <div className="min-w-0">\n                  <p className="text-[13px] font-semibold text-ink-900">Generate Kurikulum</p>\n                  <p className="text-[12px] text-ink-500">Buat kurikulum dari sumber regulasi resmi tanpa mengubah kurikulum sekolah secara otomatis.</p>\n                </div>\n              </div>\n              <span className="shrink-0 text-[12px] font-semibold text-brand-700 transition group-hover:translate-x-0.5">Buka →</span>\n            </Link>\n          </div>\n'''
+              text = text[:card_end] + launcher + text[card_end:]
+
+          path.write_text(text, encoding="utf-8")
+
+          if "data-sakala-curriculum-launcher" not in text:
+              raise SystemExit("Launcher patch failed")
+
+      - name: Commit patch and remove one-shot workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "app/(shell)/akademik/AkademikWorkspace.tsx"
+          git rm .github/workflows/fix-academic-curriculum-launcher.yml
+          git commit -m "fix: place curriculum launcher under academic context"
+          git push origin HEAD
