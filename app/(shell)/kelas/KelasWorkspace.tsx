@@ -6,8 +6,20 @@ import type { Kelas, Semester, StatusAktif } from "@/lib/domain/kelas";
 import { createKelasAction, updateKelasAction, deleteKelasAction } from "./actions";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
+import SelectField from "@/components/ui/SelectField";
 import Modal from "@/components/ui/Modal";
 import { Card, Badge, EmptyState } from "@/components/ui/primitives";
+
+const TINGKAT_OPTIONS = ["VII", "VIII", "IX"].map((value) => ({ value, label: value }));
+const YEAR_OPTIONS = ["2025/2026", "2026/2027", "2027/2028"].map((value) => ({ value, label: value }));
+const SEMESTER_OPTIONS = [
+  { value: "ganjil", label: "Ganjil" },
+  { value: "genap", label: "Genap" },
+];
+const STATUS_OPTIONS = [
+  { value: "aktif", label: "Aktif" },
+  { value: "nonaktif", label: "Tidak Aktif" },
+];
 
 export default function KelasWorkspace({ initialData }: { initialData: Kelas[] }) {
   const [data, setData] = useState<Kelas[]>(initialData);
@@ -72,11 +84,11 @@ export default function KelasWorkspace({ initialData }: { initialData: Kelas[] }
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editing ? "Ubah Kelas" : "Tambah Kelas"}>
         <form action={handleSubmit} className="flex flex-col gap-4">
-          <Input name="tingkat" label="Tingkat" placeholder="cth. VIII" defaultValue={editing?.tingkat} error={formError ?? undefined} required />
-          <Input name="namaRombel" label="Nama Kelas" placeholder="cth. VIII-A" defaultValue={editing?.namaRombel} required />
-          <Input name="tahunAjaran" label="Tahun Ajaran" placeholder="cth. 2025/2026" defaultValue={editing?.tahunAjaran} required />
-          <div className="flex flex-col gap-1.5"><label className="text-[12.5px] font-medium text-ink-700">Semester</label><select name="semester" defaultValue={editing?.semester ?? "ganjil"} className="h-11 rounded-xl border border-border bg-surface px-3.5 text-[13.5px] text-ink-900 outline-none focus:border-brand-600/50 focus:ring-2 focus:ring-brand-600/15"><option value="ganjil">Ganjil</option><option value="genap">Genap</option></select></div>
-          <div className="flex flex-col gap-1.5"><label className="text-[12.5px] font-medium text-ink-700">Status</label><select name="status" defaultValue={editing?.status ?? "aktif"} className="h-11 rounded-xl border border-border bg-surface px-3.5 py-2 text-[13.5px] text-ink-900 outline-none focus:border-brand-600/50 focus:ring-2 focus:ring-brand-600/15"><option value="aktif">Aktif</option><option value="nonaktif">Tidak Aktif</option></select></div>
+          <SelectField name="tingkat" label="Tingkat *" defaultValue={editing?.tingkat ?? ""} options={TINGKAT_OPTIONS} placeholder="Klik untuk memilih tingkat" required error={formError ?? undefined} />
+          <Input name="namaRombel" label="Nama Kelas *" placeholder="cth. VIII-A" defaultValue={editing?.namaRombel} required />
+          <SelectField name="tahunAjaran" label="Tahun Ajaran *" defaultValue={editing?.tahunAjaran ?? ""} options={YEAR_OPTIONS} placeholder="Klik untuk memilih tahun ajaran" required />
+          <SelectField name="semester" label="Semester *" defaultValue={editing?.semester ?? "ganjil"} options={SEMESTER_OPTIONS} required />
+          <SelectField name="status" label="Status *" defaultValue={editing?.status ?? "aktif"} options={STATUS_OPTIONS} required />
           <div className="mt-2 flex justify-end gap-2"><Button type="button" variant="secondary" onClick={() => setModalOpen(false)}>Batal</Button><Button type="submit" loading={isPending}>{editing ? "Simpan Perubahan" : "Simpan"}</Button></div>
         </form>
       </Modal>
