@@ -1,0 +1,48 @@
+name: Repair AkademikWorkspace JSX
+
+on:
+  push:
+    branches:
+      - fix/academic-workspace-structural-jsx-v2
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Close malformed School Profile comment only
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('app/(shell)/akademik/AkademikWorkspace.tsx')
+          s = p.read_text(encoding='utf-8')
+          old = '          {/* Bagian 8.1 / 78 — School Profile */'
+          new = '          {/* Bagian 8.1 / 78 — School Profile */}'
+          if old not in s:
+              raise SystemExit('Expected malformed School Profile comment was not found; refusing to modify source.')
+          if s.count(old) != 1:
+              raise SystemExit('Unexpected duplicate malformed comment; refusing to modify source.')
+          s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+      - name: Install dependencies
+        run: npm install
+      - name: Production build
+        run: npm run build
+      - name: Commit verified repair
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add 'app/(shell)/akademik/AkademikWorkspace.tsx'
+          git rm '.github/workflows/repair-akademik-jsx.yml'
+          git commit -m 'fix: close malformed AkademikWorkspace JSX comment'
+          git push origin HEAD
