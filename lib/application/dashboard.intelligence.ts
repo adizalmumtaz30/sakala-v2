@@ -5,7 +5,7 @@ import { auditLogRepository } from "@/lib/data-access/auditLog.repository";
 import type { HariSekolah } from "@/lib/domain/jamPelajaran";
 
 export interface DashboardHeatmapDay { day: HariSekolah; label: string; total: number; level: 0|1|2|3|4; }
-export interface DashboardAgendaEntry { id:string; dayLabel:string; time:string; subject:string; teacher:string; className:string; room:string|null; }
+export interface DashboardAgendaEntry { id:string; dayLabel:string; time:string; subject:string; teacher:string; teacherId:string|null; className:string; room:string|null; }
 export interface DashboardActivityEntry { id:string; action:string; entityType:string; entityLabel:string|null; createdAt:string; }
 
 const DAYS:HariSekolah[]=["senin","selasa","rabu","kamis","jumat","sabtu"];
@@ -17,30 +17,12 @@ function todayIndex(){
 }
 
 const ENTITY_LABEL:Record<string,string>={
-  jadwal:"Jadwal",
-  schedule:"Jadwal",
-  schedule_assignment:"Jadwal",
-  guru:"Guru",
-  mata_pelajaran:"Mata Pelajaran",
-  kelas:"Kelas",
-  ruangan:"Ruangan",
-  target_jp:"Target JP",
-  pembagian_mengajar:"Pembagian Mengajar",
-  akademik:"Akademik",
+  jadwal:"Jadwal", schedule:"Jadwal", schedule_assignment:"Jadwal", guru:"Guru", mata_pelajaran:"Mata Pelajaran",
+  kelas:"Kelas", ruangan:"Ruangan", target_jp:"Target JP", pembagian_mengajar:"Pembagian Mengajar", akademik:"Akademik",
 };
 const ACTION_LABEL:Record<string,string>={
-  create:"Menambahkan",
-  created:"Menambahkan",
-  insert:"Menambahkan",
-  update:"Memperbarui",
-  updated:"Memperbarui",
-  edit:"Memperbarui",
-  delete:"Menghapus",
-  deleted:"Menghapus",
-  remove:"Menghapus",
-  import:"Mengimpor",
-  commit:"Menetapkan",
-  committed:"Menetapkan",
+  create:"Menambahkan", created:"Menambahkan", insert:"Menambahkan", update:"Memperbarui", updated:"Memperbarui", edit:"Memperbarui",
+  delete:"Menghapus", deleted:"Menghapus", remove:"Menghapus", import:"Mengimpor", commit:"Menetapkan", committed:"Menetapkan",
 };
 
 function humanizeActivity(action:string, entityType:string, entityLabel:string|null){
@@ -74,8 +56,11 @@ export async function getDashboardIntelligence(supabase:SupabaseClient, contextI
   const current=todayIndex();
   const upcoming=committed.map(a=>({a,distance:(DAYS.indexOf(a.day)-current+7)%7})).sort((x,y)=>x.distance-y.distance||x.a.periodStart-y.a.periodStart).slice(0,6).map(({a})=>{
     const s=slots.get(`${a.day}:${a.periodStart}`);
-    return {id:a.id,dayLabel:LABEL[a.day],time:s?`${s.waktuMulai}–${s.waktuSelesai}`:`Jam ke-${a.periodStart}`,subject:mapel.get(a.subjectId)??"Mata pelajaran",teacher:guru.get(a.teacherId)??"Guru",className:kelas.get(a.classId)??"Kelas",room:a.roomId?ruang.get(a.roomId)??null:null};
+    const teacherName=guru.get(a.teacherId) ?? "Guru";
+    const className=kelas.get(a.classId) ?? "Kelas";
+    const subject=mapel.get(a.subjectId) ?? "Mata pelajaran";
+    return {id:a.id,dayLabel:LABEL[a.day],time:s?`${s.waktuMulai}–${s.waktuSelesai}`:`Jam ke-${a.periodStart}`,subject,teacher:teacherName,teacherId:guru.has(a.teacherId)?a.teacherId:null,className,room:a.roomId?ruang.get(a.roomId)??null:null};
   });
-  const recentActivity=audit.items.map(i=>({id:i.id,action:humanizeActivity(i.action,i.entityType,i.entityLabel),entityType:i.entityType,entityLabel:null,createdAt:i.createdAt}));
+  const recentActivity=audit.items.map(i=>({id:i.id,action:humanizeActivity(i.action,i.entityType,i.entityLabel),entityType:i.entityType,entityLabel:i.entityLabel,createdAt:i.createdAt}));
   return {heatmap,upcomingAgenda:upcoming,recentActivity};
 }
