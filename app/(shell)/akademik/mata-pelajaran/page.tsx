@@ -9,7 +9,8 @@ import ListControls from "@/components/ui/ListControls";
 
 // Keep this route fresh so the Curriculum Intelligence launcher is present on direct loads/reloads.
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
+// Do not export revalidate from this client module. `revalidate` is a server route config and
+// exporting it from a "use client" page is interpreted as a client function during prerender.
 
 type Source = { id: string; institution: string; name: string; official_url: string; status: string };
 type Version = { id: string; source_id: string; curriculum_name: string; regulation_number: string | null; regulation_year: number | null; regulation_title: string | null; effective_status: string; document_url: string | null; verification_status: string };
