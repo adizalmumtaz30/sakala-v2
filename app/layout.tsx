@@ -20,7 +20,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }}
         />
       </head>
-      <body className={`${inter.variable} font-sans antialiased text-ink-900`}>{children}</body>
+      <body className={`${inter.variable} font-sans antialiased text-ink-900`}>
+        <a className="skip-link" href="#main-content">Lewati ke konten utama</a>
+        <div id="main-content">{children}</div>
+      </body>
     </html>
   );
 }
