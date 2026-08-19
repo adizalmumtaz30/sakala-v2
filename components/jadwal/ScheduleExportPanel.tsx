@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { BookOpen, CalendarDays, Download, User, Users } from "lucide-react";
+import { BookOpen, CalendarDays, User, Users } from "lucide-react";
 import type { ScheduleAssignment } from "@/lib/domain/scheduleAssignment";
 import type { Guru } from "@/lib/domain/guru";
 import type { Kelas } from "@/lib/domain/kelas";
@@ -63,7 +63,7 @@ export default function ScheduleExportPanel({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-end gap-3 rounded-card border border-border bg-surface p-4">
-        <div className="flex items-center gap-2 text-[12px] font-semibold text-ink-700"><Download size={15} /> Export Jadwal</div>
+        <div className="flex items-center gap-2 text-[12px] font-semibold text-ink-700">Jadwal</div>
         <div className="flex overflow-hidden rounded-xl border border-border">
           {(["mingguan", "harian", "kelas", "guru", "mapel"] as const).map((m) => (
             <button key={m} onClick={() => setMode(m)} className={`h-10 px-3 text-[12px] font-medium capitalize ${mode === m ? "bg-brand-600 text-white" : "bg-surface text-ink-700 hover:bg-surface-muted"}`}>
@@ -71,29 +71,30 @@ export default function ScheduleExportPanel({
             </button>
           ))}
         </div>
+        <ReportExportBar
+          title={`Jadwal ${label}`}
+          context={`${contextLabel} · ${label}`}
+          schoolName={schoolName}
+          periodLabel={contextLabel}
+          filterLabel={filterLabel}
+          columns={columns}
+          rows={rows}
+          landscape
+          compact
+        />
         {mode === "harian" && (
-          <select value={day} onChange={(e) => setDay(e.target.value as HariSekolah)} className="h-10 rounded-xl border border-border bg-surface px-3 text-[12.5px]">
+          <select aria-label="Pilih hari" value={day} onChange={(e) => setDay(e.target.value as HariSekolah)} className="h-10 rounded-xl border border-border bg-surface px-3 text-[12.5px]">
             {URUTAN_HARI.filter((d) => activeDays.includes(d)).map((d) => <option key={d} value={d}>{formatHari(d)}</option>)}
           </select>
         )}
         {(mode === "kelas" || mode === "guru" || mode === "mapel") && (
-          <select value={activeEntity} onChange={(e) => setEntityId(e.target.value)} className="h-10 min-w-[190px] rounded-xl border border-border bg-surface px-3 text-[12.5px]">
+          <select aria-label={mode === "kelas" ? "Pilih kelas" : mode === "guru" ? "Pilih guru" : "Pilih mata pelajaran"} value={activeEntity} onChange={(e) => setEntityId(e.target.value)} className="h-10 min-w-[190px] rounded-xl border border-border bg-surface px-3 text-[12.5px]">
             {entityOptions.length === 0 && <option value="">Belum ada data</option>}
             {entityOptions.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
           </select>
         )}
         <span className="ml-auto text-[11.5px] text-ink-400">{label} · {scoped.length} jadwal · {contextLabel}</span>
       </div>
-      <ReportExportBar
-        title={`Jadwal ${label}`}
-        context={`${contextLabel} · ${label}`}
-        schoolName={schoolName}
-        periodLabel={contextLabel}
-        filterLabel={filterLabel}
-        columns={columns}
-        rows={rows}
-        landscape
-      />
     </div>
   );
 }
