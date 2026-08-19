@@ -82,14 +82,27 @@ export default function Header({
         {activeContextLabel ?? "Konteks belum diatur"}
       </Link>
 
-      <div className="ml-auto flex items-center gap-3">
-        <div className={`hidden items-center gap-1.5 px-2 text-[12px] font-medium md:flex ${online ? "text-emerald" : "text-rose"}`}>
+      <div className="ml-auto flex items-center gap-2">
+        <div className={`hidden items-center gap-1.5 px-2 text-[12px] font-medium md:flex ${online ? "text-emerald" : "text-rose"}`} aria-label={online ? "Status online" : "Status offline"}>
           <span className="relative flex h-2 w-2">
             {online && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald opacity-60" />}
             <span className={`relative inline-flex h-2 w-2 rounded-full ${online ? "bg-emerald" : "bg-rose"}`} />
           </span>
           {online ? <Wifi size={14} /> : <WifiOff size={14} />} {online ? "Online" : "Offline"}
         </div>
+
+        <button
+          type="button"
+          onClick={toggleTheme}
+          className="group relative flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-surface text-ink-500 shadow-sm transition-all duration-180 hover:border-brand-600/30 hover:bg-surface-muted hover:text-ink-700 focus:outline-none"
+          aria-label={dark ? "Gunakan mode terang" : "Gunakan mode gelap"}
+          title={dark ? "Mode terang" : "Mode gelap"}
+        >
+          {dark ? <Sun size={17} strokeWidth={1.9} /> : <Moon size={17} strokeWidth={1.9} />}
+          <span className="pointer-events-none absolute right-0 top-full z-30 mt-2 hidden whitespace-nowrap rounded-lg border border-border bg-surface px-2.5 py-1.5 text-[11px] font-medium text-ink-700 shadow-lg group-hover:block">
+            {dark ? "Mode terang" : "Mode gelap"}
+          </span>
+        </button>
 
         <button className="relative rounded-full p-2 text-ink-500 hover:bg-surface-muted" aria-label="Notifikasi">
           <Bell size={18} />
@@ -100,6 +113,7 @@ export default function Header({
             onClick={() => setMenuOpen((v) => !v)}
             className="flex items-center gap-2 rounded-xl py-1.5 pl-1.5 pr-2 transition-colors hover:bg-surface-muted"
             aria-expanded={menuOpen}
+            aria-label="Buka menu profil"
           >
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-50 text-[12px] font-bold text-brand-700 ring-2 ring-surface ring-offset-1 ring-offset-brand-100">
               {schoolProfileNama ? initialsOf(schoolProfileNama) : "?"}
