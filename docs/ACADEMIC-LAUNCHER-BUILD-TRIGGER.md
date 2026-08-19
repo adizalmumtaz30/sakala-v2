@@ -1,0 +1,1 @@
+Temporary build verification trigger. The one-shot workflow removes itself after verification.
