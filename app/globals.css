@@ -16,6 +16,10 @@ html, body {
   color: var(--color-ink-900);
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   font-variant-numeric: proportional-nums;
   -webkit-font-smoothing: antialiased;
@@ -24,13 +28,74 @@ body {
 
 button, input, select, textarea { font: inherit; }
 
-:where(button, a, input, select, textarea):focus-visible {
+/* Global keyboard-visible focus language. Never remove this with outline-none. */
+:where(button, a, input, select, textarea, [role="button"], [role="menuitem"], [tabindex]:not([tabindex="-1"])):focus-visible {
   outline: 2px solid var(--color-brand);
-  outline-offset: 2px;
+  outline-offset: 3px;
   box-shadow: var(--focus-ring);
 }
 
+:where(button, a, [role="button"], [role="menuitem"]):focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Touch-safe defaults for interactive controls without forcing dense data cells. */
+:where(button, [role="button"], [role="menuitem"], input[type="checkbox"], input[type="radio"]) {
+  min-height: 44px;
+}
+
+:where(button, [role="button"], [role="menuitem"]) {
+  touch-action: manipulation;
+}
+
 :where(input, select, textarea) { border-radius: var(--radius-input); }
+
+:where(input, select, textarea)[aria-invalid="true"] {
+  border-color: var(--color-danger, #e11d48);
+}
+
+:where(input, select, textarea)[disabled],
+:where(button, [role="button"])[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+/* Screen-reader-only utility. Remains available to assistive technology. */
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+/* Skip navigation: keyboard users reach the workspace immediately. */
+.skip-link {
+  position: fixed;
+  left: 12px;
+  top: 12px;
+  z-index: 9999;
+  transform: translateY(-160%);
+  padding: 10px 14px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 10px;
+  background: var(--color-surface);
+  color: var(--color-ink-900);
+  box-shadow: var(--shadow-soft);
+  transition: transform 180ms var(--easing);
+}
+
+.skip-link:focus-visible {
+  transform: translateY(0);
+}
+
+/* Keep status text available to screen readers without adding visual noise. */
+[role="status"], [role="alert"] {
+  overflow-wrap: anywhere;
+}
 
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: var(--color-border-strong); border-radius: 999px; }
@@ -47,7 +112,7 @@ button, input, select, textarea { font: inherit; }
   position: absolute;
   inset: 0;
   transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-ink-0, #fff) 18%, transparent), transparent);
   animation: shimmer 1.4s infinite var(--easing);
 }
 @keyframes shimmer { 100% { transform: translateX(100%); } }
@@ -124,7 +189,24 @@ main > .flex.flex-col.gap-6 > .flex.gap-1.rounded-xl.border.border-border.bg-sur
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  html { scroll-behavior: auto !important; }
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (forced-colors: active) {
+  :where(button, a, input, select, textarea, [role="button"], [role="menuitem"]):focus-visible {
+    outline: 2px solid Highlight;
+    box-shadow: none;
+  }
+
+  :where(button, a, [role="button"], [role="menuitem"]) {
+    forced-color-adjust: auto;
+  }
 }
 
 @keyframes splashLogoIn { from { opacity: 0; transform: scale(.86); } to { opacity: 1; transform: scale(1); } }
