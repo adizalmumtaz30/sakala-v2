@@ -482,7 +482,6 @@ export default function AkademikWorkspace({
             )}
           </Card>
 
-          {/* Bagian 8.2 / 77 — Active Academic Context */}
           <Card className="p-0">
             <div className="flex items-center justify-between gap-3 px-5 pt-4 pb-2.5">
               <div className="flex items-center gap-3">
