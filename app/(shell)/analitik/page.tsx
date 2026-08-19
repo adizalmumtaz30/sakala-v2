@@ -38,18 +38,20 @@ export default async function AnalitikPage() {
     ];
 
     return (
-      <div className="mx-auto flex max-w-3xl flex-col gap-4 pb-12 pt-6">
+      <div className="w-full pb-12">
         <AnalitikWorkspace activeContextLabel={contextLabel} view={view} />
-        <ReportExportBar
-          title="Analitik SAKALA"
-          context={contextLabel}
-          schoolName={schoolProfile?.namaSekolah}
-          periodLabel={contextLabel}
-          filterLabel="Ringkasan seluruh dashboard analitik"
-          columns={columns}
-          rows={rows}
-          landscape
-        />
+        <div className="mx-auto mt-5 w-full max-w-5xl">
+          <ReportExportBar
+            title="Analitik SAKALA"
+            context={contextLabel}
+            schoolName={schoolProfile?.namaSekolah}
+            periodLabel={contextLabel}
+            filterLabel="Ringkasan seluruh dashboard analitik"
+            columns={columns}
+            rows={rows}
+            landscape
+          />
+        </div>
       </div>
     );
   } catch {
