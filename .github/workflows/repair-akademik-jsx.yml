@@ -1,0 +1,60 @@
+name: Repair AkademikWorkspace JSX (one-time)
+
+on:
+  push:
+    branches:
+      - fix/akademik-jsx-minimal
+
+permissions:
+  contents: write
+
+jobs:
+  repair-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repair branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply exact one-line repair
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("app/(shell)/akademik/AkademikWorkspace.tsx")
+          text = path.read_text(encoding="utf-8")
+          bad = "{/* Bagian 8.1 / 78 — School Profile */"
+          good = "{/* Bagian 8.1 / 78 — School Profile */}"
+          count = text.count(bad)
+
+          if count != 1:
+              raise SystemExit(f"ABORT: expected exactly 1 malformed comment, found {count}")
+
+          text = text.replace(bad, good, 1)
+          path.write_text(text, encoding="utf-8")
+
+      - name: Verify minimal diff
+        shell: bash
+        run: |
+          git diff --check
+          git diff -- app/'(shell)'/akademik/AkademikWorkspace.tsx
+          test "$(git diff --name-only | wc -l | tr -d ' ')" = "1"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript check
+        run: npx tsc --noEmit
+
+      - name: Production build
+        run: npm run build
+
+      - name: Commit verified repair
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- app/'(shell)'/akademik/AkademikWorkspace.tsx
+          git commit -m "fix: close malformed AkademikWorkspace JSX comment"
+          git push
