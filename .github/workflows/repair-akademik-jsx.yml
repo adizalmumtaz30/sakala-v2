@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - fix/academic-workspace-structural-jsx-v2
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -31,18 +34,19 @@ jobs:
               raise SystemExit('Expected malformed School Profile comment was not found; refusing to modify source.')
           if s.count(old) != 1:
               raise SystemExit('Unexpected duplicate malformed comment; refusing to modify source.')
-          s = s.replace(old, new, 1)
-          p.write_text(s, encoding='utf-8')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
       - name: Install dependencies
         run: npm install
       - name: Production build
         run: npm run build
       - name: Commit verified repair
+        if: github.event_name == 'push'
         shell: bash
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add 'app/(shell)/akademik/AkademikWorkspace.tsx'
           git rm '.github/workflows/repair-akademik-jsx.yml'
+          git rm -f 'docs/ACADEMIK-JSX-VERIFY.trigger' || true
           git commit -m 'fix: close malformed AkademikWorkspace JSX comment'
           git push origin HEAD
