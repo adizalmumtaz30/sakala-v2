@@ -6,6 +6,10 @@ import { BrainCircuit, CheckCircle2, ExternalLink, ShieldAlert } from "lucide-re
 import { adoptCurriculumItemsAction, listCurriculumIntelligenceAction } from "./curriculum-actions";
 import type { CurriculumInstitution } from "@/lib/domain/curriculumIntelligence";
 
+// Keep this route fresh so the Curriculum Intelligence launcher is present on direct loads/reloads.
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 // Curriculum Intelligence launcher: production entry point for official curriculum review.
 
 type Source = { id: string; institution: string; name: string; official_url: string; status: string };
