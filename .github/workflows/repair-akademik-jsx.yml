@@ -1,9 +1,15 @@
-name: Repair AkademikWorkspace JSX (one-time)
+name: AkademikWorkspace Repair and Build Gate
 
 on:
   push:
     branches:
       - fix/akademik-jsx-minimal
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "app/(shell)/akademik/AkademikWorkspace.tsx"
+      - ".github/workflows/repair-akademik-jsx.yml"
 
 permissions:
   contents: write
@@ -15,9 +21,10 @@ jobs:
       - name: Checkout repair branch
         uses: actions/checkout@v4
         with:
+          ref: fix/akademik-jsx-minimal
           fetch-depth: 0
 
-      - name: Apply exact one-line repair
+      - name: Apply exact repair only when needed
         shell: python
         run: |
           from pathlib import Path
@@ -28,18 +35,26 @@ jobs:
           good = "{/* Bagian 8.1 / 78 — School Profile */}"
           count = text.count(bad)
 
-          if count != 1:
-              raise SystemExit(f"ABORT: expected exactly 1 malformed comment, found {count}")
+          if count > 1:
+              raise SystemExit(f"ABORT: expected 0 or 1 malformed comment, found {count}")
 
-          text = text.replace(bad, good, 1)
-          path.write_text(text, encoding="utf-8")
+          if count == 1:
+              path.write_text(text.replace(bad, good, 1), encoding="utf-8")
+              print("Applied exactly one JSX comment repair")
+          else:
+              print("Malformed comment already repaired; no source mutation needed")
 
-      - name: Verify minimal diff
+      - name: Verify source change is minimal
         shell: bash
         run: |
           git diff --check
+          changed=$(git diff --name-only | wc -l | tr -d ' ')
+          if [ "$changed" -gt 1 ]; then
+            echo "ABORT: unexpected files changed:"
+            git diff --name-only
+            exit 1
+          fi
           git diff -- app/'(shell)'/akademik/AkademikWorkspace.tsx
-          test "$(git diff --name-only | wc -l | tr -d ' ')" = "1"
 
       - name: Install dependencies
         run: npm ci
@@ -50,11 +65,20 @@ jobs:
       - name: Production build
         run: npm run build
 
-      - name: Commit verified repair
+      - name: Commit verified source repair
+        if: github.event_name == 'pull_request' && github.head_ref == 'fix/akademik-jsx-minimal' && github.actor != 'github-actions[bot]'
         shell: bash
         run: |
+          if git diff --quiet -- app/'(shell)'/akademik/AkademikWorkspace.tsx; then
+            echo "No source repair needed; nothing to commit."
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- app/'(shell)'/akademik/AkademikWorkspace.tsx
           git commit -m "fix: close malformed AkademikWorkspace JSX comment"
-          git push
+          git push origin HEAD:fix/akademik-jsx-minimal
+
+      - name: Remove one-time repair workflow after verified source commit
+        if: github.event_name == 'pull_request' && github.head_ref == 'fix/akademik-jsx-minimal' && github.actor == 'github-actions[bot]'
+        run: echo "Repair workflow remains until the PR is merged; no self-mutating workflow deletion is performed."
