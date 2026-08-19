@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { Users, BookOpen, DoorOpen, School, ClipboardCheck, CalendarCheck2, ArrowRight } from "lucide-react";
+import { Users, BookOpen, DoorOpen, School, ClipboardCheck, CalendarCheck2, ArrowRight, CalendarDays, Activity, Clock3 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getDashboardSummary, type DashboardKeyMetrics, type DashboardJpInsight, type DashboardWorkloadEntry } from "@/lib/application/dashboard.usecases";
+import { getDashboardIntelligence, type DashboardHeatmapDay, type DashboardAgendaEntry, type DashboardActivityEntry } from "@/lib/application/dashboard.intelligence";
 import { formatContextLabel } from "@/lib/domain/academicContext";
 import { Card, Badge, EmptyState, ErrorState } from "@/components/ui/primitives";
 
@@ -10,192 +11,47 @@ export default async function DashboardPage() {
     const supabase = await createClient();
     const summary = await getDashboardSummary(supabase);
     const schoolName = summary.schoolProfile?.namaSekolah ?? "Sekolah";
+    const intelligence = summary.activeContext
+      ? await getDashboardIntelligence(supabase, summary.activeContext.id, await getSafeList(supabase, "guru"), await getSafeList(supabase, "mata_pelajaran"), await getSafeList(supabase, "kelas"), await getSafeList(supabase, "ruangan"))
+      : { heatmap: [], upcomingAgenda: [], recentActivity: [] };
 
     return (
-      <div className="mx-auto flex max-w-4xl flex-col gap-6 pt-6">
-        {/* Academic Context + Greeting (Bagian 31.1) */}
+      <div className="mx-auto flex max-w-5xl flex-col gap-6 pt-6">
         <div className="flex items-center gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl2 bg-brand-50 text-brand-600 shadow-soft">
-            <School size={22} strokeWidth={2.25} />
-          </div>
-          <div>
-            <p className="text-[12.5px] font-medium text-brand-600">
-              {summary.activeContext ? formatContextLabel(summary.activeContext) : "Belum ada konteks akademik aktif"}
-            </p>
-            <h1 className="text-[24px] font-bold tracking-tight text-ink-900">Selamat datang kembali</h1>
-            <p className="text-[13px] text-ink-500">Ringkasan kondisi {schoolName} saat ini.</p>
-          </div>
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl2 bg-brand-50 text-brand-600 shadow-soft"><School size={22} strokeWidth={2.25} /></div>
+          <div><p className="text-[12.5px] font-medium text-brand-600">{summary.activeContext ? formatContextLabel(summary.activeContext) : "Belum ada konteks akademik aktif"}</p><h1 className="text-[24px] font-bold tracking-tight text-ink-900">Selamat datang kembali</h1><p className="text-[13px] text-ink-500">Ringkasan kondisi {schoolName} saat ini.</p></div>
         </div>
-
-        {!summary.activeContext ? (
-          <Card>
-            <EmptyState
-              title="Belum ada konteks akademik aktif"
-              description="Aktifkan satu Tahun Pelajaran/Semester di halaman Akademik dulu supaya Dashboard bisa menampilkan ringkasan jadwal dan JP."
-              action={
-                <Link href="/akademik" className="text-[12.5px] font-medium text-brand-600 hover:text-brand-700">
-                  Buka Akademik →
-                </Link>
-              }
-            />
-          </Card>
-        ) : (
-          <>
-            <KeyMetrics metrics={summary.metrics} />
-            <JpInsightCard insight={summary.jpInsight} />
-            <WorkloadCard entries={summary.workloadTop} />
-          </>
-        )}
-
-        {/* Bagian 31.1 — Heatmap, Upcoming Agenda, Recent Activity SENGAJA
-            belum ada di sini: butuh data Analitik/Riwayat/Notifikasi (step
-            17-19 Build Pipeline) yang belum dibangun. Dicatat eksplisit
-            (Bagian 70) supaya tidak terkesan diam-diam dihilangkan. */}
-        <Card className="border-dashed bg-transparent">
-          <p className="text-[12px] text-ink-400">
-            Heatmap jadwal, Agenda mendatang, dan Aktivitas terbaru menyusul setelah Analitik, Riwayat, dan Notifikasi
-            dibangun (step 17-19).
-          </p>
-        </Card>
+        {!summary.activeContext ? <Card><EmptyState title="Belum ada konteks akademik aktif" description="Aktifkan satu Tahun Pelajaran/Semester di halaman Akademik dulu supaya Dashboard bisa menampilkan ringkasan jadwal dan JP." action={<Link href="/akademik" className="text-[12.5px] font-medium text-brand-600 hover:text-brand-700">Buka Akademik →</Link>} /></Card> : <>
+          <KeyMetrics metrics={summary.metrics} />
+          <JpInsightCard insight={summary.jpInsight} />
+          <WorkloadCard entries={summary.workloadTop} />
+          <div className="grid gap-4 lg:grid-cols-[1.05fr_.95fr]">
+            <HeatmapCard days={intelligence.heatmap} />
+            <AgendaCard entries={intelligence.upcomingAgenda} />
+          </div>
+          <ActivityCard entries={intelligence.recentActivity} />
+        </>}
       </div>
     );
-  } catch {
-    return (
-      <div className="mx-auto max-w-3xl pt-10">
-        <ErrorState message="Gagal memuat ringkasan Dashboard dari Supabase. Cek koneksi dan environment variable kamu." />
-      </div>
-    );
-  }
+  } catch { return <div className="mx-auto max-w-3xl pt-10"><ErrorState message="Gagal memuat ringkasan Dashboard dari Supabase. Cek koneksi dan environment variable kamu." /></div>; }
 }
 
-const METRIC_TONE: Record<string, { chip: string; icon: string }> = {
-  brand: { chip: "bg-brand-50", icon: "text-brand-600" },
-  violet: { chip: "bg-violet-50", icon: "text-violet" },
-  cyan: { chip: "bg-cyan-50", icon: "text-cyan" },
-  amber: { chip: "bg-amber-50", icon: "text-amber" },
-  emerald: { chip: "bg-emerald-50", icon: "text-emerald" },
-};
-
-function KeyMetrics({ metrics }: { metrics: DashboardKeyMetrics }) {
-  const items: { label: string; value: number; href: string; icon: React.ReactNode; tone: keyof typeof METRIC_TONE }[] = [
-    { label: "Guru Aktif", value: metrics.totalGuruAktif, href: "/guru", icon: <Users size={17} />, tone: "brand" },
-    { label: "Mata Pelajaran Aktif", value: metrics.totalMataPelajaranAktif, href: "/mata-pelajaran", icon: <BookOpen size={17} />, tone: "violet" },
-    { label: "Kelas", value: metrics.totalKelas, href: "/kelas", icon: <School size={17} />, tone: "cyan" },
-    { label: "Ruangan", value: metrics.totalRuangan, href: "/ruangan", icon: <DoorOpen size={17} />, tone: "amber" },
-    { label: "Pembagian Mengajar Aktif", value: metrics.totalPembagianMengajarAktif, href: "/pembagian-mengajar", icon: <ClipboardCheck size={17} />, tone: "emerald" },
-    { label: "Jadwal Committed", value: metrics.totalJadwalCommitted, href: "/jadwal", icon: <CalendarCheck2 size={17} />, tone: "brand" },
-  ];
-
-  return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-      {items.map((item) => {
-        const tone = METRIC_TONE[item.tone];
-        return (
-          <Link
-            key={item.label}
-            href={item.href}
-            className="group flex flex-col gap-3 rounded-card border border-border bg-surface p-4 shadow-soft transition-all hover:-translate-y-0.5 hover:border-brand-600/25 hover:shadow-float"
-          >
-            <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${tone.chip} ${tone.icon} transition-transform group-hover:scale-105`}>
-              {item.icon}
-            </span>
-            <div>
-              <span className="block text-[22px] font-bold leading-tight text-ink-900">{item.value}</span>
-              <span className="text-[11.5px] font-medium text-ink-500">{item.label}</span>
-            </div>
-          </Link>
-        );
-      })}
-    </div>
-  );
+async function getSafeList(supabase:any, kind:string){
+  const { listGuru } = await import("@/lib/application/guru.usecases");
+  const { listMataPelajaran } = await import("@/lib/application/mata-pelajaran.usecases");
+  const { listKelas } = await import("@/lib/application/kelas.usecases");
+  const { listRuangan } = await import("@/lib/application/ruangan.usecases");
+  if(kind==="guru") return listGuru(supabase); if(kind==="mata_pelajaran") return listMataPelajaran(supabase); if(kind==="kelas") return listKelas(supabase); return listRuangan(supabase);
 }
 
-const JP_STATUS_LABEL: Record<string, string> = { kosong: "Belum Mulai", sebagian: "Belum Lengkap", penuh: "Lengkap", lebih: "Melebihi Target" };
-const JP_STATUS_TONE: Record<string, "neutral" | "warning" | "success" | "danger"> = { kosong: "neutral", sebagian: "warning", penuh: "success", lebih: "danger" };
+const METRIC_TONE: Record<string,{chip:string;icon:string}>={brand:{chip:"bg-brand-50",icon:"text-brand-600"},violet:{chip:"bg-violet-50",icon:"text-violet"},cyan:{chip:"bg-cyan-50",icon:"text-cyan"},amber:{chip:"bg-amber-50",icon:"text-amber"},emerald:{chip:"bg-emerald-50",icon:"text-emerald"}};
+function KeyMetrics({metrics}:{metrics:DashboardKeyMetrics}){const items=[{label:"Guru Aktif",value:metrics.totalGuruAktif,href:"/guru",icon:<Users size={17}/>,tone:"brand"},{label:"Mata Pelajaran Aktif",value:metrics.totalMataPelajaranAktif,href:"/mata-pelajaran",icon:<BookOpen size={17}/>,tone:"violet"},{label:"Kelas",value:metrics.totalKelas,href:"/kelas",icon:<School size={17}/>,tone:"cyan"},{label:"Ruangan",value:metrics.totalRuangan,href:"/ruangan",icon:<DoorOpen size={17}/>,tone:"amber"},{label:"Pembagian Mengajar Aktif",value:metrics.totalPembagianMengajarAktif,href:"/pembagian-mengajar",icon:<ClipboardCheck size={17}/>,tone:"emerald"},{label:"Jadwal Committed",value:metrics.totalJadwalCommitted,href:"/jadwal",icon:<CalendarCheck2 size={17}/>,tone:"brand"}];return <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{items.map(item=>{const tone=METRIC_TONE[item.tone];return <Link key={item.label} href={item.href} className="group flex flex-col gap-3 rounded-card border border-border bg-surface p-4 shadow-soft transition-all hover:-translate-y-0.5 hover:border-brand-600/25 hover:shadow-float"><span className={`flex h-8 w-8 items-center justify-center rounded-lg ${tone.chip} ${tone.icon} transition-transform group-hover:scale-105`}>{item.icon}</span><div><span className="block text-[22px] font-bold leading-tight text-ink-900">{item.value}</span><span className="text-[11.5px] font-medium text-ink-500">{item.label}</span></div></Link>})}</div>}
 
-function JpInsightCard({ insight }: { insight: DashboardJpInsight }) {
-  return (
-    <Card>
-      <div className="flex items-center justify-between">
-        <h2 className="text-[14px] font-semibold text-ink-900">Kelengkapan Jadwal (Target JP)</h2>
-        <Link href="/pembagian-mengajar/target-jp" className="flex items-center gap-1 text-[12px] font-medium text-brand-600 hover:text-brand-700">
-          Lihat detail <ArrowRight size={12} />
-        </Link>
-      </div>
+const JP_STATUS_LABEL:Record<string,string>={kosong:"Belum Mulai",sebagian:"Belum Lengkap",penuh:"Lengkap",lebih:"Melebihi Target"}; const JP_STATUS_TONE:Record<string,"neutral"|"warning"|"success"|"danger">={kosong:"neutral",sebagian:"warning",penuh:"success",lebih:"danger"};
+function JpInsightCard({insight}:{insight:DashboardJpInsight}){return <Card><div className="flex items-center justify-between"><h2 className="text-[14px] font-semibold text-ink-900">Kelengkapan Jadwal (Target JP)</h2><Link href="/pembagian-mengajar/target-jp" className="flex items-center gap-1 text-[12px] font-medium text-brand-600">Lihat detail <ArrowRight size={12}/></Link></div>{insight.totalKombinasi===0?<p className="mt-3 text-[12.5px] text-ink-400">Belum ada Pembagian Mengajar aktif untuk konteks ini.</p>:<><div className="mt-3 flex items-end gap-2"><span className={`text-[28px] font-bold ${insight.completionPercent>=100?"text-emerald":insight.completionPercent>=50?"text-ink-900":"text-amber"}`}>{insight.completionPercent}%</span><span className="pb-1 text-[12px] text-ink-400">dari {insight.totalKombinasi} kombinasi Guru+Mapel+Kelas</span></div><div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-surface-muted"><div className={`h-full rounded-full transition-all ${insight.completionPercent>=100?"bg-emerald":"bg-brand-600"}`} style={{width:`${Math.min(insight.completionPercent,100)}%`}}/></div><div className="mt-4 flex flex-wrap gap-2">{(Object.keys(insight.countByStatus) as (keyof typeof insight.countByStatus)[]).map(key=><Badge key={key} tone={JP_STATUS_TONE[key]}>{JP_STATUS_LABEL[key]}: {insight.countByStatus[key]}</Badge>)}</div></>}</Card>}
+function WorkloadCard({entries}:{entries:DashboardWorkloadEntry[]}){return <Card><div className="flex items-center justify-between"><h2 className="text-[14px] font-semibold text-ink-900">Beban Mengajar Tertinggi</h2><Link href="/guru" className="flex items-center gap-1 text-[12px] font-medium text-brand-600">Lihat semua Guru <ArrowRight size={12}/></Link></div>{entries.length===0?<p className="mt-3 text-[12.5px] text-ink-400">Belum ada jadwal committed untuk dihitung bebannya.</p>:<div className="mt-4 flex flex-col gap-3">{entries.map((entry,i)=>{const max=Math.max(...entries.map(e=>e.totalJamMengajar),1);return <div key={entry.guruId} className="flex items-center gap-3"><span className="w-4 shrink-0 text-[11px] font-mono text-ink-300">{i+1}</span><div className="flex-1"><div className="flex items-baseline justify-between"><span className="text-[13px] text-ink-900">{entry.namaGuru}</span><span className="text-[12px] font-medium tabular-nums text-ink-500">{entry.totalJamMengajar} JP/minggu</span></div><div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-surface-muted"><div className="h-full rounded-full bg-brand-600/70" style={{width:`${Math.max((entry.totalJamMengajar/max)*100,4)}%`}}/></div></div></div>})}</div>}</Card>}
 
-      {insight.totalKombinasi === 0 ? (
-        <p className="mt-3 text-[12.5px] text-ink-400">Belum ada Pembagian Mengajar aktif untuk konteks ini.</p>
-      ) : (
-        <>
-          <div className="mt-3 flex items-end gap-2">
-            <span
-              className={`text-[28px] font-bold ${
-                insight.completionPercent >= 100
-                  ? "text-emerald"
-                  : insight.completionPercent >= 50
-                    ? "text-ink-900"
-                    : "text-amber"
-              }`}
-            >
-              {insight.completionPercent}%
-            </span>
-            <span className="pb-1 text-[12px] text-ink-400">dari {insight.totalKombinasi} kombinasi Guru+Mapel+Kelas</span>
-          </div>
-          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-surface-muted">
-            <div
-              className={`h-full rounded-full transition-all ${insight.completionPercent >= 100 ? "bg-emerald" : "bg-brand-600"}`}
-              style={{ width: `${Math.min(insight.completionPercent, 100)}%` }}
-            />
-          </div>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {(Object.keys(insight.countByStatus) as (keyof typeof insight.countByStatus)[]).map((key) => (
-              <Badge key={key} tone={JP_STATUS_TONE[key]}>
-                {JP_STATUS_LABEL[key]}: {insight.countByStatus[key]}
-              </Badge>
-            ))}
-          </div>
-        </>
-      )}
-    </Card>
-  );
-}
-
-function WorkloadCard({ entries }: { entries: DashboardWorkloadEntry[] }) {
-  return (
-    <Card>
-      <div className="flex items-center justify-between">
-        <h2 className="text-[14px] font-semibold text-ink-900">Beban Mengajar Tertinggi</h2>
-        <Link href="/guru" className="flex items-center gap-1 text-[12px] font-medium text-brand-600 hover:text-brand-700">
-          Lihat semua Guru <ArrowRight size={12} />
-        </Link>
-      </div>
-
-      {entries.length === 0 ? (
-        <p className="mt-3 text-[12.5px] text-ink-400">Belum ada jadwal committed untuk dihitung bebannya.</p>
-      ) : (
-        <div className="mt-4 flex flex-col gap-3">
-          {(() => {
-            const max = Math.max(...entries.map((e) => e.totalJamMengajar), 1);
-            return entries.map((entry, i) => (
-              <div key={entry.guruId} className="flex items-center gap-3">
-                <span className="w-4 shrink-0 text-[11px] font-mono text-ink-300">{i + 1}</span>
-                <div className="flex-1">
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-[13px] text-ink-900">{entry.namaGuru}</span>
-                    <span className="text-[12px] font-medium text-ink-500">{entry.totalJamMengajar} JP/minggu</span>
-                  </div>
-                  <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-surface-muted">
-                    <div
-                      className="h-full rounded-full bg-brand-600/70 transition-all"
-                      style={{ width: `${Math.max((entry.totalJamMengajar / max) * 100, 4)}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-            ));
-          })()}
-        </div>
-      )}
-    </Card>
-  );
-}
+function HeatmapCard({days}:{days:DashboardHeatmapDay[]}){const max=Math.max(...days.map(d=>d.total),1);return <Card><div className="flex items-start justify-between"><div><div className="flex items-center gap-2"><CalendarDays size={16} className="text-brand-600"/><h2 className="text-[14px] font-semibold text-ink-900">Kepadatan Jadwal</h2></div><p className="mt-1 text-[11.5px] text-ink-400">Distribusi JP committed per hari.</p></div><Link href="/jadwal" className="text-[12px] font-medium text-brand-600">Buka Jadwal</Link></div><div className="mt-5 grid grid-cols-6 gap-2">{days.map(day=><div key={day.day} className="min-w-0 text-center"><div title={`${day.label}: ${day.total} JP`} className={`mx-auto h-11 rounded-lg border border-border transition-transform hover:-translate-y-0.5 ${day.total===0?"bg-surface-muted":day.level===1?"bg-brand-50":day.level===2?"bg-brand-100":day.level===3?"bg-brand-200":"bg-brand-300"}`}><span className="flex h-full items-center justify-center text-[12px] font-semibold tabular-nums text-ink-800">{day.total}</span></div><span className="mt-2 block truncate text-[10.5px] font-medium text-ink-500">{day.label.slice(0,3)}</span></div>)}</div><div className="mt-4 flex items-center justify-between text-[10.5px] text-ink-400"><span>Rendah</span><span>{Math.max(...days.map(d=>d.total),0)} JP tertinggi</span></div></Card>}
+function AgendaCard({entries}:{entries:DashboardAgendaEntry[]}){return <Card><div className="flex items-start justify-between"><div><div className="flex items-center gap-2"><Clock3 size={16} className="text-brand-600"/><h2 className="text-[14px] font-semibold text-ink-900">Agenda Mendatang</h2></div><p className="mt-1 text-[11.5px] text-ink-400">Jadwal terdekat dari konteks aktif.</p></div><Link href="/jadwal" className="text-[12px] font-medium text-brand-600">Lihat semua</Link></div>{entries.length===0?<p className="mt-5 rounded-lg bg-surface-muted p-4 text-[12px] text-ink-400">Belum ada agenda. Jadwal committed akan muncul di sini.</p>:<div className="mt-4 divide-y divide-border">{entries.map(e=><div key={e.id} className="flex gap-3 py-3 first:pt-0"><div className="w-[74px] shrink-0"><p className="text-[11px] font-semibold text-brand-600">{e.dayLabel}</p><p className="mt-0.5 text-[10.5px] tabular-nums text-ink-400">{e.time}</p></div><div className="min-w-0 flex-1"><p className="truncate text-[12.5px] font-semibold text-ink-900">{e.subject}</p><p className="truncate text-[11px] text-ink-500">{e.className} · {e.teacher}</p>{e.room&&<p className="text-[10.5px] text-ink-400">{e.room}</p>}</div></div>)}</div>}</Card>}
+function ActivityCard({entries}:{entries:DashboardActivityEntry[]}){return <Card><div className="flex items-start justify-between"><div><div className="flex items-center gap-2"><Activity size={16} className="text-brand-600"/><h2 className="text-[14px] font-semibold text-ink-900">Aktivitas Terbaru</h2></div><p className="mt-1 text-[11.5px] text-ink-400">Perubahan terbaru pada konteks akademik aktif.</p></div><Link href="/riwayat" className="text-[12px] font-medium text-brand-600">Buka Riwayat</Link></div>{entries.length===0?<p className="mt-5 rounded-lg bg-surface-muted p-4 text-[12px] text-ink-400">Belum ada aktivitas terbaru. Perubahan akademik akan muncul di sini.</p>:<div className="mt-4 grid gap-2 md:grid-cols-2">{entries.map(e=><div key={e.id} className="flex items-center gap-3 rounded-lg border border-border/70 bg-surface-muted/40 px-3 py-2.5"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand-600"><Activity size={13}/></span><div className="min-w-0 flex-1"><p className="truncate text-[12px] font-medium text-ink-800">{e.action} · {e.entityLabel??e.entityType}</p><p className="text-[10.5px] text-ink-400">{formatActivityTime(e.createdAt)}</p></div></div>)}</div>}</Card>}
+function formatActivityTime(value:string){const d=new Date(value);return new Intl.DateTimeFormat("id-ID",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit",timeZone:"Asia/Jakarta"}).format(d);}
