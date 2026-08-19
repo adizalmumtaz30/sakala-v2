@@ -101,7 +101,6 @@ export default function AnalitikWorkspace({ activeContextLabel, view }: Props) {
         </Link>
       </header>
 
-      {/* Executive snapshot: decision first, detail second. */}
       <section aria-label="Ringkasan analitik" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Card className="card-hover p-4">
           <div className="flex items-center justify-between">
@@ -142,7 +141,6 @@ export default function AnalitikWorkspace({ activeContextLabel, view }: Props) {
         </Card>
       </section>
 
-      {/* Intelligence layer: insight → reason → next action. */}
       <Card className="overflow-hidden border-brand-100 bg-brand-50/40 p-0">
         <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-start">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
@@ -159,7 +157,7 @@ export default function AnalitikWorkspace({ activeContextLabel, view }: Props) {
             </h2>
             <p className="mt-1.5 text-[12px] leading-5 text-ink-500">
               {busiestTeacher
-                ? `${busiestTeacher.guruNama} saat ini memegang beban tertinggi dengan ${busiestTeacher.totalJamCommitted} JP committed. Gunakan data ini untuk memeriksa keseimbangan distribusi."
+                ? `${busiestTeacher.guruNama} saat ini memegang beban tertinggi dengan ${busiestTeacher.totalJamCommitted} JP committed. Gunakan data ini untuk memeriksa keseimbangan distribusi.`
                 : "Belum ada data beban guru yang dapat dianalisis."}
             </p>
           </div>
@@ -173,7 +171,6 @@ export default function AnalitikWorkspace({ activeContextLabel, view }: Props) {
       </Card>
 
       <div className="grid gap-5 xl:grid-cols-[1.15fr_.85fr]">
-        {/* Teacher workload */}
         <Card className="p-0">
           <SectionHeader
             icon={BarChart3}
@@ -221,7 +218,6 @@ export default function AnalitikWorkspace({ activeContextLabel, view }: Props) {
           )}
         </Card>
 
-        {/* JP distribution */}
         <Card className="p-0">
           <SectionHeader
             icon={Gauge}
@@ -259,16 +255,15 @@ export default function AnalitikWorkspace({ activeContextLabel, view }: Props) {
                 );
               })}
             </ul>
-            <div className="mt-3 flex items-center gap-2 text-[10.5px] text-ink-400">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald" /> Sesuai target
-              <span className="ml-2 h-1.5 w-1.5 rounded-full bg-amber" /> Perlu dilengkapi
-              <span className="ml-2 h-1.5 w-1.5 rounded-full bg-rose" /> Melebihi target
+            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10.5px] text-ink-400">
+              <span className="inline-flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-emerald" /> Sesuai target</span>
+              <span className="inline-flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-amber" /> Perlu dilengkapi</span>
+              <span className="inline-flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-rose" /> Melebihi target</span>
             </div>
           </div>
         </Card>
       </div>
 
-      {/* Actionable exception list */}
       <Card className="p-0">
         <SectionHeader
           icon={AlertTriangle}
