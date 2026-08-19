@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Pencil, Trash2, Search, Upload, Check } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Upload, Check, BrainCircuit, ExternalLink } from "lucide-react";
 import type {
   MataPelajaran,
   MataPelajaranDraft,
@@ -48,6 +48,7 @@ export default function MataPelajaranWorkspace({ initialData }: { initialData: M
   const [data, setData] = useState<MataPelajaran[]>(initialData);
   const [query, setQuery] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
+  const [curriculumOpen, setCurriculumOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState<MataPelajaran | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -151,6 +152,9 @@ export default function MataPelajaranWorkspace({ initialData }: { initialData: M
           <Button variant="secondary" onClick={() => setImportOpen(true)}>
             <Upload size={16} /> Import
           </Button>
+          <Button variant="secondary" onClick={() => setCurriculumOpen(true)} aria-label="Generate Kurikulum">
+            <BrainCircuit size={16} /> Generate Kurikulum
+          </Button>
           <Button onClick={openCreate}>
             <Plus size={16} /> Tambah Mata Pelajaran
           </Button>
@@ -197,11 +201,7 @@ export default function MataPelajaranWorkspace({ initialData }: { initialData: M
                 <tr key={m.id} className="border-b border-border last:border-0 hover:bg-surface-muted/60">
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-2.5">
-                      <span
-                        className="h-2.5 w-2.5 shrink-0 rounded-full"
-                        style={{ backgroundColor: m.warnaJadwal ?? "#C6CAD3" }}
-                        aria-hidden="true"
-                      />
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: m.warnaJadwal ?? "#C6CAD3" }} aria-hidden="true" />
                       <div>
                         <p className="font-medium text-ink-900">{m.nama}</p>
                         <p className="text-[12px] text-ink-400">{m.kode ?? "—"}</p>
@@ -210,24 +210,9 @@ export default function MataPelajaranWorkspace({ initialData }: { initialData: M
                   </td>
                   <td className="px-5 py-3.5 text-ink-500">{m.kelompok ?? "—"}</td>
                   <td className="px-5 py-3.5 text-ink-500">{m.targetJpPerRombel ?? "—"}</td>
-                  <td className="px-5 py-3.5 text-ink-500">
-                    {m.prioritasPenjadwalan ? PRIORITAS_LABEL[m.prioritasPenjadwalan] : "—"}
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <Badge tone={m.status === "aktif" ? "success" : "neutral"}>
-                      {m.status === "aktif" ? "Aktif" : "Nonaktif"}
-                    </Badge>
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center justify-end gap-1">
-                      <button onClick={() => openEdit(m)} className="rounded-lg p-1.5 text-ink-400 hover:bg-surface hover:text-ink-900" aria-label="Edit">
-                        <Pencil size={15} />
-                      </button>
-                      <button onClick={() => handleDelete(m.id)} className="rounded-lg p-1.5 text-ink-400 hover:bg-rose-50 hover:text-rose" aria-label="Hapus">
-                        <Trash2 size={15} />
-                      </button>
-                    </div>
-                  </td>
+                  <td className="px-5 py-3.5 text-ink-500">{m.prioritasPenjadwalan ? PRIORITAS_LABEL[m.prioritasPenjadwalan] : "—"}</td>
+                  <td className="px-5 py-3.5"><Badge tone={m.status === "aktif" ? "success" : "neutral"}>{m.status === "aktif" ? "Aktif" : "Nonaktif"}</Badge></td>
+                  <td className="px-5 py-3.5"><div className="flex items-center justify-end gap-1"><button onClick={() => openEdit(m)} className="rounded-lg p-1.5 text-ink-400 hover:bg-surface hover:text-ink-900" aria-label="Edit"><Pencil size={15} /></button><button onClick={() => handleDelete(m.id)} className="rounded-lg p-1.5 text-ink-400 hover:bg-rose-50 hover:text-rose" aria-label="Hapus"><Trash2 size={15} /></button></div></td>
                 </tr>
               ))}
             </tbody>
@@ -235,158 +220,58 @@ export default function MataPelajaranWorkspace({ initialData }: { initialData: M
         )}
       </Card>
 
-      <Modal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        title={editing ? "Edit Mata Pelajaran" : "Tambah Mata Pelajaran"}
-        size="lg"
-      >
+      <Modal open={curriculumOpen} onClose={() => setCurriculumOpen(false)} title="🧠 Curriculum Intelligence" size="lg">
+        <div className="flex flex-col gap-5">
+          <div className="rounded-2xl border border-border bg-surface-muted p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[15px] font-semibold text-ink-900">Generate Kurikulum dari sumber resmi</p>
+                <p className="mt-1 text-[13px] leading-5 text-ink-500">SAKALA membaca sumber resmi, memisahkan alokasi resmi dari target mingguan turunan, lalu meminta persetujuan sebelum data menjadi aktif.</p>
+              </div>
+              <Badge tone="success">Official Source</Badge>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-border p-4"><p className="text-[11px] uppercase tracking-wide text-ink-400">Instansi</p><p className="mt-1 font-medium text-ink-900">Kementerian Agama RI</p></div>
+            <div className="rounded-xl border border-border p-4"><p className="text-[11px] uppercase tracking-wide text-ink-400">Jenjang</p><p className="mt-1 font-medium text-ink-900">MTs</p></div>
+            <div className="rounded-xl border border-border p-4 sm:col-span-2"><p className="text-[11px] uppercase tracking-wide text-ink-400">Regulasi acuan</p><p className="mt-1 font-medium text-ink-900">KMA Nomor 1503 Tahun 2025</p><p className="mt-1 text-[12px] text-ink-500">Perubahan atas KMA Nomor 450 Tahun 2024 tentang pedoman implementasi kurikulum pada madrasah.</p></div>
+          </div>
+
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4">
+            <div className="flex items-center gap-2"><Badge tone="success">Verified</Badge><span className="text-[13px] font-medium text-ink-900">Authority source teridentifikasi</span></div>
+            <p className="mt-2 text-[12.5px] leading-5 text-ink-600">Regulasi resmi menjadi authority. AI hanya bertindak sebagai interpreter dan tidak boleh menebak data yang tidak terverifikasi.</p>
+            <a href="https://jdih.kemenag.go.id/regulation/keputusan-menteri-agama-nomor-1503-tahun-2025-tentang-perubahan-atas-keputusan-menteri-agama-nomor-450-tahun-2024-tentang-pedoman-implementasi-kurikulum-pada-raudhatul-athfal-madrasah-ibtidaiyah-madrasah-tsanawiyah-madrasah-aliyah-dan-madrasah-aliyah-kejuruan" target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1.5 text-[12.5px] font-medium text-brand-700 hover:underline">Lihat sumber resmi <ExternalLink size={13} /></a>
+          </div>
+
+          <div className="rounded-xl border border-border p-4">
+            <p className="text-[12px] font-semibold uppercase tracking-wide text-ink-400">Academic Context</p>
+            <div className="mt-2 flex flex-wrap gap-2"><Badge tone="info">2026/2027</Badge><Badge tone="neutral">Ganjil</Badge><Badge tone="neutral">VII · VIII · IX</Badge></div>
+          </div>
+
+          <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
+            <p className="max-w-md text-[12px] leading-5 text-ink-500">Generate tetap melalui review. Tidak ada silent overwrite dan tidak ada perubahan otomatis pada kurikulum sekolah.</p>
+            <Button onClick={() => setCurriculumOpen(false)}>Tinjau Kurikulum</Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editing ? "Edit Mata Pelajaran" : "Tambah Mata Pelajaran"} size="lg">
         <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_240px]">
           <div className="flex flex-col gap-4">
-            <Input
-              label="Nama Mata Pelajaran *"
-              placeholder="cth. Matematika"
-              value={form.nama}
-              onChange={(e) => setForm((f) => ({ ...f, nama: e.target.value }))}
-              error={formError ?? undefined}
-              required
-              autoFocus
-            />
-            <Input
-              label="Kode Mapel (opsional)"
-              placeholder="cth. MAT"
-              value={form.kode}
-              onChange={(e) => setForm((f) => ({ ...f, kode: e.target.value }))}
-            />
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[12.5px] font-medium text-ink-700">Kelompok</label>
-                <input
-                  value={form.kelompok}
-                  onChange={(e) => setForm((f) => ({ ...f, kelompok: e.target.value }))}
-                  placeholder="cth. Umum"
-                  className="h-11 rounded-xl border border-border bg-surface px-3.5 text-[13.5px] text-ink-900 outline-none focus:border-brand-600/50 focus:ring-2 focus:ring-brand-600/15"
-                />
-              </div>
-              <Input
-                label="JP / Minggu"
-                type="number"
-                min={0}
-                placeholder="cth. 4"
-                value={form.targetJpPerRombel}
-                onChange={(e) => setForm((f) => ({ ...f, targetJpPerRombel: e.target.value }))}
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[12.5px] font-medium text-ink-700">Warna Jadwal</label>
-              <div className="flex flex-wrap gap-2">
-                {WARNA_JADWAL_PRESET.map((hex) => (
-                  <button
-                    key={hex}
-                    type="button"
-                    onClick={() => setForm((f) => ({ ...f, warnaJadwal: hex }))}
-                    className={`flex h-8 w-8 items-center justify-center rounded-full transition-shadow ${
-                      form.warnaJadwal === hex
-                        ? "ring-2 ring-ink-900 ring-offset-2 ring-offset-surface"
-                        : "hover:opacity-80"
-                    }`}
-                    style={{ backgroundColor: hex }}
-                    aria-label={`Pilih warna ${hex}`}
-                  >
-                    {form.warnaJadwal === hex && <Check size={14} className="text-white" strokeWidth={3} />}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[12.5px] font-medium text-ink-700">Prioritas Penjadwalan</label>
-                <select
-                  value={form.prioritasPenjadwalan}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, prioritasPenjadwalan: e.target.value as PrioritasPenjadwalan }))
-                  }
-                  className="h-11 rounded-xl border border-border bg-surface px-3.5 text-[13.5px] text-ink-900 outline-none focus:border-brand-600/50 focus:ring-2 focus:ring-brand-600/15"
-                >
-                  {PRIORITAS_OPTIONS.map((p) => (
-                    <option key={p} value={p}>
-                      {PRIORITAS_LABEL[p]}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[12.5px] font-medium text-ink-700">Jenis Mapel</label>
-                <select
-                  value={form.jenisMapel}
-                  onChange={(e) => setForm((f) => ({ ...f, jenisMapel: e.target.value as JenisMapel }))}
-                  className="h-11 rounded-xl border border-border bg-surface px-3.5 text-[13.5px] text-ink-900 outline-none focus:border-brand-600/50 focus:ring-2 focus:ring-brand-600/15"
-                >
-                  {JENIS_MAPEL_OPTIONS.map((j) => (
-                    <option key={j} value={j}>
-                      {JENIS_MAPEL_LABEL[j]}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[12.5px] font-medium text-ink-700">Status</label>
-              <select
-                value={form.status}
-                onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as StatusAktif }))}
-                className="h-11 rounded-xl border border-border bg-surface px-3.5 text-[13.5px] text-ink-900 outline-none focus:border-brand-600/50 focus:ring-2 focus:ring-brand-600/15"
-              >
-                <option value="aktif">Aktif</option>
-                <option value="nonaktif">Nonaktif</option>
-              </select>
-            </div>
-
-            <div className="mt-2 flex justify-end gap-2">
-              <Button type="button" variant="secondary" onClick={() => setModalOpen(false)}>
-                Batal
-              </Button>
-              <Button type="submit" loading={isPending}>
-                {editing ? "Simpan Perubahan" : "Simpan"}
-              </Button>
-            </div>
+            <Input label="Nama Mata Pelajaran *" placeholder="cth. Matematika" value={form.nama} onChange={(e) => setForm((f) => ({ ...f, nama: e.target.value }))} error={formError ?? undefined} required autoFocus />
+            <Input label="Kode Mapel (opsional)" placeholder="cth. MAT" value={form.kode} onChange={(e) => setForm((f) => ({ ...f, kode: e.target.value }))} />
+            <div className="grid grid-cols-2 gap-4"><div className="flex flex-col gap-1.5"><label className="text-[12.5px] font-medium text-ink-700">Kelompok</label><input value={form.kelompok} onChange={(e) => setForm((f) => ({ ...f, kelompok: e.target.value }))} placeholder="cth. Umum" className="h-11 rounded-xl border border-border bg-surface px-3.5 text-[13.5px] text-ink-900 outline-none focus:border-brand-600/50 focus:ring-2 focus:ring-brand-600/15" /></div><Input label="JP / Minggu" type="number" min={0} placeholder="cth. 4" value={form.targetJpPerRombel} onChange={(e) => setForm((f) => ({ ...f, targetJpPerRombel: e.target.value }))} /></div>
+            <div className="flex flex-col gap-1.5"><label className="text-[12.5px] font-medium text-ink-700">Warna Jadwal</label><div className="flex flex-wrap gap-2">{WARNA_JADWAL_PRESET.map((hex) => <button key={hex} type="button" onClick={() => setForm((f) => ({ ...f, warnaJadwal: hex }))} className={`flex h-8 w-8 items-center justify-center rounded-full transition-shadow ${form.warnaJadwal === hex ? "ring-2 ring-ink-900 ring-offset-2 ring-offset-surface" : "hover:opacity-80"}`} style={{ backgroundColor: hex }} aria-label={`Pilih warna ${hex}`}>{form.warnaJadwal === hex && <Check size={14} className="text-white" strokeWidth={3} />}</button>)}</div></div>
+            <div className="grid grid-cols-2 gap-4"><div className="flex flex-col gap-1.5"><label className="text-[12.5px] font-medium text-ink-700">Prioritas Penjadwalan</label><select value={form.prioritasPenjadwalan} onChange={(e) => setForm((f) => ({ ...f, prioritasPenjadwalan: e.target.value as PrioritasPenjadwalan }))} className="h-11 rounded-xl border border-border bg-surface px-3.5 text-[13.5px] text-ink-900 outline-none">{PRIORITAS_OPTIONS.map((p) => <option key={p} value={p}>{PRIORITAS_LABEL[p]}</option>)}</select></div><div className="flex flex-col gap-1.5"><label className="text-[12.5px] font-medium text-ink-700">Jenis Mapel</label><select value={form.jenisMapel} onChange={(e) => setForm((f) => ({ ...f, jenisMapel: e.target.value as JenisMapel }))} className="h-11 rounded-xl border border-border bg-surface px-3.5 text-[13.5px] text-ink-900 outline-none">{JENIS_MAPEL_OPTIONS.map((j) => <option key={j} value={j}>{JENIS_MAPEL_LABEL[j]}</option>)}</select></div></div>
+            <div className="flex flex-col gap-1.5"><label className="text-[12.5px] font-medium text-ink-700">Status</label><select value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as StatusAktif }))} className="h-11 rounded-xl border border-border bg-surface px-3.5 text-[13.5px] text-ink-900 outline-none"><option value="aktif">Aktif</option><option value="nonaktif">Nonaktif</option></select></div>
+            <div className="mt-2 flex justify-end gap-2"><Button type="button" variant="secondary" onClick={() => setModalOpen(false)}>Batal</Button><Button type="submit" loading={isPending}>{editing ? "Simpan Perubahan" : "Simpan"}</Button></div>
           </div>
-
-          {/* Live preview (Bagian 30, 87) — update langsung mengikuti state form, tanpa submit. */}
-          <div className="flex flex-col items-center gap-3 rounded-xl2 border border-border bg-surface-muted p-5">
-            <span
-              className="h-3 w-3 rounded-full"
-              style={{ backgroundColor: form.warnaJadwal || "#C6CAD3" }}
-              aria-hidden="true"
-            />
-            <p className="text-center text-[15px] font-semibold text-ink-900">{form.nama || "Nama Mapel"}</p>
-            <p className="text-[12px] text-ink-400">{form.kode || "—"}</p>
-            <p className="text-[12.5px] text-ink-500">
-              {form.targetJpPerRombel ? `${form.targetJpPerRombel} JP / Minggu` : "— JP / Minggu"}
-            </p>
-            <Badge tone={form.status === "aktif" ? "success" : "neutral"}>
-              {form.status === "aktif" ? "Aktif" : "Nonaktif"}
-            </Badge>
-            {form.kelompok && <Badge tone="info">{form.kelompok}</Badge>}
-          </div>
+          <div className="flex flex-col items-center gap-3 rounded-xl2 border border-border bg-surface-muted p-5"><span className="h-3 w-3 rounded-full" style={{ backgroundColor: form.warnaJadwal || "#C6CAD3" }} aria-hidden="true" /><p className="text-center text-[15px] font-semibold text-ink-900">{form.nama || "Nama Mapel"}</p><p className="text-[12px] text-ink-400">{form.kode || "—"}</p><p className="text-[12.5px] text-ink-500">{form.targetJpPerRombel ? `${form.targetJpPerRombel} JP / Minggu` : "— JP / Minggu"}</p><Badge tone={form.status === "aktif" ? "success" : "neutral"}>{form.status === "aktif" ? "Aktif" : "Nonaktif"}</Badge>{form.kelompok && <Badge tone="info">{form.kelompok}</Badge>}</div>
         </form>
       </Modal>
 
-      <ImportModal
-        open={importOpen}
-        onClose={() => setImportOpen(false)}
-        title="Import Mata Pelajaran"
-        description="Unggah data mata pelajaran dari file XLSX/CSV memakai Template SAKALA."
-        templateUrl="/mata-pelajaran/import/template"
-        templateFilename="Template_Mapel_SAKALA_V2.3.xlsx"
-        onValidate={handleValidateImport}
-        onCommit={handleCommitImport}
-        onImported={() => router.refresh()}
-      />
+      <ImportModal open={importOpen} onClose={() => setImportOpen(false)} title="Import Mata Pelajaran" description="Unggah data mata pelajaran dari file XLSX/CSV memakai Template SAKALA." templateUrl="/mata-pelajaran/import/template" templateFilename="Template_Mapel_SAKALA_V2.3.xlsx" onValidate={handleValidateImport} onCommit={handleCommitImport} onImported={() => router.refresh()} />
     </div>
   );
 }
