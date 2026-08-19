@@ -25,6 +25,9 @@
   --color-emerald-50: #E8F6EF;
   --color-rose: #C73C3C;
   --color-rose-50: #FDECEC;
+  --color-chart-grid: #E1E6E1;
+  --color-chart-axis: #748077;
+  --color-chart-tooltip: #FFFFFF;
   --shadow-soft: 0 1px 2px rgba(23,32,25,.04), 0 6px 18px -14px rgba(23,32,25,.14);
   --shadow-float: 0 14px 32px -18px rgba(23,32,25,.20);
   --focus-ring: 0 0 0 3px rgba(47,125,85,.18);
@@ -35,6 +38,7 @@
 
 html.dark {
   color-scheme: dark;
+  /* Calm dark: deep neutral canvas, elevated green-neutral surfaces. */
   --color-canvas: #0E1511;
   --color-surface: #151D18;
   --color-surface-muted: #1B251F;
@@ -59,9 +63,12 @@ html.dark {
   --color-emerald-50: #123A2A;
   --color-rose: #F17878;
   --color-rose-50: #3D2020;
+  --color-chart-grid: #2B3830;
+  --color-chart-axis: #A3AEA6;
+  --color-chart-tooltip: #1B251F;
   --shadow-soft: 0 1px 2px rgba(0,0,0,.20), 0 8px 22px -14px rgba(0,0,0,.48);
   --shadow-float: 0 16px 36px -16px rgba(0,0,0,.60);
-  --focus-ring: 0 0 0 3px rgba(103,184,137,.22);
+  --focus-ring: 0 0 0 3px rgba(103,184,137,.26);
 }
 
 html, body {
@@ -72,6 +79,7 @@ html, body {
 
 html.dark ::selection {
   background: rgba(103,184,137,.28);
+  color: var(--color-ink-900);
 }
 
 html.dark .bg-white,
@@ -139,4 +147,26 @@ html.dark table.w-full.border-collapse.text-\[12\.5px\] tbody td:first-child {
 
 html.dark table.w-full.border-collapse.text-\[12\.5px\] tbody td button:hover {
   box-shadow: var(--shadow-float);
+}
+
+/* Dark-mode compatibility for common utility colors still present in legacy surfaces. */
+html.dark .bg-emerald-50 { background-color: var(--color-emerald-50) !important; }
+html.dark .bg-amber-50 { background-color: var(--color-amber-50) !important; }
+html.dark .bg-rose-50 { background-color: var(--color-rose-50) !important; }
+html.dark .bg-cyan-50 { background-color: var(--color-cyan-50) !important; }
+html.dark .bg-violet-50 { background-color: var(--color-violet-50) !important; }
+
+html.dark .text-emerald-700,
+html.dark .text-emerald-600 { color: var(--color-emerald) !important; }
+html.dark .text-amber-700,
+html.dark .text-amber-600 { color: var(--color-amber) !important; }
+html.dark .text-rose-700,
+html.dark .text-rose-600 { color: var(--color-rose) !important; }
+html.dark .text-cyan-700,
+html.dark .text-cyan-600 { color: var(--color-cyan) !important; }
+html.dark .text-violet-700,
+html.dark .text-violet-600 { color: var(--color-violet) !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  html, body { transition: none; }
 }
