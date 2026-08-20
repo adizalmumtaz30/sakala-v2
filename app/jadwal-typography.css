@@ -1,0 +1,13 @@
+/* SAKALA Jadwal typography polish — scoped, semantic, theme-safe. */
+.jadwal-typography table.w-full.border-collapse.text-\[12\.5px\] { font-size: 13px; }
+.jadwal-typography table.w-full.border-collapse.text-\[12\.5px\] thead th { font-size: 13px; line-height: 1.35; }
+.jadwal-typography table.w-full.border-collapse.text-\[12\.5px\] tbody td:first-child { font-size: 13px; }
+.jadwal-typography table.w-full.border-collapse.text-\[12\.5px\] tbody td button { font-size: 12.5px; line-height: 1.35; }
+.jadwal-typography table.w-full.border-collapse.text-\[12\.5px\] tbody td button > span:first-child { font-size: 13px; }
+
+/* Committed uses the existing semantic emerald token in both themes. */
+.jadwal-typography .bg-emerald-50.text-emerald { color: var(--color-emerald); }
+html.dark .jadwal-typography .bg-emerald-50.text-emerald {
+  background-color: var(--color-emerald-50) !important;
+  color: var(--color-emerald) !important;
+}
