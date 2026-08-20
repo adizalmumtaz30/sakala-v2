@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import { CheckSquare2, SlidersHorizontal } from "lucide-react";
 
 export const SAKALA_LIST_PAGE_SIZES = [10, 20, 30, 40, 50] as const;
@@ -21,6 +22,28 @@ export default function ListControls({
   onPageSizeChange: (size: number) => void;
   label?: string;
 }) {
+  const maxItems = Math.max(1, total);
+  const safePageSize = Math.min(maxItems, Math.max(1, Math.floor(pageSize) || 1));
+  const [manualValue, setManualValue] = useState(String(safePageSize));
+
+  useEffect(() => {
+    setManualValue(String(safePageSize));
+  }, [safePageSize]);
+
+  const presetSizes = useMemo(
+    () => Array.from(new Set([...SAKALA_LIST_PAGE_SIZES, maxItems])).filter((size) => size <= maxItems),
+    [maxItems],
+  );
+
+  function applyManualValue(raw: string) {
+    setManualValue(raw);
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) return;
+    const next = Math.min(maxItems, Math.max(1, Math.floor(parsed)));
+    onPageSizeChange(next);
+    setManualValue(String(next));
+  }
+
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface-muted/40 px-4 py-3">
       <div className="flex flex-wrap items-center gap-3">
@@ -42,21 +65,33 @@ export default function ListControls({
         </span>
       </div>
 
-      <label className="inline-flex items-center gap-2 text-[12px] font-medium text-ink-600">
+      <div className="flex flex-wrap items-center gap-2 text-[12px] font-medium text-ink-600">
         <SlidersHorizontal size={15} />
-        Tampilkan
+        <span>Tampilkan</span>
         <select
-          value={pageSize}
-          onChange={(event) => onPageSizeChange(Number(event.target.value))}
+          value={safePageSize}
+          onChange={(event) => onPageSizeChange(Math.min(maxItems, Math.max(1, Number(event.target.value))))}
           className="rounded-lg border border-border bg-surface px-2.5 py-1.5 text-[12px] font-semibold text-ink-800 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15"
-          aria-label={`Jumlah ${label.toLowerCase()} per tampilan`}
+          aria-label={`Pilihan jumlah ${label.toLowerCase()} per tampilan`}
         >
-          {SAKALA_LIST_PAGE_SIZES.map((size) => (
+          {presetSizes.map((size) => (
             <option key={size} value={size}>{size}</option>
           ))}
         </select>
-        per tampilan
-      </label>
+        <span>atau</span>
+        <input
+          type="number"
+          inputMode="numeric"
+          min={1}
+          max={maxItems}
+          value={manualValue}
+          onChange={(event) => applyManualValue(event.target.value)}
+          onBlur={() => applyManualValue(manualValue || "1")}
+          className="h-8 w-20 rounded-lg border border-border bg-surface px-2 text-center text-[12px] font-semibold text-ink-800 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15"
+          aria-label={`Masukkan jumlah ${label.toLowerCase()} per tampilan`}
+        />
+        <span>item</span>
+      </div>
     </div>
   );
 }
