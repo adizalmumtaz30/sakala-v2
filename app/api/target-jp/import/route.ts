@@ -18,21 +18,45 @@ export async function GET(request: Request) {
   if (url.searchParams.get("mode") === "data") {
     try {
       const supabase = await createClient();
-      const [activeContext, classesResult, subjectsResult, targetsResult] = await Promise.all([
-        getActiveAcademicContext(supabase),
-        supabase.from("kelas").select("id,nama_rombel,tingkat,tahun_ajaran,semester").order("tingkat").order("nama_rombel"),
-        supabase.from("mata_pelajaran").select("id,nama,kode").order("nama"),
-        supabase.from("target_jp").select("academic_context_id,kelas_id,mata_pelajaran_id,target_jp"),
-      ]);
-      const { data: classes, error: ke } = classesResult;
-      const { data: subjects, error: se } = subjectsResult;
-      const { data: targets, error: te } = targetsResult;
-      if (ke || se || te) throw new Error(ke?.message || se?.message || te?.message || "Gagal membaca data Target JP.");
+
+      // Context is the canonical prerequisite for Generate Kurikulum.
+      // Read it first and do not let optional Target-JP/master reads block
+      // the context handoff to the client.
+      const activeContext = await getActiveAcademicContext(supabase);
       const contexts = activeContext
         ? [{ id: activeContext.id, tahun_pelajaran: activeContext.tahunPelajaran, semester: activeContext.semester, is_active: activeContext.isActive }]
         : [];
-      return NextResponse.json({ contexts, classes: classes ?? [], subjects: subjects ?? [], targets: targets ?? [] });
-    } catch (e) { return NextResponse.json({ error: e instanceof Error ? e.message : "Gagal membaca data." }, { status: 500 }); }
+
+      let classes: Array<{ id: string; nama_rombel: string; tingkat: string; tahun_ajaran: string; semester: string }> = [];
+      if (activeContext) {
+        const { data, error } = await supabase
+          .from("kelas")
+          .select("id,nama_rombel,tingkat,tahun_ajaran,semester")
+          .eq("tahun_ajaran", activeContext.tahunPelajaran)
+          .eq("semester", activeContext.semester)
+          .order("tingkat")
+          .order("nama_rombel");
+        if (error) throw error;
+        classes = data ?? [];
+      }
+
+      // These datasets are supplementary to the Generate context handoff.
+      // Keep them best-effort so a Target-JP policy/RLS issue cannot make the
+      // otherwise valid Academic Context appear as "not ready" in Generate.
+      const [subjectsResult, targetsResult] = await Promise.all([
+        supabase.from("mata_pelajaran").select("id,nama,kode").order("nama"),
+        supabase.from("target_jp").select("academic_context_id,kelas_id,mata_pelajaran_id,target_jp").eq("academic_context_id", activeContext?.id ?? "00000000-0000-0000-0000-000000000000"),
+      ]);
+
+      return NextResponse.json({
+        contexts,
+        classes,
+        subjects: subjectsResult.data ?? [],
+        targets: targetsResult.data ?? [],
+      });
+    } catch (e) {
+      return NextResponse.json({ error: e instanceof Error ? e.message : "Gagal membaca data context." }, { status: 500 });
+    }
   }
 
   const buffer = buildControlledTemplateWorkbook(columns, [
