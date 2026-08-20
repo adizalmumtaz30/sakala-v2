@@ -18,7 +18,7 @@ export async function GET(request: Request) {
     try {
       const supabase = await createClient();
       const [{ data: contexts, error: ce }, { data: classes, error: ke }, { data: subjects, error: se }, { data: targets, error: te }] = await Promise.all([
-        supabase.from("academic_context").select("id,tahun_pelajaran,semester").order("tahun_pelajaran", { ascending: false }),
+        supabase.from("academic_context").select("id,tahun_pelajaran,semester,is_active").order("tahun_pelajaran", { ascending: false }),
         supabase.from("kelas").select("id,nama_rombel,tingkat,tahun_ajaran,semester").order("tingkat").order("nama_rombel"),
         supabase.from("mata_pelajaran").select("id,nama,kode").order("nama"),
         supabase.from("target_jp").select("academic_context_id,kelas_id,mata_pelajaran_id,target_jp"),
