@@ -15,8 +15,19 @@ export async function getActiveAcademicContextAction() {
     .order("tahun_pelajaran", { ascending: false });
   if (contextError) return { ok: false as const, error: contextError.message };
 
-  const active = (contexts ?? []).find((context) => context.is_active) ?? null;
-  if (!active) return { ok: true as const, data: { contexts: contexts ?? [], classes: [] } };
+  const normalizedContexts = (contexts ?? []).map((context) => ({
+    ...context,
+    semester: String(context.semester).toLowerCase(),
+    is_active: Boolean(context.is_active),
+  }));
+  const active = normalizedContexts.find((context) => context.is_active) ?? null;
+
+  if (!active) {
+    return {
+      ok: true as const,
+      data: { contexts: normalizedContexts, activeContext: null, classes: [] },
+    };
+  }
 
   const { data: classes, error: classError } = await supabase
     .from("kelas")
@@ -27,7 +38,14 @@ export async function getActiveAcademicContextAction() {
     .order("nama_rombel");
   if (classError) return { ok: false as const, error: classError.message };
 
-  return { ok: true as const, data: { contexts: contexts ?? [], classes: classes ?? [] } };
+  return {
+    ok: true as const,
+    data: {
+      contexts: normalizedContexts,
+      activeContext: active,
+      classes: classes ?? [],
+    },
+  };
 }
 
 export async function listCurriculumIntelligenceAction(institution: CurriculumInstitution | "all" = "all") {
@@ -69,7 +87,7 @@ export async function adoptCurriculumItemsAction(input: {
     .eq("id", input.academicContextId)
     .eq("is_active", true)
     .maybeSingle();
-  if (!context) return { ok: false, error: "Hasil generate hanya boleh masuk ke Active Academic Context." };
+  if (!context) return { ok: false, error: "Hasil generate hanya boleh masuk ke Active Academic Context." }
 
   const selectedIds = Array.from(new Set(input.items.map((item) => item.id)));
   const { data: sourceItems, error: itemError } = await supabase
@@ -87,115 +105,55 @@ export async function adoptCurriculumItemsAction(input: {
     .select("id,source_id,verification_status,effective_status")
     .in("id", versionIds);
   if (versionError) return { ok: false, error: versionError.message };
-  if (!versions?.length || versions.length !== versionIds.length) {
-    return { ok: false, error: "Versi kurikulum sumber tidak ditemukan. Operasi diblokir." };
-  }
-
+  if (!versions?.length || versions.length !== versionIds.length) return { ok: false, error: "Versi kurikulum sumber tidak ditemukan. Operasi diblokir." };
   const versionMap = new Map(versions.map((version) => [version.id, version]));
-  if (versions.some((version) => version.verification_status !== "verified")) {
-    return { ok: false, error: "Regulasi sumber belum terverifikasi. SAKALA tidak akan memasukkan data yang belum verified." };
-  }
+  if (versions.some((version) => version.verification_status !== "verified")) return { ok: false, error: "Regulasi sumber belum terverifikasi. SAKALA tidak akan memasukkan data yang belum verified." };
 
   const sourceIds = Array.from(new Set(versions.map((version) => version.source_id)));
-  const { data: sources, error: sourceError } = await supabase
-    .from("curriculum_source")
-    .select("id,source_tier,status")
-    .in("id", sourceIds);
+  const { data: sources, error: sourceError } = await supabase.from("curriculum_source").select("id,source_tier,status").in("id", sourceIds);
   if (sourceError) return { ok: false, error: sourceError.message };
-  if (!sources?.length || sources.length !== sourceIds.length) {
-    return { ok: false, error: "Source provenance tidak ditemukan. Operasi diblokir." };
-  }
-  if (sources.some((source) => source.source_tier > 1 || source.status !== "active")) {
-    return { ok: false, error: "Item harus berasal dari sumber authority resmi yang aktif. Cross-check tidak dapat menjadi authority." };
-  }
+  if (!sources?.length || sources.length !== sourceIds.length) return { ok: false, error: "Source provenance tidak ditemukan. Operasi diblokir." };
+  if (sources.some((source) => source.source_tier > 1 || source.status !== "active")) return { ok: false, error: "Item harus berasal dari sumber authority resmi yang aktif. Cross-check tidak dapat menjadi authority." };
 
-  const { data: classes, error: classError } = await supabase
-    .from("kelas")
-    .select("id,tingkat,nama_rombel")
-    .in("id", input.classIds);
+  const { data: classes, error: classError } = await supabase.from("kelas").select("id,tingkat,nama_rombel").in("id", input.classIds);
   if (classError) return { ok: false, error: classError.message };
-  if (!classes?.length || classes.length !== input.classIds.length) {
-    return { ok: false, error: "Satu atau lebih kelas yang dipilih tidak ditemukan." };
-  }
+  if (!classes?.length || classes.length !== input.classIds.length) return { ok: false, error: "Satu atau lebih kelas yang dipilih tidak ditemukan." };
 
   const classMap = new Map(classes.map((item) => [item.id, item]));
   const itemMap = new Map(sourceItems.map((item) => [item.id, item]));
   const selectionMap = new Map(input.items.map((item) => [item.id, item]));
   const rows: Array<Record<string, unknown>> = [];
-
   for (const classId of input.classIds) {
     const kelas = classMap.get(classId);
     if (!kelas) return { ok: false, error: "Kelas yang dipilih tidak ditemukan." };
-
     for (const itemId of selectedIds) {
       const item = itemMap.get(itemId);
       if (!item) return { ok: false, error: "Item kurikulum tidak ditemukan." };
       if (item.class_level !== kelas.tingkat) continue;
       if (item.derivation_status === "blocked" || item.weekly_target == null) continue;
-
       const version = versionMap.get(item.curriculum_version_id);
-      if (!version || version.verification_status !== "verified") {
-        return { ok: false, error: `Regulasi untuk ${item.subject_name} belum verified.` };
-      }
-
-      const { data: existingSubject, error: subjectLookupError } = await supabase
-        .from("mata_pelajaran")
-        .select("id,nama,kode")
-        .eq("nama", item.subject_name)
-        .maybeSingle();
+      if (!version || version.verification_status !== "verified") return { ok: false, error: `Regulasi untuk ${item.subject_name} belum verified.` };
+      const { data: existingSubject, error: subjectLookupError } = await supabase.from("mata_pelajaran").select("id,nama,kode").eq("nama", item.subject_name).maybeSingle();
       if (subjectLookupError) return { ok: false, error: subjectLookupError.message };
-
       let subjectId = existingSubject?.id;
       if (!subjectId) {
-        const { data: createdSubject, error: subjectError } = await supabase
-          .from("mata_pelajaran")
-          .insert({ nama: item.subject_name, kode: item.subject_code, status: "aktif" })
-          .select("id")
-          .single();
+        const { data: createdSubject, error: subjectError } = await supabase.from("mata_pelajaran").insert({ nama: item.subject_name, kode: item.subject_code, status: "aktif" }).select("id").single();
         if (subjectError) return { ok: false, error: subjectError.message };
         subjectId = createdSubject.id;
       }
-
       const selectedTarget = selectionMap.get(item.id)?.weeklyTarget;
       const schoolTarget = selectedTarget ?? item.weekly_target;
-
-      rows.push({
-        academic_context_id: input.academicContextId,
-        kelas_id: classId,
-        mata_pelajaran_id: subjectId,
-        curriculum_item_id: item.id,
-        status: "selected",
-        official_target_jp: item.weekly_target,
-        school_target_jp: schoolTarget,
-      });
+      rows.push({ academic_context_id: input.academicContextId, kelas_id: classId, mata_pelajaran_id: subjectId, curriculum_item_id: item.id, status: "selected", official_target_jp: item.weekly_target, school_target_jp: schoolTarget });
     }
   }
-
-  if (!rows.length) {
-    return { ok: false, error: "Tidak ada item valid untuk kelas yang dipilih. Pastikan jenjang kelas sesuai dengan curriculum item dan target mingguan tervalidasi." };
-  }
-
-  const { error: adoptionError } = await supabase.from("curriculum_adoption").upsert(rows, {
-    onConflict: "academic_context_id,kelas_id,mata_pelajaran_id,curriculum_item_id",
-  });
+  if (!rows.length) return { ok: false, error: "Tidak ada item valid untuk kelas yang dipilih. Pastikan jenjang kelas sesuai dengan curriculum item dan target mingguan tervalidasi." };
+  const { error: adoptionError } = await supabase.from("curriculum_adoption").upsert(rows, { onConflict: "academic_context_id,kelas_id,mata_pelajaran_id,curriculum_item_id" });
   if (adoptionError) return { ok: false, error: adoptionError.message };
-
-  const targetRows = rows
-    .filter((row) => typeof row.school_target_jp === "number")
-    .map((row) => ({
-      academic_context_id: row.academic_context_id,
-      kelas_id: row.kelas_id,
-      mata_pelajaran_id: row.mata_pelajaran_id,
-      target_jp: Math.round(Number(row.school_target_jp)),
-    }));
-
+  const targetRows = rows.filter((row) => typeof row.school_target_jp === "number").map((row) => ({ academic_context_id: row.academic_context_id, kelas_id: row.kelas_id, mata_pelajaran_id: row.mata_pelajaran_id, target_jp: Math.round(Number(row.school_target_jp)) }));
   if (targetRows.length) {
-    const { error: targetError } = await supabase.from("target_jp").upsert(targetRows, {
-      onConflict: "academic_context_id,kelas_id,mata_pelajaran_id",
-    });
+    const { error: targetError } = await supabase.from("target_jp").upsert(targetRows, { onConflict: "academic_context_id,kelas_id,mata_pelajaran_id" });
     if (targetError) return { ok: false, error: targetError.message };
   }
-
   revalidatePath("/akademik/mata-pelajaran");
   revalidatePath("/akademik/target-jp");
   return { ok: true, data: { adopted: rows.length } };
