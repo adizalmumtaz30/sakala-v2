@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { createClient } from "@/lib/supabase/server";
+import { getActiveAcademicContext } from "@/lib/application/academicContext.usecases";
 import { buildControlledTemplateWorkbook, type ControlledTemplateColumn } from "@/lib/import/controlled-template";
 import { bufferToBodyInit } from "@/lib/utils/response";
 
@@ -17,14 +18,20 @@ export async function GET(request: Request) {
   if (url.searchParams.get("mode") === "data") {
     try {
       const supabase = await createClient();
-      const [{ data: contexts, error: ce }, { data: classes, error: ke }, { data: subjects, error: se }, { data: targets, error: te }] = await Promise.all([
-        supabase.from("academic_context").select("id,tahun_pelajaran,semester,is_active").order("tahun_pelajaran", { ascending: false }),
+      const [activeContext, classesResult, subjectsResult, targetsResult] = await Promise.all([
+        getActiveAcademicContext(supabase),
         supabase.from("kelas").select("id,nama_rombel,tingkat,tahun_ajaran,semester").order("tingkat").order("nama_rombel"),
         supabase.from("mata_pelajaran").select("id,nama,kode").order("nama"),
         supabase.from("target_jp").select("academic_context_id,kelas_id,mata_pelajaran_id,target_jp"),
       ]);
-      if (ce || ke || se || te) throw new Error(ce?.message || ke?.message || se?.message || te?.message || "Gagal membaca data Target JP.");
-      return NextResponse.json({ contexts: contexts ?? [], classes: classes ?? [], subjects: subjects ?? [], targets: targets ?? [] });
+      const { data: classes, error: ke } = classesResult;
+      const { data: subjects, error: se } = subjectsResult;
+      const { data: targets, error: te } = targetsResult;
+      if (ke || se || te) throw new Error(ke?.message || se?.message || te?.message || "Gagal membaca data Target JP.");
+      const contexts = activeContext
+        ? [{ id: activeContext.id, tahun_pelajaran: activeContext.tahunPelajaran, semester: activeContext.semester, is_active: activeContext.isActive }]
+        : [];
+      return NextResponse.json({ contexts, classes: classes ?? [], subjects: subjects ?? [], targets: targets ?? [] });
     } catch (e) { return NextResponse.json({ error: e instanceof Error ? e.message : "Gagal membaca data." }, { status: 500 }); }
   }
 
