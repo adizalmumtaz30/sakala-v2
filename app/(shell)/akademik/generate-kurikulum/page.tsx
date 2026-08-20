@@ -2,7 +2,7 @@
 
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, CheckCircle2, ChevronRight, FileUp, Link2, RefreshCw, Save, Search, ShieldAlert, X } from "lucide-react";
+import { ArrowLeft, CheckCircle2, ChevronRight, FileUp, Link2, RefreshCw, Save, Search, X } from "lucide-react";
 import { adoptCurriculumItemsAction, listCurriculumIntelligenceAction } from "../mata-pelajaran/curriculum-actions";
 
 export const dynamic = "force-dynamic";
@@ -45,6 +45,7 @@ export default function GenerateKurikulumPage() {
   const [success, setSuccess] = useState(false);
 
   const activeContext = contexts.find((x) => x.is_active) ?? null;
+  const verifiedVersions = useMemo(() => versions.filter((v) => v.verification_status === "verified"), [versions]);
   const activeVersion = versions.find((x) => x.id === versionId) ?? null;
   const activeSource = sources.find((x) => x.id === activeVersion?.source_id) ?? null;
   const levels = useMemo(() => Array.from(new Set(items.filter((i) => i.curriculum_version_id === versionId).map((i) => i.class_level))), [items, versionId]);
@@ -67,15 +68,17 @@ export default function GenerateKurikulumPage() {
   const validation = useMemo(() => {
     if (!activeContext) return { status: "blocked", text: "Konteks akademik belum siap." } as const;
     if (!activeVersion || activeVersion.verification_status !== "verified") return { status: "blocked", text: "Pilih kurikulum dengan sumber yang sudah terverifikasi." } as const;
-    if (!level || !classIds.length) return { status: "warning", text: "Pilih jenjang dan minimal satu kelas." } as const;
-    if (!candidate.length) return { status: "warning", text: "Belum ada hasil kurikulum." } as const;
+    if (!classIds.length) return { status: "warning", text: "Menyiapkan kelas dari konteks aktif…" } as const;
+    if (!candidate.length) return { status: "warning", text: "Konteks siap · Kurikulum siap · Sumber siap" } as const;
     if (reviewIds.length) return { status: "warning", text: `${reviewIds.length} data perlu ditinjau.` } as const;
     return { status: "valid", text: "Konteks siap · Kurikulum siap · Sumber siap" } as const;
-  }, [activeContext, activeVersion, level, classIds, candidate, reviewIds.length]);
+  }, [activeContext, activeVersion, classIds.length, candidate.length, reviewIds.length]);
 
   useEffect(() => {
+    let mounted = true;
     void (async () => {
       const result = await listCurriculumIntelligenceAction("all");
+      if (!mounted) return;
       if (result.ok) {
         setSources(result.data.sources as Source[]);
         setVersions(result.data.versions as Version[]);
@@ -87,19 +90,30 @@ export default function GenerateKurikulumPage() {
         const response = await fetch("/api/target-jp/import?mode=data", { cache: "no-store" });
         if (!response.ok) throw new Error("Data context belum dapat dibaca.");
         const data = await response.json();
-        setContexts(data.contexts ?? []);
-        setClasses(data.classes ?? []);
+        if (!mounted) return;
+        setContexts(Array.isArray(data.contexts) ? data.contexts : []);
+        setClasses(Array.isArray(data.classes) ? data.classes : []);
       } catch (error) {
-        setMessage(error instanceof Error ? error.message : "Data context belum dapat dibaca.");
+        if (mounted) setMessage(error instanceof Error ? error.message : "Data context belum dapat dibaca.");
       } finally {
-        setBusy(false);
+        if (mounted) setBusy(false);
       }
     })();
+    return () => { mounted = false; };
   }, []);
+
+  // Operator-first handoff: once the canonical context and curriculum are loaded,
+  // SAKALA prepares the applicable classes automatically. Manual controls remain
+  // available for exceptions, but they are no longer a prerequisite to Generate.
+  useEffect(() => {
+    if (busy || !activeContext || classIds.length) return;
+    const matchingClasses = classes.filter((c) => c.tahun_ajaran === activeContext.tahun_pelajaran && c.semester === activeContext.semester);
+    if (matchingClasses.length) setClassIds(matchingClasses.map((c) => c.id));
+  }, [busy, activeContext, classes, classIds.length]);
 
   function toggleClass(id: string) { setClassIds((current) => current.includes(id) ? current.filter((x) => x !== id) : [...current, id]); }
   function openUpdate(mode: "previous" | "new") { setUpdateMode(mode); setUpdateReady(false); setMessage(""); setUpdateOpen(true); }
-  function chooseVersion(id: string) { setVersionId(id); setLevel(""); setClassIds([]); setCandidate([]); setBaseline({}); setSelectedIds([]); setUpdateReady(false); }
+  function chooseVersion(id: string) { setVersionId(id); setLevel(""); setCandidate([]); setBaseline({}); setSelectedIds([]); setUpdateReady(false); }
   function toggleSelected(id: string) { setSelectedIds((current) => current.includes(id) ? current.filter((x) => x !== id) : [...current, id]); }
   function updateTarget(id: string, value: string) { setCandidate((current) => current.map((item) => item.id === id ? { ...item, manualTarget: value === "" ? null : Number(value) } : item)); }
   function restoreTarget(id: string) { setCandidate((current) => current.map((item) => item.id === id ? { ...item, manualTarget: baseline[id] ?? item.weekly_target } : item)); }
@@ -127,6 +141,7 @@ export default function GenerateKurikulumPage() {
   }
 
   function generateCandidate() {
+    if (!activeVersion || activeVersion.verification_status !== "verified" || !classIds.length) return;
     setProgress(1);
     const steps = [1, 2, 3, 4, 5];
     let index = 0;
@@ -176,7 +191,7 @@ export default function GenerateKurikulumPage() {
 
       <section className="rounded-2xl border border-border bg-surface p-5 shadow-soft">
         <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wider text-ink-500">Kurikulum</p><div className="mt-1 flex flex-wrap items-center gap-2"><h2 className="text-xl font-bold text-ink-900">{activeVersion?.curriculum_name ?? "Belum dipilih"}</h2>{activeVersion && <span className="text-emerald-700">✓</span>}</div><p className="text-sm text-ink-600">{activeVersion ? `Kemenag · ${activeVersion.regulation_year ?? "tahun tidak dicantumkan"}` : "SAKALA akan memilih kurikulum relevan bila hanya ada satu."}</p></div><button type="button" onClick={() => openUpdate("previous")} className="rounded-lg border border-border px-3 py-2 text-sm font-semibold text-ink-700 hover:bg-surface-muted">Update</button></div>
-        {versions.filter((v) => v.verification_status === "verified").length > 1 && <select aria-label="Pilih kurikulum" value={versionId} onChange={(e) => chooseVersion(e.target.value)} className="mt-4 w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm"><option value="">Pilih kurikulum</option>{versions.filter((v) => v.verification_status === "verified").map((v) => <option key={v.id} value={v.id}>{v.curriculum_name} · Kemenag · {v.regulation_year ?? "—"}</option>)}</select>}
+        {verifiedVersions.length > 1 && <select aria-label="Pilih kurikulum" value={versionId} onChange={(e) => chooseVersion(e.target.value)} className="mt-4 w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm"><option value="">Pilih kurikulum</option>{verifiedVersions.map((v) => <option key={v.id} value={v.id}>{v.curriculum_name} · Kemenag · {v.regulation_year ?? "—"}</option>)}</select>}
       </section>
 
       <section className="rounded-2xl border border-border bg-surface p-5 shadow-soft">
@@ -185,9 +200,9 @@ export default function GenerateKurikulumPage() {
       </section>
 
       <section className="rounded-2xl border border-border bg-surface p-5 shadow-soft">
-        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-bold text-ink-900">Generate</h2><p className="mt-1 text-sm text-ink-600">Pilih parameter hanya bila diperlukan.</p></div><span className={`rounded-full px-3 py-1.5 text-xs font-bold ${validation.status === "valid" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{validation.text}</span></div>
-        <div className="mt-4 grid gap-4 md:grid-cols-2"><label><span className="mb-2 block text-sm font-semibold">Jenjang</span><select aria-label="Pilih jenjang" value={level} onChange={(e) => { setLevel(e.target.value); setClassIds([]); setCandidate([]); }} className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm"><option value="">Pilih jenjang</option>{levels.map((value) => <option key={value}>{value}</option>)}</select></label><div><p className="mb-2 text-sm font-semibold">Kelas</p><div className="flex flex-wrap gap-2">{eligibleClasses.map((kelas) => <button key={kelas.id} type="button" onClick={() => toggleClass(kelas.id)} aria-pressed={classIds.includes(kelas.id)} className={`rounded-lg border px-3 py-2 text-sm ${classIds.includes(kelas.id) ? "border-brand-600 bg-brand-50 text-brand-700" : "border-border text-ink-700"}`}>{kelas.tingkat} · {kelas.nama_rombel}</button>)}{!busy && !eligibleClasses.length && <span className="text-sm text-ink-500">Belum ada kelas yang sesuai.</span>}</div></div></div>
-        <button type="button" onClick={generateCandidate} disabled={busy || !activeVersion || activeVersion.verification_status !== "verified" || !level || !classIds.length} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-brand-600 px-5 py-3 text-sm font-bold text-white shadow-soft disabled:opacity-50"><RefreshCw className="h-4 w-4" /> Generate Kurikulum</button>
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-bold text-ink-900">Generate</h2><p className="mt-1 text-sm text-ink-600">Parameter kelas disiapkan otomatis dari konteks aktif; operator tetap dapat menyesuaikannya.</p></div><span className={`rounded-full px-3 py-1.5 text-xs font-bold ${validation.status === "valid" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{validation.text}</span></div>
+        <div className="mt-4 grid gap-4 md:grid-cols-2"><label><span className="mb-2 block text-sm font-semibold">Jenjang <span className="font-normal text-ink-500">(opsional)</span></span><select aria-label="Pilih jenjang" value={level} onChange={(e) => { setLevel(e.target.value); setCandidate([]); }} className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm"><option value="">Semua jenjang dari kurikulum</option>{levels.map((value) => <option key={value}>{value}</option>)}</select></label><div><p className="mb-2 text-sm font-semibold">Kelas</p><div className="flex flex-wrap gap-2">{eligibleClasses.map((kelas) => <button key={kelas.id} type="button" onClick={() => toggleClass(kelas.id)} aria-pressed={classIds.includes(kelas.id)} className={`rounded-lg border px-3 py-2 text-sm ${classIds.includes(kelas.id) ? "border-brand-600 bg-brand-50 text-brand-700" : "border-border text-ink-700"}`}>{kelas.tingkat} · {kelas.nama_rombel}</button>)}{!busy && !eligibleClasses.length && <span className="text-sm text-ink-500">Belum ada kelas yang sesuai.</span>}</div></div></div>
+        <button type="button" onClick={generateCandidate} disabled={busy || !activeVersion || activeVersion.verification_status !== "verified" || !classIds.length} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-brand-600 px-5 py-3 text-sm font-bold text-white shadow-soft disabled:opacity-50"><RefreshCw className="h-4 w-4" /> Generate Kurikulum</button>
         {progress > 0 && progress < 5 && <div className="mt-4 grid grid-cols-5 gap-2 text-[11px] font-semibold text-ink-500"><span className={progress >= 1 ? "text-emerald-700" : ""}>Membaca sumber {progress >= 1 ? "✓" : "○"}</span><span className={progress >= 2 ? "text-emerald-700" : ""}>Struktur {progress >= 2 ? "✓" : "○"}</span><span className={progress >= 3 ? "text-brand-700" : ""}>Mapel {progress >= 3 ? "●" : "○"}</span><span className={progress >= 4 ? "text-brand-700" : ""}>JP {progress >= 4 ? "●" : "○"}</span><span className={progress >= 5 ? "text-emerald-700" : ""}>Hasil {progress >= 5 ? "✓" : "○"}</span></div>}
       </section>
 
@@ -208,7 +223,7 @@ export default function GenerateKurikulumPage() {
 
       {sourceDrawer && activeVersion && <div className="fixed inset-0 z-50 bg-black/20" onClick={() => setSourceDrawer(false)}><aside className="absolute right-0 top-0 h-full w-full max-w-md overflow-y-auto bg-surface p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}><div className="flex items-start justify-between"><div><p className="text-xs font-bold uppercase tracking-wider text-ink-500">Source Preview</p><h2 className="mt-1 text-xl font-bold">{activeVersion.curriculum_name}</h2><p className="text-sm text-ink-600">Kemenag · {activeVersion.regulation_year ?? "—"}</p></div><button onClick={() => setSourceDrawer(false)} aria-label="Tutup"><X className="h-5 w-5" /></button></div><div className="mt-6 space-y-4 text-sm"><div><p className="font-semibold">Status</p><p className="mt-1 text-emerald-700">✓ Siap digunakan</p></div><div><p className="font-semibold">Sumber</p><p className="mt-1">{activeSource?.name ?? "Regulasi resmi"}</p></div><div><p className="font-semibold">Regulasi</p><p className="mt-1 text-ink-600">{activeVersion.regulation_number ?? "Belum dicantumkan"}{activeVersion.regulation_title ? ` · ${activeVersion.regulation_title}` : ""}</p></div><div className="flex gap-2 pt-3"><button onClick={() => setSourceDrawer(false)} className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white">Gunakan sumber</button><button onClick={() => setSourceDrawer(false)} className="rounded-xl border border-border px-4 py-2.5 text-sm font-semibold">Tutup</button></div></div></aside></div>}
 
-      {updateOpen && <div className="fixed inset-0 z-50 bg-black/20 p-4" onClick={() => setUpdateOpen(false)}><div role="dialog" aria-modal="true" className="mx-auto mt-[8vh] max-h-[84vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-border bg-surface p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}><div className="flex items-start justify-between"><div><p className="text-xs font-bold uppercase tracking-wider text-brand-700">Update</p><h2 className="mt-1 text-xl font-bold">Perbarui pilihan kurikulum</h2><p className="mt-1 text-sm text-ink-600">Menggunakan konteks aktif · SMP/MTs · Kemenag · {activeContext?.tahun_pelajaran ?? "—"} · {activeContext?.semester ?? "—"}</p></div><button onClick={() => setUpdateOpen(false)} aria-label="Tutup"><X className="h-5 w-5" /></button></div><div className="mt-5 flex rounded-xl bg-surface-muted p-1"><button onClick={() => setUpdateMode("previous")} className={`flex-1 rounded-lg px-3 py-2 text-sm font-bold ${updateMode === "previous" ? "bg-surface shadow-sm" : "text-ink-500"}`}>Sumber sebelumnya</button><button onClick={() => setUpdateMode("new")} className={`flex-1 rounded-lg px-3 py-2 text-sm font-bold ${updateMode === "new" ? "bg-surface shadow-sm" : "text-ink-500"}`}>Sumber baru</button></div>{updateMode === "previous" ? <div className="mt-4 space-y-2"><div className="flex items-center gap-2 rounded-xl border border-border px-3 py-2"><Search className="h-4 w-4 text-ink-400" /><input placeholder="Cari sumber..." className="w-full bg-transparent text-sm outline-none" /></div>{versions.filter((v) => v.verification_status === "verified").map((v) => <button key={v.id} type="button" onClick={() => chooseVersion(v.id)} className={`w-full rounded-xl border p-4 text-left ${versionId === v.id ? "border-brand-500 bg-brand-50" : "border-border"}`}><p className="font-semibold">{v.curriculum_name}</p><p className="mt-1 text-sm text-ink-600">Kemenag · {v.regulation_year ?? "—"}</p>{versionId === v.id && <p className="mt-1 text-xs font-bold text-emerald-700">✓ Dipilih</p>}</button>)}</div> : <div className="mt-4 grid gap-3 md:grid-cols-2"><label className="rounded-xl border border-border p-4"><span className="mb-2 flex items-center gap-2 text-sm font-semibold"><Link2 className="h-4 w-4" /> Link</span><input value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} placeholder="https://..." inputMode="url" className="w-full rounded-lg border border-border px-3 py-2 text-sm" /></label><label className="cursor-pointer rounded-xl border border-border p-4"><span className="mb-2 flex items-center gap-2 text-sm font-semibold"><FileUp className="h-4 w-4" /> Import File</span><input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" onChange={onFileChange} className="w-full text-sm" /><span className="mt-2 block text-xs text-ink-500">{fileName || "Belum ada file dipilih"}</span></label></div>}<div className="mt-5 flex items-center justify-between gap-3"><p className="text-sm text-ink-600">{updateReady ? "✓ Pilihan siap digunakan" : "Data resmi belum berubah."}</p><button type="button" onClick={() => void applyUpdateSelection()} disabled={updating} className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${updating ? "animate-spin" : ""}`} /> {updating ? "Mencari…" : "Gunakan sumber"}</button></div></div></div>}
+      {updateOpen && <div className="fixed inset-0 z-50 bg-black/20 p-4" onClick={() => setUpdateOpen(false)}><div role="dialog" aria-modal="true" className="mx-auto mt-[8vh] max-h-[84vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-border bg-surface p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}><div className="flex items-start justify-between"><div><p className="text-xs font-bold uppercase tracking-wider text-brand-700">Update</p><h2 className="mt-1 text-xl font-bold">Perbarui pilihan kurikulum</h2><p className="mt-1 text-sm text-ink-600">Menggunakan konteks aktif · SMP/MTs · Kemenag · {activeContext?.tahun_pelajaran ?? "—"} · {activeContext?.semester ?? "—"}</p></div><button onClick={() => setUpdateOpen(false)} aria-label="Tutup"><X className="h-5 w-5" /></button></div><div className="mt-5 flex rounded-xl bg-surface-muted p-1"><button onClick={() => setUpdateMode("previous")} className={`flex-1 rounded-lg px-3 py-2 text-sm font-bold ${updateMode === "previous" ? "bg-surface shadow-sm" : "text-ink-500"}`}>Sumber sebelumnya</button><button onClick={() => setUpdateMode("new")} className={`flex-1 rounded-lg px-3 py-2 text-sm font-bold ${updateMode === "new" ? "bg-surface shadow-sm" : "text-ink-500"}`}>Sumber baru</button></div>{updateMode === "previous" ? <div className="mt-4 space-y-2"><div className="flex items-center gap-2 rounded-xl border border-border px-3 py-2"><Search className="h-4 w-4 text-ink-400" /><input placeholder="Cari sumber..." className="w-full bg-transparent text-sm outline-none" /></div>{verifiedVersions.map((v) => <button key={v.id} type="button" onClick={() => chooseVersion(v.id)} className={`w-full rounded-xl border p-4 text-left ${versionId === v.id ? "border-brand-500 bg-brand-50" : "border-border"}`}><p className="font-semibold">{v.curriculum_name}</p><p className="mt-1 text-sm text-ink-600">Kemenag · {v.regulation_year ?? "—"}</p>{versionId === v.id && <p className="mt-1 text-xs font-bold text-emerald-700">✓ Dipilih</p>}</button>)}</div> : <div className="mt-4 grid gap-3 md:grid-cols-2"><label className="rounded-xl border border-border p-4"><span className="mb-2 flex items-center gap-2 text-sm font-semibold"><Link2 className="h-4 w-4" /> Link</span><input value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} placeholder="https://..." inputMode="url" className="w-full rounded-lg border border-border px-3 py-2 text-sm" /></label><label className="cursor-pointer rounded-xl border border-border p-4"><span className="mb-2 flex items-center gap-2 text-sm font-semibold"><FileUp className="h-4 w-4" /> Import File</span><input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" onChange={onFileChange} className="w-full text-sm" /><span className="mt-2 block text-xs text-ink-500">{fileName || "Belum ada file dipilih"}</span></label></div>}<div className="mt-5 flex items-center justify-between gap-3"><p className="text-sm text-ink-600">{updateReady ? "✓ Pilihan siap digunakan" : "Data resmi belum berubah."}</p><button type="button" onClick={() => void applyUpdateSelection()} disabled={updating} className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${updating ? "animate-spin" : ""}`} /> {updating ? "Mencari…" : "Gunakan sumber"}</button></div></div></div>}
 
       {compareOpen && <div className="fixed inset-0 z-[60] bg-black/20 p-4" onClick={() => setCompareOpen(false)}><div role="dialog" aria-modal="true" className="mx-auto mt-[12vh] w-full max-w-lg rounded-2xl border border-border bg-surface p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}><p className="text-xs font-bold uppercase tracking-wider text-brand-700">Automatic Compare</p><h2 className="mt-1 text-xl font-bold">Perubahan ditemukan</h2><p className="mt-1 text-sm text-ink-600">{changedIds.length} perubahan perlu ditinjau sebelum sinkronisasi.</p><div className="mt-4 space-y-2 rounded-xl bg-surface-muted p-4 text-sm">{changedIds.slice(0, 8).map((id) => { const item = candidate.find((x) => x.id === id); return item ? <div key={id} className="flex justify-between gap-3"><span>{item.subject_name}</span><strong>{baseline[id] ?? "—"} → {item.manualTarget ?? "—"}</strong></div> : null; })}{changedIds.length > 8 && <p className="text-xs text-ink-500">+ {changedIds.length - 8} perubahan lainnya</p>}{newIds.length > 0 && <p className="pt-2 text-sm font-semibold text-brand-700">{newIds.length} mata pelajaran baru ditemukan.</p>}</div><p className="mt-4 text-sm text-ink-600">Saran: gunakan hasil terbaru. Data yang tidak berubah tidak perlu ditinjau satu per satu.</p><div className="mt-5 flex flex-wrap justify-end gap-2"><button onClick={() => setCompareOpen(false)} className="rounded-xl border border-border px-4 py-2.5 text-sm font-semibold">Tinjau perbedaan</button><button onClick={() => void commitCandidate()} className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white">Gunakan hasil terbaru</button></div></div></div>}
     </div>
