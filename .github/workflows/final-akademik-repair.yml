@@ -1,0 +1,58 @@
+name: Final Akademik Repair Gate
+
+on:
+  push:
+    branches: [fix/akademik-parser-final]
+
+permissions:
+  contents: write
+
+jobs:
+  repair-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Exact parser repair
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('app/(shell)/akademik/AkademikWorkspace.tsx')
+          s = p.read_text(encoding='utf-8')
+          bad = '{/* Bagian 8.2 / 77 — Active Academic Context */'
+          good = '{/* Bagian 8.2 / 77 — Active Academic Context */}'
+          if s.count(bad) != 1:
+              raise SystemExit(f'Expected exactly one malformed occurrence; found {s.count(bad)}')
+          p.write_text(s.replace(bad, good), encoding='utf-8')
+          print('Exact parser repair applied: 1 occurrence')
+          PY
+
+      - name: Diff guard
+        shell: bash
+        run: |
+          git diff --check
+          git diff --numstat
+          test "$(git diff --name-only | wc -l | tr -d ' ')" = "1"
+          test "$(git diff --numstat | awk '{a+=$1; d+=$2} END {print a ":" d}')" = "1:1"
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Production build
+        run: npm run build
+
+      - name: Commit verified repair
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add 'app/(shell)/akademik/AkademikWorkspace.tsx'
+          git commit -m 'fix: repair AkademikWorkspace parser after build verification'
+          git push origin HEAD:fix/akademik-parser-final
