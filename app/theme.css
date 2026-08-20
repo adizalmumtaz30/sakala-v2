@@ -1,0 +1,214 @@
+:root {
+  color-scheme: light;
+  /* SAKALA Calm Intelligence — foundation tokens */
+  --color-canvas: #F7F8F6;
+  --color-surface: #FFFFFF;
+  --color-surface-muted: #F3F5F2;
+  --color-border: #E3E7E1;
+  --color-border-strong: #CFD6CC;
+  --color-ink-900: #172019;
+  --color-ink-700: #3F4A42;
+  --color-ink-500: #68736B;
+  --color-ink-400: #879188;
+  --color-ink-300: #AAB2AB;
+  --color-brand: #2F7D55;
+  --color-brand-50: #EDF7F0;
+  --color-brand-100: #D9EDDF;
+  --color-brand-700: #21613F;
+  --color-cyan: #147E9A;
+  --color-cyan-50: #EAF7FA;
+  --color-amber: #A86500;
+  --color-amber-50: #FFF5E5;
+  --color-violet: #6D55B8;
+  --color-violet-50: #F2EEFB;
+  --color-emerald: #1F8A5B;
+  --color-emerald-50: #E8F6EF;
+  --color-rose: #C73C3C;
+  --color-rose-50: #FDECEC;
+  --color-chart-grid: #E1E6E1;
+  --color-chart-axis: #748077;
+  --color-chart-tooltip: #FFFFFF;
+  --shadow-soft: 0 1px 2px rgba(23,32,25,.04), 0 6px 18px -14px rgba(23,32,25,.14);
+  --shadow-float: 0 14px 32px -18px rgba(23,32,25,.20);
+  --focus-ring: 0 0 0 3px rgba(47,125,85,.18);
+  --radius-input: 10px;
+  --radius-card: 12px;
+  --radius-panel: 16px;
+}
+
+html.dark {
+  color-scheme: dark;
+  /* Calm dark: deep neutral canvas, elevated green-neutral surfaces. */
+  --color-canvas: #0E1511;
+  --color-surface: #151D18;
+  --color-surface-muted: #1B251F;
+  --color-border: #2C3830;
+  --color-border-strong: #3A493F;
+  --color-ink-900: #F1F5F1;
+  --color-ink-700: #D3DDD5;
+  --color-ink-500: #9CA9A0;
+  --color-ink-400: #7E8B82;
+  --color-ink-300: #5F6C63;
+  --color-brand: #67B889;
+  --color-brand-50: #172D21;
+  --color-brand-100: #214632;
+  --color-brand-700: #8FD0A8;
+  --color-cyan: #56B9D0;
+  --color-cyan-50: #12323A;
+  --color-amber: #F0B45A;
+  --color-amber-50: #3A2A15;
+  --color-violet: #A596E0;
+  --color-violet-50: #2A2442;
+  --color-emerald: #58C796;
+  --color-emerald-50: #123A2A;
+  --color-rose: #F17878;
+  --color-rose-50: #3D2020;
+  --color-chart-grid: #2B3830;
+  --color-chart-axis: #A3AEA6;
+  --color-chart-tooltip: #1B251F;
+  --shadow-soft: 0 1px 2px rgba(0,0,0,.20), 0 8px 22px -14px rgba(0,0,0,.48);
+  --shadow-float: 0 16px 36px -16px rgba(0,0,0,.60);
+  --focus-ring: 0 0 0 3px rgba(103,184,137,.26);
+}
+
+html, body {
+  background: var(--color-canvas);
+  color: var(--color-ink-900);
+  transition: background-color 180ms ease, color 180ms ease;
+}
+
+html.dark ::selection {
+  background: rgba(103,184,137,.28);
+  color: var(--color-ink-900);
+}
+
+html.dark .bg-white,
+html.dark .bg-white\/80,
+html.dark .bg-white\/75,
+html.dark .bg-white\/70,
+html.dark .bg-white\/60 {
+  background-color: var(--color-surface) !important;
+}
+
+html.dark .bg-slate-50,
+html.dark .bg-slate-50\/70,
+html.dark .bg-slate-50\/45,
+html.dark .bg-slate-50\/90 {
+  background-color: var(--color-surface-muted) !important;
+}
+
+html.dark .text-slate-950,
+html.dark .text-slate-900,
+html.dark .text-slate-800,
+html.dark .text-slate-700 {
+  color: var(--color-ink-900) !important;
+}
+
+html.dark .text-slate-600,
+html.dark .text-slate-500 {
+  color: var(--color-ink-500) !important;
+}
+
+html.dark .text-slate-400,
+html.dark .text-slate-300 {
+  color: var(--color-ink-400) !important;
+}
+
+html.dark .border-slate-200,
+html.dark .border-slate-200\/80,
+html.dark .border-slate-200\/70,
+html.dark .border-slate-200\/60,
+html.dark .border-slate-300 {
+  border-color: var(--color-border) !important;
+}
+
+html.dark table.w-full.border-collapse.text-\[12\.5px\] {
+  background: var(--color-surface);
+}
+
+html.dark table.w-full.border-collapse.text-\[12\.5px\] thead tr,
+html.dark table.w-full.border-collapse.text-\[12\.5px\] thead th:first-child {
+  background: var(--color-surface-muted);
+}
+
+html.dark table.w-full.border-collapse.text-\[12\.5px\] thead th {
+  border-color: var(--color-border);
+  color: var(--color-ink-500);
+}
+
+html.dark table.w-full.border-collapse.text-\[12\.5px\] tbody td {
+  border-color: rgba(255,255,255,.055);
+}
+
+html.dark table.w-full.border-collapse.text-\[12\.5px\] tbody td:first-child {
+  background: var(--color-surface-muted);
+  border-color: var(--color-border);
+}
+
+html.dark table.w-full.border-collapse.text-\[12\.5px\] tbody td button:hover {
+  box-shadow: var(--shadow-float);
+}
+
+/* Dark-mode compatibility for common utility colors still present in legacy surfaces. */
+html.dark .bg-emerald-50 { background-color: var(--color-emerald-50) !important; }
+html.dark .bg-amber-50 { background-color: var(--color-amber-50) !important; }
+html.dark .bg-rose-50 { background-color: var(--color-rose-50) !important; }
+html.dark .bg-cyan-50 { background-color: var(--color-cyan-50) !important; }
+html.dark .bg-violet-50 { background-color: var(--color-violet-50) !important; }
+
+html.dark .text-emerald-700,
+html.dark .text-emerald-600,
+html.dark .text-emerald { color: var(--color-emerald) !important; }
+html.dark .text-amber-700,
+html.dark .text-amber-600 { color: var(--color-amber) !important; }
+html.dark .text-rose-700,
+html.dark .text-rose-600 { color: var(--color-rose) !important; }
+html.dark .text-cyan-700,
+html.dark .text-cyan-600 { color: var(--color-cyan) !important; }
+html.dark .text-violet-700,
+html.dark .text-violet-600 { color: var(--color-violet) !important; }
+
+/* Jadwal readability: slightly larger, calmer type without changing layout density. */
+table.w-full.border-collapse.text-\[12\.5px\] {
+  font-size: 13px;
+}
+
+table.w-full.border-collapse.text-\[12\.5px\] thead th {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+table.w-full.border-collapse.text-\[12\.5px\] tbody td:first-child {
+  font-size: 13px;
+}
+
+table.w-full.border-collapse.text-\[12\.5px\] tbody td:first-child > div:first-child {
+  font-size: 13px;
+}
+
+table.w-full.border-collapse.text-\[12\.5px\] tbody td:first-child > div:nth-child(2) {
+  font-size: 12px;
+}
+
+table.w-full.border-collapse.text-\[12\.5px\] tbody td button {
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+
+table.w-full.border-collapse.text-\[12\.5px\] tbody td button > span:first-child {
+  font-size: 13px;
+}
+
+/* Committed/status semantic color remains readable in both themes. */
+.bg-emerald-50.text-emerald {
+  color: var(--color-emerald);
+}
+
+html.dark .bg-emerald-50.text-emerald {
+  background-color: var(--color-emerald-50) !important;
+  color: var(--color-emerald) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html, body { transition: none; }
+}
