@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import type { CSSProperties } from "react";
 
 type LongTextProps = {
@@ -27,6 +27,7 @@ export default function LongText({
   const safeMax = Math.max(safeMin, Math.floor(maxLines));
   const initialLines = Math.min(safeMax, Math.max(safeMin, Math.floor(lines) || safeMin));
   const [visibleLines, setVisibleLines] = useState(initialLines);
+  const inputId = useId();
 
   const clampStyle: CSSProperties = {
     display: "-webkit-box",
@@ -54,11 +55,11 @@ export default function LongText({
 
       {allowCustomLines && (
         <div className="mt-2 flex items-center gap-2 text-[11px] text-ink-500">
-          <label htmlFor="long-text-view-lines" className="shrink-0 font-medium">
+          <label htmlFor={inputId} className="shrink-0 font-medium">
             View
           </label>
           <input
-            id="long-text-view-lines"
+            id={inputId}
             type="number"
             inputMode="numeric"
             min={safeMin}
