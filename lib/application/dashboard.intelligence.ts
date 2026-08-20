@@ -3,10 +3,15 @@ import { scheduleAssignmentRepository } from "@/lib/data-access/scheduleAssignme
 import { jamPelajaranRepository } from "@/lib/data-access/jamPelajaran.repository";
 import { auditLogRepository } from "@/lib/data-access/auditLog.repository";
 import type { HariSekolah } from "@/lib/domain/jamPelajaran";
+import { classifyBeban, type Guru } from "@/lib/domain/guru";
 
 export interface DashboardHeatmapDay { day: HariSekolah; label: string; total: number; level: 0|1|2|3|4; }
 export interface DashboardAgendaEntry { id:string; dayLabel:string; time:string; subject:string; teacher:string; teacherId:string|null; className:string; room:string|null; }
 export interface DashboardActivityEntry { id:string; action:string; entityType:string; entityLabel:string|null; createdAt:string; }
+export interface DashboardBebanDistribution { ringan:number; normal:number; berat:number; }
+export interface DashboardHeatmapCell { periode:number; time:string; total:number; level:0|1|2|3|4; }
+export interface DashboardHeatmapGridDay { day:HariSekolah; label:string; cells:DashboardHeatmapCell[]; }
+export interface DashboardWorkloadFullEntry { guruId:string; namaGuru:string; totalJamMengajar:number; beban:"ringan"|"normal"|"berat"; }
 
 const DAYS:HariSekolah[]=["senin","selasa","rabu","kamis","jumat","sabtu"];
 const LABEL:Record<HariSekolah,string>={senin:"Senin",selasa:"Selasa",rabu:"Rabu",kamis:"Kamis",jumat:"Jumat",sabtu:"Sabtu",minggu:"Minggu"};
@@ -35,7 +40,7 @@ function humanizeActivity(action:string, entityType:string, entityLabel:string|n
   return meaningfulLabel ? `${verb} ${entity} · ${meaningfulLabel}` : `${verb} ${entity}`;
 }
 
-export async function getDashboardIntelligence(supabase:SupabaseClient, contextId:string, guruList:any[], mapelList:any[], kelasList:any[], ruanganList:any[]){
+export async function getDashboardIntelligence(supabase:SupabaseClient, contextId:string, guruList:Guru[], mapelList:any[], kelasList:any[], ruanganList:any[]){
   const [assignments,jam,audit]=await Promise.all([
     scheduleAssignmentRepository.findByContext(supabase,contextId),
     jamPelajaranRepository.findByContext(supabase,contextId),
@@ -46,12 +51,40 @@ export async function getDashboardIntelligence(supabase:SupabaseClient, contextI
   const mapel=new Map(mapelList.map(m=>[m.id,m.nama]));
   const kelas=new Map(kelasList.map(k=>[k.id,`${k.tingkat} ${k.namaRombel}`]));
   const ruang=new Map(ruanganList.map(r=>[r.id,r.nama]));
-  const slots=new Map(jam.filter(j=>j.status==="aktif"&&j.jenis==="pembelajaran").map(j=>[`${j.hari}:${j.nomorUrut}`,j]));
+  const pembelajaranJam=jam.filter(j=>j.status==="aktif"&&j.jenis==="pembelajaran");
+  const slots=new Map(pembelajaranJam.map(j=>[`${j.hari}:${j.nomorUrut}`,j]));
 
   const totals=new Map<HariSekolah,number>();
   for(const a of committed) totals.set(a.day,(totals.get(a.day)??0)+(a.periodEnd-a.periodStart+1));
   const max=Math.max(...DAYS.map(d=>totals.get(d)??0),1);
   const heatmap=DAYS.map(day=>{const total=totals.get(day)??0;const r=total/max;const level=(total===0?0:r<=.25?1:r<=.5?2:r<=.75?3:4) as 0|1|2|3|4;return {day,label:LABEL[day],total,level};});
+
+  // Heatmap Jadwal grid penuh: hari x periode pembelajaran, cell = jumlah assignment committed yang menutupi periode itu.
+  const cellCounts=new Map<string,number>();
+  for(const a of committed){
+    for(let p=a.periodStart;p<=a.periodEnd;p++) cellCounts.set(`${a.day}:${p}`,(cellCounts.get(`${a.day}:${p}`)??0)+1);
+  }
+  const gridMax=Math.max(...Array.from(cellCounts.values()),1);
+  const heatmapGrid=DAYS.map(day=>{
+    const periods=pembelajaranJam.filter(j=>j.hari===day).sort((x,y)=>x.nomorUrut-y.nomorUrut);
+    const cells=periods.map(j=>{
+      const total=cellCounts.get(`${day}:${j.nomorUrut}`)??0;
+      const r=total/gridMax;
+      const level=(total===0?0:r<=.25?1:r<=.5?2:r<=.75?3:4) as 0|1|2|3|4;
+      return {periode:j.nomorUrut,time:`${j.waktuMulai}–${j.waktuSelesai}`,total,level};
+    });
+    return {day,label:LABEL[day],cells};
+  });
+
+  // Distribusi Beban Guru (Ringan/Normal/Berat) — semua guru aktif, termasuk yang belum punya jadwal committed (0 JP = ringan).
+  const jamByGuruId=new Map<string,number>();
+  for(const a of committed) jamByGuruId.set(a.teacherId,(jamByGuruId.get(a.teacherId)??0)+(a.periodEnd-a.periodStart+1));
+  const guruAktif=guruList.filter(g=>g.status==="aktif");
+  const workloadFull=guruAktif.map(g=>{
+    const totalJamMengajar=jamByGuruId.get(g.id)??0;
+    return {guruId:g.id,namaGuru:g.namaGuru,totalJamMengajar,beban:classifyBeban(totalJamMengajar)};
+  }).sort((a,b)=>b.totalJamMengajar-a.totalJamMengajar);
+  const bebanDistribution=workloadFull.reduce((acc,w)=>{acc[w.beban]+=1;return acc;},{ringan:0,normal:0,berat:0} as DashboardBebanDistribution);
 
   const current=todayIndex();
   const upcoming=committed.map(a=>({a,distance:(DAYS.indexOf(a.day)-current+7)%7})).sort((x,y)=>x.distance-y.distance||x.a.periodStart-y.a.periodStart).slice(0,6).map(({a})=>{
@@ -62,5 +95,5 @@ export async function getDashboardIntelligence(supabase:SupabaseClient, contextI
     return {id:a.id,dayLabel:LABEL[a.day],time:s?`${s.waktuMulai}–${s.waktuSelesai}`:`Jam ke-${a.periodStart}`,subject,teacher:teacherName,teacherId:guru.has(a.teacherId)?a.teacherId:null,className,room:a.roomId?ruang.get(a.roomId)??null:null};
   });
   const recentActivity=audit.items.map(i=>({id:i.id,action:humanizeActivity(i.action,i.entityType,i.entityLabel),entityType:i.entityType,entityLabel:i.entityLabel,createdAt:i.createdAt}));
-  return {heatmap,upcomingAgenda:upcoming,recentActivity};
+  return {heatmap,heatmapGrid,bebanDistribution,workloadFull,upcomingAgenda:upcoming,recentActivity};
 }

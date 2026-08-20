@@ -31,6 +31,8 @@ export interface DashboardKeyMetrics {
   totalRuangan: number;
   totalPembagianMengajarAktif: number;
   totalJadwalCommitted: number;
+  /** Total Jam Tatap Muka: jumlah JP (periodEnd-periodStart+1) seluruh jadwal committed dalam konteks aktif. */
+  totalJtm: number;
 }
 
 export interface DashboardJpInsight {
@@ -82,6 +84,7 @@ export async function getDashboardSummary(supabase: SupabaseClient): Promise<Das
     totalRuangan: ruanganList.length,
     totalPembagianMengajarAktif: 0,
     totalJadwalCommitted: 0,
+    totalJtm: 0,
   };
 
   if (!activeContext) {
@@ -112,9 +115,11 @@ export async function getDashboardSummary(supabase: SupabaseClient): Promise<Das
 
   const guruById = new Map(guruList.map((g) => [g.id, g.namaGuru]));
   const jamByGuru = new Map<string, number>();
+  let totalJtm = 0;
   for (const a of committed) {
     const jp = a.periodEnd - a.periodStart + 1;
     jamByGuru.set(a.teacherId, (jamByGuru.get(a.teacherId) ?? 0) + jp);
+    totalJtm += jp;
   }
   const workloadTop: DashboardWorkloadEntry[] = Array.from(jamByGuru.entries())
     .map(([guruId, totalJamMengajar]) => ({ guruId, namaGuru: guruById.get(guruId) ?? "(guru tidak ditemukan)", totalJamMengajar }))
@@ -128,6 +133,7 @@ export async function getDashboardSummary(supabase: SupabaseClient): Promise<Das
       ...baseMetrics,
       totalPembagianMengajarAktif: pembagianAktif.length,
       totalJadwalCommitted: committed.length,
+      totalJtm,
     },
     jpInsight: { totalKombinasi: pembagianAktif.length, countByStatus, completionPercent },
     workloadTop,

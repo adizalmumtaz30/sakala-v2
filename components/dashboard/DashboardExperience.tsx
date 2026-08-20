@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { Activity, ArrowRight, CalendarDays, ChevronRight, Clock3, Lightbulb, Users } from "lucide-react";
+import { useState } from "react";
+import { Activity, ArrowRight, BookOpen, CalendarCheck2, ChevronRight, Clock3, DoorOpen, Layers, Lightbulb, Users } from "lucide-react";
 import type { ReactNode } from "react";
 import type { DashboardKeyMetrics, DashboardJpInsight, DashboardWorkloadEntry } from "@/lib/application/dashboard.usecases";
-import type { DashboardActivityEntry, DashboardAgendaEntry, DashboardHeatmapDay } from "@/lib/application/dashboard.intelligence";
+import type { DashboardActivityEntry, DashboardAgendaEntry, DashboardHeatmapDay, DashboardHeatmapGridDay, DashboardBebanDistribution, DashboardWorkloadFullEntry } from "@/lib/application/dashboard.intelligence";
 
 type GuruLite = { id: string; namaGuru: string; jenisKelamin?: "L" | "P" };
 type AvatarSize = "xs" | "sm" | "md" | "lg";
+type JtmMode = "hari" | "minggu" | "bulan" | "semester";
 
 function Avatar({ name, size = "md" }: { name?: string | null; size?: AvatarSize }) {
   const safeName = (name ?? "Guru").trim() || "Guru";
@@ -24,6 +26,33 @@ function Section({ title, description, href, children, icon }: { title: string; 
     </div>
     {children}
   </section>;
+}
+
+const BEBAN_STYLE: Record<"ringan" | "normal" | "berat", { label: string; badge: string; dot: string }> = {
+  ringan: { label: "Ringan", badge: "border-emerald-200 bg-emerald-50 text-emerald-700", dot: "bg-emerald-500" },
+  normal: { label: "Normal", badge: "border-brand-600/20 bg-brand-50 text-brand-700", dot: "bg-brand-600" },
+  berat: { label: "Berat", badge: "border-rose-200 bg-rose-50 text-rose-700", dot: "bg-rose-500" },
+};
+
+function KpiCard({ label, value, suffix, icon, href }: { label: string; value: number; suffix?: string; icon: ReactNode; href: string }) {
+  return <Link href={href} className="group flex items-center gap-3 rounded-[16px] border border-border/70 bg-surface/95 px-3.5 py-3 shadow-[0_1px_2px_rgba(15,23,42,.03)] transition-all hover:-translate-y-0.5 hover:border-brand-600/25 hover:shadow-[0_8px_20px_rgba(15,23,42,.06)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">
+    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">{icon}</span>
+    <span className="min-w-0">
+      <span className="flex items-baseline gap-1"><strong className="text-[19px] font-bold leading-none tabular-nums text-ink-900 group-hover:text-brand-700">{value}</strong>{suffix && <span className="text-[9.5px] font-medium text-ink-400">{suffix}</span>}</span>
+      <span className="mt-1 block truncate text-[9.5px] font-medium text-ink-400">{label}</span>
+    </span>
+  </Link>;
+}
+
+function KpiRow({ metrics }: { metrics: DashboardKeyMetrics }) {
+  return <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
+    <KpiCard label="Guru Aktif" value={metrics.totalGuruAktif} icon={<Users size={16} />} href="/guru" />
+    <KpiCard label="Kelas" value={metrics.totalKelas} icon={<Layers size={16} />} href="/kelas" />
+    <KpiCard label="Mata Pelajaran" value={metrics.totalMataPelajaranAktif} icon={<BookOpen size={16} />} href="/mata-pelajaran" />
+    <KpiCard label="Ruangan" value={metrics.totalRuangan} icon={<DoorOpen size={16} />} href="/ruangan" />
+    <KpiCard label="Total JTM" value={metrics.totalJtm} suffix="JP/minggu" icon={<Clock3 size={16} />} href="/analitik" />
+    <KpiCard label="Jadwal Aktif" value={metrics.totalJadwalCommitted} icon={<CalendarCheck2 size={16} />} href="/jadwal" />
+  </div>;
 }
 
 function LineChart({ days }: { days: DashboardHeatmapDay[] }) {
@@ -43,55 +72,71 @@ function LineChart({ days }: { days: DashboardHeatmapDay[] }) {
   </div>;
 }
 
-function Donut({ insight }: { insight: DashboardJpInsight }) {
-  const total = Math.max(insight.totalKombinasi, 1);
-  const done = insight.countByStatus.penuh + insight.countByStatus.lebih;
-  const partial = insight.countByStatus.sebagian;
-  const empty = insight.countByStatus.kosong;
-  const a = (done / total) * 360;
-  const b = ((done + partial) / total) * 360;
-  const bg = "conic-gradient(var(--brand-600) 0deg " + a + "deg, #f59e0b " + a + "deg " + b + "deg, #e5e7eb " + b + "deg 360deg)";
+const JTM_MODES: { key: JtmMode; label: string }[] = [{ key: "hari", label: "Hari" }, { key: "minggu", label: "Minggu" }, { key: "bulan", label: "Bulan" }, { key: "semester", label: "Semester" }];
+
+function RekapJtm({ heatmap }: { heatmap: DashboardHeatmapDay[] }) {
+  const [mode, setMode] = useState<JtmMode>("hari");
+  const totalMinggu = heatmap.reduce((s, d) => s + d.total, 0);
+  return <div>
+    <div className="mb-3 flex gap-1 rounded-lg bg-surface-muted/60 p-0.5 text-[9.5px] font-semibold">
+      {JTM_MODES.map((m) => <button key={m.key} type="button" onClick={() => setMode(m.key)} className={`flex-1 rounded-md px-2 py-1 transition-colors ${mode === m.key ? "bg-surface text-brand-700 shadow-sm" : "text-ink-400 hover:text-ink-700"}`}>{m.label}</button>)}
+    </div>
+    {mode === "hari" && <LineChart days={heatmap} />}
+    {mode === "minggu" && <div className="flex h-[164px] flex-col items-center justify-center rounded-xl bg-surface-muted/45"><strong className="text-[30px] font-bold leading-none tabular-nums text-ink-900">{totalMinggu}</strong><span className="mt-1.5 text-[10px] text-ink-400">Total JP committed minggu ini</span></div>}
+    {(mode === "bulan" || mode === "semester") && <div className="flex h-[164px] flex-col items-center justify-center rounded-xl bg-surface-muted/45 px-6 text-center"><span className="text-[10.5px] font-medium text-ink-500">Data historis {mode === "bulan" ? "bulanan" : "semesteran"} belum tersedia.</span><span className="mt-1 text-[9px] text-ink-400">Akan terisi otomatis seiring histori jadwal committed bertambah dari minggu ke minggu.</span></div>}
+  </div>;
+}
+
+function BebanDonut({ distribution }: { distribution: DashboardBebanDistribution }) {
+  const total = Math.max(distribution.ringan + distribution.normal + distribution.berat, 1);
+  const a = (distribution.ringan / total) * 360;
+  const b = ((distribution.ringan + distribution.normal) / total) * 360;
+  const bg = `conic-gradient(#10b981 0deg ${a}deg, var(--brand-600) ${a}deg ${b}deg, #f43f5e ${b}deg 360deg)`;
   return <div className="flex items-center gap-5">
     <div className="relative h-28 w-28 shrink-0 rounded-full p-[11px] transition-transform hover:scale-[1.02]" style={{ background: bg }}>
-      <Link href="/pembagian-mengajar/target-jp?status=penuh" aria-label={`Buka Target JP terpenuhi ${insight.completionPercent}%`} className="flex h-full w-full items-center justify-center rounded-full bg-surface text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">
-        <span><strong className="block text-[23px] leading-none tabular-nums text-ink-900">{insight.completionPercent}%</strong><small className="mt-1 block text-[8px] text-ink-400">terpenuhi</small></span>
+      <Link href="/guru" aria-label="Buka Data Guru" className="flex h-full w-full items-center justify-center rounded-full bg-surface text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">
+        <span><strong className="block text-[23px] leading-none tabular-nums text-ink-900">{distribution.ringan + distribution.normal + distribution.berat}</strong><small className="mt-1 block text-[8px] text-ink-400">guru aktif</small></span>
       </Link>
     </div>
     <div className="min-w-0 flex-1 space-y-2 text-[10px]">
-      <Link href="/pembagian-mengajar/target-jp?status=penuh" className="flex justify-between gap-3 rounded px-1 hover:bg-brand-50 hover:text-brand-600 focus-visible:ring-2 focus-visible:ring-brand-500/40"><span>Terpenuhi</span><b className="tabular-nums">{done}</b></Link>
-      <Link href="/pembagian-mengajar/target-jp?status=sebagian" className="flex justify-between gap-3 rounded px-1 hover:bg-amber-50 hover:text-amber-700 focus-visible:ring-2 focus-visible:ring-brand-500/40"><span>Belum lengkap</span><b className="tabular-nums">{partial}</b></Link>
-      <Link href="/pembagian-mengajar/target-jp?status=kosong" className="flex justify-between gap-3 rounded px-1 hover:bg-slate-50 hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-brand-500/40"><span>Belum mulai</span><b className="tabular-nums">{empty}</b></Link>
+      <Link href="/guru" className="flex justify-between gap-3 rounded px-1 hover:bg-emerald-50 hover:text-emerald-700 focus-visible:ring-2 focus-visible:ring-brand-500/40"><span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Ringan</span><b className="tabular-nums">{distribution.ringan}</b></Link>
+      <Link href="/guru" className="flex justify-between gap-3 rounded px-1 hover:bg-brand-50 hover:text-brand-600 focus-visible:ring-2 focus-visible:ring-brand-500/40"><span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-brand-600" />Normal</span><b className="tabular-nums">{distribution.normal}</b></Link>
+      <Link href="/guru" className="flex justify-between gap-3 rounded px-1 hover:bg-rose-50 hover:text-rose-700 focus-visible:ring-2 focus-visible:ring-brand-500/40"><span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-rose-500" />Berat</span><b className="tabular-nums">{distribution.berat}</b></Link>
     </div>
   </div>;
 }
 
-function Metric({ label, value, href }: { label: string; value: number; href: string }) {
-  return <Link href={href} className="group min-w-[58px] border-l border-border/70 pl-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"><span className="block text-[17px] font-bold leading-none tabular-nums text-ink-900 group-hover:text-brand-600">{value}</span><span className="mt-1 block text-[9px] text-ink-400">{label}</span></Link>;
-}
-
-function Pulse({ metrics }: { metrics: DashboardKeyMetrics }) {
-  return <div className="rounded-[20px] border border-brand-600/10 bg-[linear-gradient(135deg,rgba(37,99,235,.055),rgba(255,255,255,.9))] px-5 py-4 shadow-[0_8px_28px_rgba(15,23,42,.045)]">
-    <div className="flex flex-wrap items-end justify-between gap-4">
-      <div><p className="text-[9px] font-bold uppercase tracking-[.14em] text-brand-600">Academic Pulse</p><div className="mt-1.5 flex items-baseline gap-2"><strong className="text-[34px] font-bold leading-none tracking-[-.035em] tabular-nums text-ink-900">{metrics.totalJadwalCommitted}</strong><span className="text-[11px] font-medium text-ink-500">JP committed</span></div><p className="mt-1 text-[10px] text-ink-400">Jadwal aktif sebagai sumber utama operasional.</p></div>
-      <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4"><Metric label="Guru" value={metrics.totalGuruAktif} href="/guru" /><Metric label="Kelas" value={metrics.totalKelas} href="/kelas" /><Metric label="Ruangan" value={metrics.totalRuangan} href="/ruangan" /><Metric label="Pembagian" value={metrics.totalPembagianMengajarAktif} href="/pembagian-mengajar" /></div>
+function HeatmapGrid({ grid }: { grid: DashboardHeatmapGridDay[] }) {
+  const rows = Math.max(...grid.map((d) => d.cells.length), 1);
+  const LEVEL_BG: Record<0 | 1 | 2 | 3 | 4, string> = { 0: "bg-surface-muted", 1: "bg-brand-50", 2: "bg-brand-100", 3: "bg-brand-200", 4: "bg-brand-300" };
+  return <div className="overflow-x-auto">
+    <div className="grid min-w-[420px] gap-1.5" style={{ gridTemplateColumns: `repeat(${grid.length}, minmax(0,1fr))` }}>
+      {grid.map((d) => <div key={d.day} className="text-center text-[8px] font-semibold text-ink-400">{d.label.slice(0, 3)}</div>)}
+      {Array.from({ length: rows }).map((_, r) => grid.map((d) => {
+        const cell = d.cells[r];
+        if (!cell) return <div key={`${d.day}-${r}`} className="h-6 rounded-md" />;
+        return <Link key={`${d.day}-${r}`} href={`/jadwal?day=${encodeURIComponent(d.day)}`} title={`${d.label} · Jam ke-${cell.periode} (${cell.time}) · ${cell.total} jadwal`} aria-label={`${d.label} jam ke-${cell.periode}: ${cell.total} jadwal`} className={`h-6 rounded-md ${LEVEL_BG[cell.level]} transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40`} />;
+      }))}
     </div>
+    <p className="mt-2 text-[9px] text-ink-400">Arahkan kursor ke sel untuk melihat detail jam &amp; jumlah jadwal.</p>
   </div>;
 }
 
-export default function DashboardExperience({ schoolName, context, metrics, jpInsight, workload, heatmap, agenda, activity, guruList }: { schoolName: string; context: string | null; metrics: DashboardKeyMetrics; jpInsight: DashboardJpInsight; workload: DashboardWorkloadEntry[]; heatmap: DashboardHeatmapDay[]; agenda: DashboardAgendaEntry[]; activity: DashboardActivityEntry[]; guruList: GuruLite[] }) {
+export default function DashboardExperience({ schoolName, context, metrics, jpInsight, workload, heatmap, heatmapGrid, bebanDistribution, workloadFull, agenda, activity, guruList }: { schoolName: string; context: string | null; metrics: DashboardKeyMetrics; jpInsight: DashboardJpInsight; workload: DashboardWorkloadEntry[]; heatmap: DashboardHeatmapDay[]; heatmapGrid: DashboardHeatmapGridDay[]; bebanDistribution: DashboardBebanDistribution; workloadFull: DashboardWorkloadFullEntry[]; agenda: DashboardAgendaEntry[]; activity: DashboardActivityEntry[]; guruList: GuruLite[] }) {
   const guruByName = new Map(guruList.map((g) => [g.namaGuru, g]));
+  const bebanTertinggi = workloadFull.slice(0, 4);
   return <main className="mx-auto flex min-h-[calc(100vh-5.5rem)] max-w-[1440px] flex-col gap-3 px-2 pb-4 pt-3 sm:px-3 lg:gap-3.5">
     <header className="flex items-end justify-between gap-4 px-1"><div className="min-w-0"><p className="mb-1 text-[9px] font-bold uppercase tracking-[.14em] text-brand-600">{context ?? "Konteks akademik belum aktif"}</p><h1 className="text-[25px] font-semibold leading-none tracking-[-.03em] text-ink-900">Dashboard</h1><p className="mt-1.5 text-[11px] text-ink-500">Kondisi akademik <span className="font-semibold text-ink-700">{schoolName}</span> dalam satu pandangan.</p></div><Link href="/analitik" className="hidden items-center gap-1 rounded-full border border-border bg-surface px-3 py-1.5 text-[10px] font-semibold text-ink-600 shadow-sm hover:border-brand-600/25 hover:text-brand-700 sm:flex">Analitik <ArrowRight size={12} /></Link></header>
-    <Pulse metrics={metrics} />
-    <div className="grid min-h-0 gap-3 lg:grid-cols-[1.5fr_.72fr]"><Section title="Tren Jadwal" description="Distribusi JP committed per hari · klik titik/area untuk membuka analitik." href="/analitik" icon={<Activity size={14} />}><LineChart days={heatmap} /></Section><Section title="Target JP" description="Kesehatan pembagian mengajar." href="/pembagian-mengajar/target-jp" icon={<span className="text-[12px]">◔</span>}><Donut insight={jpInsight} /></Section></div>
+    <KpiRow metrics={metrics} />
+    <div className="grid min-h-0 gap-3 lg:grid-cols-[1.5fr_.72fr]"><Section title="Rekap JTM" description="Jam Tatap Muka committed · klik titik/area untuk membuka analitik." href="/analitik" icon={<Activity size={14} />}><RekapJtm heatmap={heatmap} /></Section><Section title="Distribusi Beban Guru" description="Ringan/Normal/Berat berdasarkan JP committed." href="/guru" icon={<Users size={14} />}><BebanDonut distribution={bebanDistribution} /></Section></div>
     <div className="grid min-h-0 gap-3 lg:grid-cols-[1.08fr_.92fr_1fr]">
-      <Section title="Kepadatan Jadwal" description="Puncak minggu ini." href="/jadwal" icon={<CalendarDays size={14} />}><div className="grid grid-cols-6 gap-2">{heatmap.map((d) => <Link key={d.day} href={`/jadwal?day=${encodeURIComponent(d.day)}`} aria-label={`Buka jadwal ${d.label}: ${d.total} JP`} className="group text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"><div className={`flex h-11 items-center justify-center rounded-xl border border-border/60 ${d.total === 0 ? "bg-surface-muted" : "bg-brand-50"} transition-all hover:-translate-y-0.5 hover:border-brand-600/25 hover:bg-brand-100`}><span className="text-[13px] font-bold tabular-nums text-ink-800">{d.total}</span></div><span className="mt-1 block text-[8px] font-semibold text-ink-400">{d.label.slice(0, 3)}</span></Link>)}</div></Section>
-      <Section title="Insight" description="Sinyal yang layak diperhatikan." href="/analitik" icon={<Lightbulb size={14} />}><Link href="/analitik" className="group block rounded-xl bg-brand-50/60 p-3 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"><p className="text-[11px] font-semibold leading-4 text-ink-900">{workload[0]?.namaGuru ? `${workload[0].namaGuru} memiliki beban JP tertinggi.` : "Jadwal akademik siap dianalisis."}</p><p className="mt-1 text-[9.5px] leading-4 text-ink-500">Buka Analitik untuk melihat distribusi dan pola yang lebih lengkap.</p><span className="mt-2 inline-flex items-center gap-1 text-[9.5px] font-semibold text-brand-600">Analisis <ArrowRight size={11} /></span></Link></Section>
+      <Section title="Heatmap Jadwal" description="Kepadatan tiap jam pelajaran sepekan." href="/jadwal" icon={<Activity size={14} />}><HeatmapGrid grid={heatmapGrid} /></Section>
+      <Section title="Insight" description="Sinyal yang layak diperhatikan." href="/analitik" icon={<Lightbulb size={14} />}><Link href="/analitik" className="group block rounded-xl bg-brand-50/60 p-3 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"><p className="text-[11px] font-semibold leading-4 text-ink-900">{bebanTertinggi[0]?.namaGuru ? `${bebanTertinggi[0].namaGuru} memiliki beban JP tertinggi.` : "Jadwal akademik siap dianalisis."}</p><p className="mt-1 text-[9.5px] leading-4 text-ink-500">Buka Analitik untuk melihat distribusi dan pola yang lebih lengkap.</p><span className="mt-2 inline-flex items-center gap-1 text-[9.5px] font-semibold text-brand-600">Analisis <ArrowRight size={11} /></span></Link></Section>
       <Section title="Aktivitas Terbaru" description="Perubahan terakhir pada konteks aktif." href="/riwayat" icon={<Clock3 size={14} />}><div className="space-y-2.5">{activity.slice(0, 4).map((a) => { const isGuru = a.entityType.toLowerCase().replace(/[- ]+/g, "_") === "guru"; const guru = isGuru && a.entityLabel ? guruByName.get(a.entityLabel) : undefined; return <Link key={a.id} href="/riwayat" className="group flex items-start gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">{isGuru ? <Avatar name={a.entityLabel} size="sm" /> : <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-600/70" />}<div className="min-w-0"><p className="truncate text-[10px] font-medium text-ink-800 group-hover:text-brand-700">{a.action}</p><time className="text-[8.5px] text-ink-400">{new Date(a.createdAt).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" })}</time></div></Link>; })}</div></Section>
     </div>
     <div className="grid min-h-0 gap-3 lg:grid-cols-[1.35fr_1fr]">
       <Section title="Agenda Mendatang" description="Jadwal terdekat dari konteks aktif." href="/jadwal" icon={<Clock3 size={14} />}><div className="grid gap-x-4 sm:grid-cols-2">{agenda.slice(0, 4).map((e) => { const teacher = e.teacher?.trim() || "Guru"; const className = e.className?.trim() || "Kelas"; const g = e.teacherId ? guruList.find((item) => item.id === e.teacherId) : guruByName.get(teacher); return <Link key={e.id} href={`/jadwal?assignment=${encodeURIComponent(e.id)}`} aria-label={`${e.subject} · ${teacher} · ${className}`} className="group flex items-center gap-2.5 border-b border-border/50 py-2 last:border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"><span className="w-[50px] shrink-0 text-[9px] font-bold tabular-nums text-brand-600">{e.time}</span><Avatar name={g?.namaGuru ?? teacher} size="md" /><span className="min-w-0 flex-1"><span className="block truncate text-[10.5px] font-semibold text-ink-900 group-hover:text-brand-700">{e.subject?.trim() || "Mata pelajaran"}</span><span className="block truncate text-[8.5px] text-ink-400">{className} · {teacher}{e.room ? ` · ${e.room}` : ""}</span></span><ChevronRight size={11} className="text-ink-300 group-hover:text-brand-600" /></Link>; })}</div></Section>
-      <Section title="Beban Mengajar" description="Guru dengan JP tertinggi." href="/guru" icon={<Users size={14} />}><div className="space-y-2">{workload.slice(0, 4).map((e) => <Link key={e.guruId} href={`/guru?teacher=${encodeURIComponent(e.guruId)}`} aria-label={`${e.namaGuru}: ${e.totalJamMengajar} JP`} className="group flex items-center gap-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"><Avatar name={e.namaGuru} size="md" /><span className="min-w-0 flex-1 truncate text-[10px] font-medium text-ink-800 group-hover:text-brand-700">{e.namaGuru}</span><span className="text-[10px] font-bold tabular-nums text-ink-800">{e.totalJamMengajar} JP</span></Link>)}</div></Section>
+      <Section title="Beban Guru Tertinggi" description="Guru dengan JP committed tertinggi." href="/guru" icon={<Users size={14} />}><div className="space-y-2">{bebanTertinggi.map((e) => { const style = BEBAN_STYLE[e.beban]; return <Link key={e.guruId} href={`/guru?teacher=${encodeURIComponent(e.guruId)}`} aria-label={`${e.namaGuru}: ${e.totalJamMengajar} JP, ${style.label}`} className="group flex items-center gap-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"><Avatar name={e.namaGuru} size="md" /><span className="min-w-0 flex-1 truncate text-[10px] font-medium text-ink-800 group-hover:text-brand-700">{e.namaGuru}</span><span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[8px] font-bold ${style.badge}`}>{style.label}</span><span className="text-[10px] font-bold tabular-nums text-ink-800">{e.totalJamMengajar} JP</span></Link>; })}{bebanTertinggi.length === 0 && <p className="text-[10px] text-ink-400">Belum ada guru aktif dengan jadwal committed.</p>}</div></Section>
     </div>
   </main>;
 }
