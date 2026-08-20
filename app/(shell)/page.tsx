@@ -5,6 +5,8 @@ import { getDashboardIntelligence } from "@/lib/application/dashboard.intelligen
 import { formatContextLabel } from "@/lib/domain/academicContext";
 import { EmptyState, ErrorState, Card } from "@/components/ui/primitives";
 import DashboardExperience from "@/components/dashboard/DashboardExperience";
+import { guruRepository } from "@/lib/data-access/guru.repository";
+import { kelasRepository } from "@/lib/data-access/kelas.repository";
 
 export default async function DashboardPage() {
   try {
@@ -13,13 +15,14 @@ export default async function DashboardPage() {
     if (!summary.activeContext) {
       return <div className="mx-auto max-w-[1440px] px-4 pt-6"><Card><EmptyState title="Belum ada konteks akademik aktif" description="Aktifkan satu Tahun Pelajaran/Semester di Akademik supaya Dashboard menampilkan ringkasan jadwal dan JP." action={<Link href="/akademik" className="mt-1 text-[12.5px] font-semibold text-brand-600">Buka Akademik →</Link>} /></Card></div>;
     }
-    const guruList = await getSafeList(supabase, "guru");
+    const guruList = await guruRepository.findAll(supabase).catch(() => []);
+    const kelasList = await kelasRepository.findAll(supabase).catch(() => []);
     const intelligence = await getDashboardIntelligence(
       supabase,
       summary.activeContext.id,
       guruList,
       await getSafeList(supabase, "mata_pelajaran"),
-      await getSafeList(supabase, "kelas"),
+      kelasList,
       await getSafeList(supabase, "ruangan"),
     );
     return <DashboardExperience
@@ -29,6 +32,9 @@ export default async function DashboardPage() {
       jpInsight={summary.jpInsight}
       workload={summary.workloadTop}
       heatmap={intelligence.heatmap}
+      heatmapGrid={intelligence.heatmapGrid}
+      bebanDistribution={intelligence.bebanDistribution}
+      workloadFull={intelligence.workloadFull}
       agenda={intelligence.upcomingAgenda}
       activity={intelligence.recentActivity}
       guruList={guruList}
