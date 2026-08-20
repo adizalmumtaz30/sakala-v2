@@ -167,6 +167,47 @@ html.dark .text-cyan-600 { color: var(--color-cyan) !important; }
 html.dark .text-violet-700,
 html.dark .text-violet-600 { color: var(--color-violet) !important; }
 
+/* Jadwal readability: slightly larger, calmer type without changing layout density. */
+table.w-full.border-collapse.text-\[12\.5px\] {
+  font-size: 13px;
+}
+
+table.w-full.border-collapse.text-\[12\.5px\] thead th {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+table.w-full.border-collapse.text-\[12\.5px\] tbody td:first-child {
+  font-size: 13px;
+}
+
+table.w-full.border-collapse.text-\[12\.5px\] tbody td:first-child > div:first-child {
+  font-size: 13px;
+}
+
+table.w-full.border-collapse.text-\[12\.5px\] tbody td:first-child > div:nth-child(2) {
+  font-size: 12px;
+}
+
+table.w-full.border-collapse.text-\[12\.5px\] tbody td button {
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+
+table.w-full.border-collapse.text-\[12\.5px\] tbody td button > span:first-child {
+  font-size: 13px;
+}
+
+/* Committed/status semantic color remains readable in both themes. */
+.bg-emerald-50.text-emerald {
+  color: var(--color-emerald);
+}
+
+html.dark .bg-emerald-50.text-emerald {
+  background-color: var(--color-emerald-50) !important;
+  color: var(--color-emerald) !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html, body { transition: none; }
 }
