@@ -96,11 +96,13 @@ function MiniCalendar() {
 }
 
 function ActivityList({ activity }: { activity: DashboardActivityEntry[] }) {
-  return <div className="space-y-2.5">{activity.slice(0, 4).map((a) => <Link key={a.id} href="/riwayat" className={`group flex items-start gap-2.5 rounded-[11px] px-1 py-1 ${focusRing}`}><span className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand-600"><Activity size={11} /></span><span className="min-w-0"><span className="block truncate text-[9.5px] font-medium text-ink-800 group-hover:text-brand-700">{a.action}</span><time className="mt-0.5 block text-[8px] text-ink-400">{new Date(a.createdAt).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" })}</time></span></Link>)}</div>;
+  if (!activity.length) return <div className="rounded-[12px] bg-surface-muted/60 px-3 py-3 text-[9px] text-ink-400">Belum ada aktivitas pada konteks akademik aktif.</div>;
+  return <div className="space-y-2.5">{activity.slice(0, 4).map((a) => <Link key={a.id} href="/riwayat" className={`group flex items-start gap-2.5 rounded-[11px] px-1 py-1 ${focusRing}`}><span className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand-600"><Activity size={11} /></span><span className="min-w-0"><span className="block truncate text-[9.5px] font-medium text-ink-800 group-hover:text-brand-700">{a.action || "Aktivitas akademik"}</span><time className="mt-0.5 block text-[8px] text-ink-400">{new Date(a.createdAt).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" })}</time></span></Link>)}</div>;
 }
 
 function AgendaList({ agenda, guruList, academicPeriod }: { agenda: DashboardAgendaEntry[]; guruList: GuruLite[]; academicPeriod: string | null }) {
   const periodLabel = academicPeriod?.trim() || "Periode Akademik belum aktif";
+  if (!agenda.length) return <div className="rounded-[12px] bg-surface-muted/60 px-3 py-3 text-[9px] text-ink-400">Tidak ada agenda untuk periode akademik aktif.</div>;
   return <div className="space-y-1">{agenda.slice(0, 4).map((e) => {
     const teacher = e.teacher?.trim() || "Guru belum teridentifikasi";
     const g = e.teacherId ? guruList.find((item) => item.id === e.teacherId) : undefined;
@@ -109,12 +111,27 @@ function AgendaList({ agenda, guruList, academicPeriod }: { agenda: DashboardAge
     return <Link key={e.id} href={`/jadwal?assignment=${encodeURIComponent(e.id)}`} aria-label={`${subject} · ${teacher} · ${periodLabel}`} className={`group flex items-center gap-2 rounded-[11px] px-1.5 py-2 hover:bg-surface-muted ${focusRing}`}>
       <span className="w-[42px] shrink-0 text-[8.5px] font-bold tabular-nums text-brand-600">{e.time}</span>
       <Avatar name={g?.namaGuru ?? teacher} size="sm" />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[9.5px] font-semibold text-ink-900 group-hover:text-brand-700">{subject}</span>
-        <span className="block truncate text-[7.8px] text-ink-400">{periodLabel}{room ? ` · ${room}` : ""}</span>
-      </span>
+      <span className="min-w-0 flex-1"><span className="block truncate text-[9.5px] font-semibold text-ink-900 group-hover:text-brand-700">{subject}</span><span className="block truncate text-[7.8px] text-ink-400">{periodLabel}{room ? ` · ${room}` : ""}</span></span>
     </Link>;
   })}</div>;
+}
+
+function MoreMenu() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
+    const onPointer = (event: PointerEvent) => { if (!(event.target as HTMLElement)?.closest("[data-more-menu]")) setOpen(false); };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("pointerdown", onPointer);
+    return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("pointerdown", onPointer); };
+  }, [open]);
+  return <div className="relative shrink-0" data-more-menu>
+    <button type="button" aria-haspopup="menu" aria-expanded={open} aria-label="Aksi lainnya" title="More" onClick={() => setOpen((value) => !value)} className={`flex h-8 w-8 items-center justify-center rounded-[11px] text-ink-500 hover:bg-surface-muted ${focusRing}`}><MoreHorizontal size={15} /></button>
+    {open && <div role="menu" aria-label="Aksi lainnya" className="absolute bottom-11 right-0 w-44 rounded-[14px] border border-border/80 bg-surface p-1.5 shadow-[0_14px_38px_rgba(15,23,42,.14)]">
+      {[["Analitik", "/analitik", Activity], ["Riwayat", "/riwayat", Clock3], ["Notifikasi", "/notifikasi", Bell], ["Navigasi", "/navigasi", ArrowRight]].map(([label, href, Icon]) => <Link key={label as string} role="menuitem" href={href as string} onClick={() => setOpen(false)} className={`flex items-center gap-2 rounded-[10px] px-2.5 py-2 text-[9px] font-semibold text-ink-600 hover:bg-surface-muted hover:text-brand-700 ${focusRing}`}><Icon size={13} />{label as string}</Link>)}
+    </div>}
+  </div>;
 }
 
 function ActionDock() {
@@ -122,10 +139,10 @@ function ActionDock() {
     ["Tambah Guru", "/guru", UserPlus],
     ["Generate Jadwal", "/jadwal-cerdas", Wand2],
     ["Validasi Jadwal", "/jadwal", ShieldCheck],
-    ["Lihat Konflik", "/jadwal-cerdas", AlertTriangle],
+    ["Lihat Konflik", "/jadwal-cerdas?view=conflicts", AlertTriangle],
     ["Import Data", "/navigasi", Upload],
   ] as const;
-  return <div className="pointer-events-none fixed inset-x-0 bottom-3 z-40 flex justify-center px-3"><nav aria-label="Aksi cepat Dashboard" className="pointer-events-auto flex max-w-full items-center gap-1 overflow-x-auto rounded-[18px] border border-border/80 bg-surface/95 p-1.5 shadow-[0_14px_38px_rgba(15,23,42,.14)] backdrop-blur-xl">{actions.map(([label, href, Icon]) => <Link key={label} href={href} title={label} className={`group flex shrink-0 items-center gap-1.5 rounded-[12px] px-2.5 py-2 text-[9px] font-semibold text-ink-600 transition-colors duration-200 hover:bg-brand-50 hover:text-brand-700 ${focusRing}`}><Icon size={13} /><span className="hidden sm:inline">{label}</span></Link>)}<Link href="/notifikasi" title="Notifikasi" className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[11px] bg-brand-600 text-white shadow-sm transition-transform duration-200 hover:scale-[1.03] ${focusRing}`}><Bell size={14} /></Link><Link href="/analitik" title="More" className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[11px] text-ink-500 hover:bg-surface-muted ${focusRing}`}><MoreHorizontal size={15} /></Link></nav></div>;
+  return <div className="pointer-events-none fixed inset-x-0 bottom-3 z-40 flex justify-center px-3"><nav aria-label="Aksi cepat Dashboard" className="pointer-events-auto flex max-w-full items-center gap-1 overflow-x-auto rounded-[18px] border border-border/80 bg-surface/95 p-1.5 shadow-[0_14px_38px_rgba(15,23,42,.14)] backdrop-blur-xl">{actions.map(([label, href, Icon]) => <Link key={label} href={href} title={label} className={`group flex shrink-0 items-center gap-1.5 rounded-[12px] px-2.5 py-2 text-[9px] font-semibold text-ink-600 transition-colors duration-200 hover:bg-brand-50 hover:text-brand-700 ${focusRing}`}><Icon size={13} /><span className="hidden sm:inline">{label}</span></Link>)}<Link href="/notifikasi" title="Notifikasi" aria-label="Notifikasi" className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[11px] bg-brand-600 text-white shadow-sm transition-transform duration-200 hover:scale-[1.03] ${focusRing}`}><Bell size={14} /></Link><MoreMenu /></nav></div>;
 }
 
 export default function DashboardExperience({ schoolName, context, metrics, jpInsight, workload, heatmap, agenda, activity, guruList }: { schoolName: string; context: string | null; metrics: DashboardKeyMetrics; jpInsight: DashboardJpInsight; workload: DashboardWorkloadEntry[]; heatmap: DashboardHeatmapDay[]; agenda: DashboardAgendaEntry[]; activity: DashboardActivityEntry[]; guruList: GuruLite[] }) {
