@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { createClient } from "@/lib/supabase/server";
+import { getActiveAcademicContext } from "@/lib/application/academicContext.usecases";
 import { buildControlledTemplateWorkbook, type ControlledTemplateColumn } from "@/lib/import/controlled-template";
 import { bufferToBodyInit } from "@/lib/utils/response";
 
@@ -17,15 +18,45 @@ export async function GET(request: Request) {
   if (url.searchParams.get("mode") === "data") {
     try {
       const supabase = await createClient();
-      const [{ data: contexts, error: ce }, { data: classes, error: ke }, { data: subjects, error: se }, { data: targets, error: te }] = await Promise.all([
-        supabase.from("academic_context").select("id,tahun_pelajaran,semester,is_active").order("tahun_pelajaran", { ascending: false }),
-        supabase.from("kelas").select("id,nama_rombel,tingkat,tahun_ajaran,semester").order("tingkat").order("nama_rombel"),
+
+      // Context is the canonical prerequisite for Generate Kurikulum.
+      // Read it first and do not let optional Target-JP/master reads block
+      // the context handoff to the client.
+      const activeContext = await getActiveAcademicContext(supabase);
+      const contexts = activeContext
+        ? [{ id: activeContext.id, tahun_pelajaran: activeContext.tahunPelajaran, semester: activeContext.semester, is_active: activeContext.isActive }]
+        : [];
+
+      let classes: Array<{ id: string; nama_rombel: string; tingkat: string; tahun_ajaran: string; semester: string }> = [];
+      if (activeContext) {
+        const { data, error } = await supabase
+          .from("kelas")
+          .select("id,nama_rombel,tingkat,tahun_ajaran,semester")
+          .eq("tahun_ajaran", activeContext.tahunPelajaran)
+          .eq("semester", activeContext.semester)
+          .order("tingkat")
+          .order("nama_rombel");
+        if (error) throw error;
+        classes = data ?? [];
+      }
+
+      // These datasets are supplementary to the Generate context handoff.
+      // Keep them best-effort so a Target-JP policy/RLS issue cannot make the
+      // otherwise valid Academic Context appear as "not ready" in Generate.
+      const [subjectsResult, targetsResult] = await Promise.all([
         supabase.from("mata_pelajaran").select("id,nama,kode").order("nama"),
-        supabase.from("target_jp").select("academic_context_id,kelas_id,mata_pelajaran_id,target_jp"),
+        supabase.from("target_jp").select("academic_context_id,kelas_id,mata_pelajaran_id,target_jp").eq("academic_context_id", activeContext?.id ?? "00000000-0000-0000-0000-000000000000"),
       ]);
-      if (ce || ke || se || te) throw new Error(ce?.message || ke?.message || se?.message || te?.message || "Gagal membaca data Target JP.");
-      return NextResponse.json({ contexts: contexts ?? [], classes: classes ?? [], subjects: subjects ?? [], targets: targets ?? [] });
-    } catch (e) { return NextResponse.json({ error: e instanceof Error ? e.message : "Gagal membaca data." }, { status: 500 }); }
+
+      return NextResponse.json({
+        contexts,
+        classes,
+        subjects: subjectsResult.data ?? [],
+        targets: targetsResult.data ?? [],
+      });
+    } catch (e) {
+      return NextResponse.json({ error: e instanceof Error ? e.message : "Gagal membaca data context." }, { status: 500 });
+    }
   }
 
   const buffer = buildControlledTemplateWorkbook(columns, [
