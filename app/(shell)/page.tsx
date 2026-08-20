@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getDashboardSummary } from "@/lib/application/dashboard.usecases";
 import { getDashboardIntelligence } from "@/lib/application/dashboard.intelligence";
+import { getRecentNotifications } from "@/lib/application/notifications.usecases";
 import { formatContextLabel } from "@/lib/domain/academicContext";
 import { EmptyState, ErrorState, Card } from "@/components/ui/primitives";
 import DashboardExperience from "@/components/dashboard/DashboardExperience";
@@ -25,6 +26,7 @@ export default async function DashboardPage() {
       kelasList,
       await getSafeList(supabase, "ruangan"),
     );
+    const notifications = await getRecentNotifications(supabase, summary.activeContext.id).catch(() => []);
     return <DashboardExperience
       schoolName={summary.schoolProfile?.namaSekolah ?? "Sekolah"}
       context={formatContextLabel(summary.activeContext)}
@@ -38,6 +40,7 @@ export default async function DashboardPage() {
       agenda={intelligence.upcomingAgenda}
       activity={intelligence.recentActivity}
       guruList={guruList}
+      notifications={notifications}
     />;
   } catch {
     return <div className="mx-auto max-w-3xl px-4 pt-10"><ErrorState message="Gagal memuat ringkasan Dashboard dari Supabase. Cek koneksi dan environment variable kamu." /></div>;

@@ -30,7 +30,7 @@ const ACTION_LABEL:Record<string,string>={
   delete:"Menghapus", deleted:"Menghapus", remove:"Menghapus", import:"Mengimpor", commit:"Menetapkan", committed:"Menetapkan",
 };
 
-function humanizeActivity(action:string, entityType:string, entityLabel:string|null){
+export function humanizeActivity(action:string, entityType:string, entityLabel:string|null){
   const actionKey=action.trim().toLowerCase().replace(/[- ]+/g,"_");
   const entityKey=entityType.trim().toLowerCase().replace(/[- ]+/g,"_");
   const verb=ACTION_LABEL[actionKey]??"Mengubah";
