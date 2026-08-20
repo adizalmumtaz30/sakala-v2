@@ -264,7 +264,7 @@ export default function AnalitikWorkspace({ activeContextLabel, view }: Props) {
         </Card>
       </div>
 
-      <Card className="p-0">
+      <Card id="konflik-jp-aktif" className="scroll-mt-24 p-0">
         <SectionHeader
           icon={AlertTriangle}
           eyebrow="Exceptions"

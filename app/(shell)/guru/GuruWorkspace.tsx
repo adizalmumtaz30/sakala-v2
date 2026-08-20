@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Plus, Pencil, Trash2, Search, ChevronDown, Upload, Eye, CalendarPlus, GraduationCap } from "lucide-react";
 import type { Guru, GuruDraft, JenisKelamin, StatusAktif } from "@/lib/domain/guru";
@@ -17,6 +17,7 @@ import { teacherColor } from "@/lib/utils/teacherColor";
 
 export default function GuruWorkspace({ initialData }: { initialData: Guru[] }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [data, setData] = useState<Guru[]>(initialData);
   const [query, setQuery] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
@@ -28,6 +29,15 @@ export default function GuruWorkspace({ initialData }: { initialData: Guru[] }) 
 
   useEffect(() => setData(initialData), [initialData]);
   const filtered = data.filter((g) => g.namaGuru.toLowerCase().includes(query.toLowerCase()));
+
+  // Dipicu dari Floating Action Dock (Dashboard): ?new=1 langsung buka form Tambah
+  // Guru, ?import=1 langsung buka modal Impor Data — supaya aksi cepat tidak
+  // butuh klik dua kali. Query param dibersihkan setelah dipakai.
+  useEffect(() => {
+    if (searchParams.get("new") === "1") { setEditing(null); setFormError(null); setShowMore(false); setModalOpen(true); router.replace("/guru"); }
+    else if (searchParams.get("import") === "1") { setImportOpen(true); router.replace("/guru"); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   function openCreate() { setEditing(null); setFormError(null); setShowMore(false); setModalOpen(true); }
   function openEdit(guru: Guru) { setEditing(guru); setFormError(null); setShowMore(Boolean(guru.nip || guru.nuptk || guru.email || guru.noTelepon || guru.jenisKelamin)); setModalOpen(true); }

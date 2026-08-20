@@ -3,16 +3,18 @@ import { AlertTriangle, Inbox, RefreshCw } from "lucide-react";
 import Button from "./Button";
 
 export function Card({
+  id,
   className = "",
   style,
   children,
 }: {
+  id?: string;
   className?: string;
   style?: CSSProperties;
   children: React.ReactNode;
 }) {
   return (
-    <div style={style} className={`rounded-card border border-border bg-surface p-5 ${className}`}>
+    <div id={id} style={style} className={`rounded-card border border-border bg-surface p-5 ${className}`}>
       {children}
     </div>
   );

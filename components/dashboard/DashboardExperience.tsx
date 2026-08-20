@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { Activity, ArrowRight, BookOpen, CalendarCheck2, ChevronRight, Clock3, DoorOpen, Layers, Lightbulb, Users } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Activity, ArrowRight, Bell, BookOpen, CalendarCheck2, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, DoorOpen, Info, AlertTriangle, Layers, Lightbulb, Plus, Sparkles, ShieldCheck, Upload, MoreHorizontal, Search, Users, X } from "lucide-react";
 import type { ReactNode } from "react";
 import type { DashboardKeyMetrics, DashboardJpInsight, DashboardWorkloadEntry } from "@/lib/application/dashboard.usecases";
 import type { DashboardActivityEntry, DashboardAgendaEntry, DashboardHeatmapDay, DashboardHeatmapGridDay, DashboardBebanDistribution, DashboardWorkloadFullEntry } from "@/lib/application/dashboard.intelligence";
+import type { NotificationEntry } from "@/lib/application/notifications.usecases";
+import type { HariSekolah } from "@/lib/domain/jamPelajaran";
 
 type GuruLite = { id: string; namaGuru: string; jenisKelamin?: "L" | "P" };
 type AvatarSize = "xs" | "sm" | "md" | "lg";
@@ -122,7 +124,123 @@ function HeatmapGrid({ grid }: { grid: DashboardHeatmapGridDay[] }) {
   </div>;
 }
 
-export default function DashboardExperience({ schoolName, context, metrics, jpInsight, workload, heatmap, heatmapGrid, bebanDistribution, workloadFull, agenda, activity, guruList }: { schoolName: string; context: string | null; metrics: DashboardKeyMetrics; jpInsight: DashboardJpInsight; workload: DashboardWorkloadEntry[]; heatmap: DashboardHeatmapDay[]; heatmapGrid: DashboardHeatmapGridDay[]; bebanDistribution: DashboardBebanDistribution; workloadFull: DashboardWorkloadFullEntry[]; agenda: DashboardAgendaEntry[]; activity: DashboardActivityEntry[]; guruList: GuruLite[] }) {
+const DOW_TO_HARI: HariSekolah[] = ["minggu", "senin", "selasa", "rabu", "kamis", "jumat", "sabtu"]; // JS getDay(): 0=Minggu
+
+function MiniCalendar({ heatmap }: { heatmap: DashboardHeatmapDay[] }) {
+  const today = useMemo(() => new Date(), []);
+  const [cursor, setCursor] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
+  const scheduledDays = useMemo(() => new Set(heatmap.filter((d) => d.total > 0).map((d) => d.day)), [heatmap]);
+
+  const year = cursor.getFullYear();
+  const month = cursor.getMonth();
+  const monthLabel = cursor.toLocaleDateString("id-ID", { month: "long", year: "numeric" });
+  const firstDow = (new Date(year, month, 1).getDay() + 6) % 7; // 0=Senin
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const isCurrentMonth = year === today.getFullYear() && month === today.getMonth();
+
+  const cells: { date: number | null; hari: HariSekolah | null }[] = [];
+  for (let i = 0; i < firstDow; i++) cells.push({ date: null, hari: null });
+  for (let d = 1; d <= daysInMonth; d++) cells.push({ date: d, hari: DOW_TO_HARI[new Date(year, month, d).getDay()] });
+
+  return <div>
+    <div className="mb-2.5 flex items-center justify-between">
+      <span className="text-[11px] font-semibold capitalize text-ink-800">{monthLabel}</span>
+      <div className="flex items-center gap-0.5">
+        <button type="button" onClick={() => setCursor(new Date(year, month - 1, 1))} aria-label="Bulan sebelumnya" className="rounded-md p-1 text-ink-400 hover:bg-surface-muted hover:text-ink-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"><ChevronLeft size={13} /></button>
+        <button type="button" onClick={() => setCursor(new Date(year, month + 1, 1))} aria-label="Bulan berikutnya" className="rounded-md p-1 text-ink-400 hover:bg-surface-muted hover:text-ink-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"><ChevronRight size={13} /></button>
+      </div>
+    </div>
+    <div className="grid grid-cols-7 gap-y-1 text-center">
+      {["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"].map((d) => <span key={d} className="text-[8px] font-semibold text-ink-400">{d}</span>)}
+      {cells.map((c, i) => {
+        if (c.date === null) return <span key={`e-${i}`} />;
+        const isToday = isCurrentMonth && c.date === today.getDate();
+        const hasSchedule = c.hari && scheduledDays.has(c.hari);
+        const isSchoolDay = c.hari !== "minggu";
+        const base = "mx-auto flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-medium tabular-nums transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40";
+        if (!isSchoolDay || !c.hari) return <span key={i} className={`${base} text-ink-300`}>{c.date}</span>;
+        return <Link key={i} href={`/jadwal?day=${encodeURIComponent(c.hari)}`} title={hasSchedule ? "Ada jadwal committed" : "Belum ada jadwal committed"} className={`${base} relative ${isToday ? "bg-brand-600 font-bold text-white" : "text-ink-700 hover:bg-surface-muted"}`}>
+          {c.date}
+          {hasSchedule && !isToday && <span aria-hidden="true" className="absolute bottom-0.5 h-1 w-1 rounded-full bg-brand-600" />}
+        </Link>;
+      })}
+    </div>
+  </div>;
+}
+
+const NOTIF_TONE: Record<NotificationEntry["tone"], { icon: typeof Info; cls: string }> = {
+  info: { icon: Info, cls: "bg-brand-50 text-brand-600" },
+  success: { icon: CheckCircle2, cls: "bg-emerald-50 text-emerald-600" },
+  warning: { icon: AlertTriangle, cls: "bg-amber-50 text-amber" },
+};
+
+function relativeTime(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const min = Math.max(0, Math.round(diffMs / 60000));
+  if (min < 1) return "Baru saja";
+  if (min < 60) return `${min}m lalu`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr}j lalu`;
+  return `${Math.round(hr / 24)}h lalu`;
+}
+
+function NotificationsPanel({ notifications }: { notifications: NotificationEntry[] }) {
+  if (notifications.length === 0) return <p className="text-[10px] text-ink-400">Belum ada aktivitas untuk ditampilkan sebagai notifikasi.</p>;
+  return <div className="space-y-3">
+    {notifications.slice(0, 4).map((n) => {
+      const tone = NOTIF_TONE[n.tone];
+      const Icon = tone.icon;
+      return <div key={n.id} className="flex items-start gap-2.5">
+        <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${tone.cls}`}><Icon size={13} aria-hidden="true" /></span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[10.5px] font-semibold text-ink-800">{n.title}</p>
+          {n.description && <p className="truncate text-[9.5px] text-ink-400">{n.description}</p>}
+        </div>
+        <span className="flex shrink-0 items-center gap-1.5 pt-0.5 text-[8.5px] text-ink-400">
+          {relativeTime(n.createdAt)}
+          {n.unread && <span className="h-1.5 w-1.5 rounded-full bg-brand-600" aria-label="Belum dibaca" />}
+        </span>
+      </div>;
+    })}
+  </div>;
+}
+
+function FloatingActionDock() {
+  const [more, setMore] = useState(false);
+  const focusRing = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40";
+  const actions: { label: string; href: string; icon: ReactNode }[] = [
+    { label: "Tambah Guru", href: "/guru?new=1", icon: <Plus size={16} /> },
+    { label: "Generate Jadwal", href: "/jadwal-cerdas", icon: <Sparkles size={16} /> },
+    { label: "Validasi Jadwal", href: "/jadwal", icon: <ShieldCheck size={16} /> },
+    { label: "Lihat Konflik", href: "/analitik#konflik-jp-aktif", icon: <AlertTriangle size={16} /> },
+    { label: "Import Data", href: "/guru?import=1", icon: <Upload size={16} /> },
+  ];
+  const moreActions: { label: string; href: string; icon: ReactNode }[] = [
+    { label: "Riwayat Perubahan", href: "/riwayat", icon: <Clock3 size={14} /> },
+    { label: "Notifikasi", href: "/notifikasi", icon: <Info size={14} /> },
+    { label: "Analitik", href: "/analitik", icon: <Activity size={14} /> },
+    { label: "Pencarian Global", href: "/navigasi", icon: <Search size={14} /> },
+  ];
+  return <nav aria-label="Aksi cepat" className="pointer-events-none sticky bottom-4 z-10 mt-1 flex justify-center">
+    <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-border/70 bg-surface/95 p-1.5 shadow-[0_10px_30px_rgba(15,23,42,.12)] backdrop-blur">
+      {actions.map((a) => <Link key={a.href} href={a.href} className={`group flex flex-col items-center gap-1 rounded-full px-3 py-1.5 text-ink-600 transition-colors hover:bg-brand-50 hover:text-brand-700 ${focusRing}`}>
+        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-muted text-ink-600 group-hover:bg-brand-100 group-hover:text-brand-700">{a.icon}</span>
+        <span className="whitespace-nowrap text-[8.5px] font-semibold">{a.label}</span>
+      </Link>)}
+      <div className="relative">
+        <button type="button" onClick={() => setMore((v) => !v)} aria-expanded={more} aria-haspopup="menu" aria-label="Lebih banyak aksi" className={`group flex flex-col items-center gap-1 rounded-full px-3 py-1.5 text-ink-600 transition-colors hover:bg-brand-50 hover:text-brand-700 ${focusRing}`}>
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-muted text-ink-600 group-hover:bg-brand-100 group-hover:text-brand-700">{more ? <X size={16} /> : <MoreHorizontal size={16} />}</span>
+          <span className="whitespace-nowrap text-[8.5px] font-semibold">More</span>
+        </button>
+        {more && <div role="menu" className="absolute bottom-full right-0 mb-2 w-52 rounded-xl border border-border bg-surface p-1.5 shadow-lg">
+          {moreActions.map((a) => <Link key={a.href} href={a.href} role="menuitem" onClick={() => setMore(false)} className={`flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[12px] font-medium text-ink-700 hover:bg-surface-muted ${focusRing}`}><span className="text-brand-600">{a.icon}</span>{a.label}</Link>)}
+        </div>}
+      </div>
+    </div>
+  </nav>;
+}
+
+export default function DashboardExperience({ schoolName, context, metrics, jpInsight, workload, heatmap, heatmapGrid, bebanDistribution, workloadFull, agenda, activity, guruList, notifications }: { schoolName: string; context: string | null; metrics: DashboardKeyMetrics; jpInsight: DashboardJpInsight; workload: DashboardWorkloadEntry[]; heatmap: DashboardHeatmapDay[]; heatmapGrid: DashboardHeatmapGridDay[]; bebanDistribution: DashboardBebanDistribution; workloadFull: DashboardWorkloadFullEntry[]; agenda: DashboardAgendaEntry[]; activity: DashboardActivityEntry[]; guruList: GuruLite[]; notifications: NotificationEntry[] }) {
   const guruByName = new Map(guruList.map((g) => [g.namaGuru, g]));
   const bebanTertinggi = workloadFull.slice(0, 4);
   return <main className="mx-auto flex min-h-[calc(100vh-5.5rem)] max-w-[1440px] flex-col gap-3 px-2 pb-4 pt-3 sm:px-3 lg:gap-3.5">
@@ -138,5 +256,10 @@ export default function DashboardExperience({ schoolName, context, metrics, jpIn
       <Section title="Agenda Mendatang" description="Jadwal terdekat dari konteks aktif." href="/jadwal" icon={<Clock3 size={14} />}><div className="grid gap-x-4 sm:grid-cols-2">{agenda.slice(0, 4).map((e) => { const teacher = e.teacher?.trim() || "Guru"; const className = e.className?.trim() || "Kelas"; const g = e.teacherId ? guruList.find((item) => item.id === e.teacherId) : guruByName.get(teacher); return <Link key={e.id} href={`/jadwal?assignment=${encodeURIComponent(e.id)}`} aria-label={`${e.subject} · ${teacher} · ${className}`} className="group flex items-center gap-2.5 border-b border-border/50 py-2 last:border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"><span className="w-[50px] shrink-0 text-[9px] font-bold tabular-nums text-brand-600">{e.time}</span><Avatar name={g?.namaGuru ?? teacher} size="md" /><span className="min-w-0 flex-1"><span className="block truncate text-[10.5px] font-semibold text-ink-900 group-hover:text-brand-700">{e.subject?.trim() || "Mata pelajaran"}</span><span className="block truncate text-[8.5px] text-ink-400">{className} · {teacher}{e.room ? ` · ${e.room}` : ""}</span></span><ChevronRight size={11} className="text-ink-300 group-hover:text-brand-600" /></Link>; })}</div></Section>
       <Section title="Beban Guru Tertinggi" description="Guru dengan JP committed tertinggi." href="/guru" icon={<Users size={14} />}><div className="space-y-2">{bebanTertinggi.map((e) => { const style = BEBAN_STYLE[e.beban]; return <Link key={e.guruId} href={`/guru?teacher=${encodeURIComponent(e.guruId)}`} aria-label={`${e.namaGuru}: ${e.totalJamMengajar} JP, ${style.label}`} className="group flex items-center gap-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"><Avatar name={e.namaGuru} size="md" /><span className="min-w-0 flex-1 truncate text-[10px] font-medium text-ink-800 group-hover:text-brand-700">{e.namaGuru}</span><span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[8px] font-bold ${style.badge}`}>{style.label}</span><span className="text-[10px] font-bold tabular-nums text-ink-800">{e.totalJamMengajar} JP</span></Link>; })}{bebanTertinggi.length === 0 && <p className="text-[10px] text-ink-400">Belum ada guru aktif dengan jadwal committed.</p>}</div></Section>
     </div>
+    <div className="grid min-h-0 gap-3 lg:grid-cols-2">
+      <Section title="Mini Kalender" description="Bulan berjalan · titik menandai hari dengan jadwal committed." icon={<CalendarDays size={14} />}><MiniCalendar heatmap={heatmap} /></Section>
+      <Section title="Notifikasi Terbaru" description="Aktivitas terbaru pada konteks aktif." href="/notifikasi" icon={<Bell size={14} />}><NotificationsPanel notifications={notifications} /></Section>
+    </div>
+    <FloatingActionDock />
   </main>;
 }
