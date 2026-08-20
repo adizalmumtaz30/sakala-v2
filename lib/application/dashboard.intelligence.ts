@@ -8,6 +8,8 @@ export interface DashboardHeatmapDay { day: HariSekolah; label: string; total: n
 export interface DashboardAgendaEntry { id:string; dayLabel:string; time:string; subject:string; teacher:string; teacherId:string|null; className:string; room:string|null; }
 export interface DashboardActivityEntry { id:string; action:string; entityType:string; entityLabel:string|null; createdAt:string; }
 
+type AnyRow = Record<string, any>;
+
 const DAYS:HariSekolah[]=["senin","selasa","rabu","kamis","jumat","sabtu"];
 const LABEL:Record<HariSekolah,string>={senin:"Senin",selasa:"Selasa",rabu:"Rabu",kamis:"Kamis",jumat:"Jumat",sabtu:"Sabtu",minggu:"Minggu"};
 
@@ -35,6 +37,34 @@ function humanizeActivity(action:string, entityType:string, entityLabel:string|n
   return meaningfulLabel ? `${verb} ${entity} · ${meaningfulLabel}` : `${verb} ${entity}`;
 }
 
+function firstText(row: AnyRow | undefined, keys: string[]): string | null {
+  if (!row) return null;
+  for (const key of keys) {
+    const value = row[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function guruName(row: AnyRow | undefined): string | null {
+  return firstText(row, ["namaGuru", "nama_guru", "nama"]);
+}
+
+function subjectName(row: AnyRow | undefined): string | null {
+  return firstText(row, ["nama", "namaMapel", "nama_mata_pelajaran", "namaMataPelajaran"]);
+}
+
+function className(row: AnyRow | undefined): string | null {
+  if (!row) return null;
+  const tingkat = firstText(row, ["tingkat", "level"]);
+  const rombel = firstText(row, ["namaRombel", "nama_rombel", "rombel", "nama"]);
+  return [tingkat, rombel].filter(Boolean).join(" ") || null;
+}
+
+function roomName(row: AnyRow | undefined): string | null {
+  return firstText(row, ["nama", "namaRuangan", "nama_ruangan", "ruang"]);
+}
+
 export async function getDashboardIntelligence(supabase:SupabaseClient, contextId:string, guruList:any[], mapelList:any[], kelasList:any[], ruanganList:any[]){
   const [assignments,jam,audit]=await Promise.all([
     scheduleAssignmentRepository.findByContext(supabase,contextId),
@@ -42,10 +72,10 @@ export async function getDashboardIntelligence(supabase:SupabaseClient, contextI
     auditLogRepository.findMany(supabase,{academicContextId:contextId,limit:6}),
   ]);
   const committed=assignments.filter(a=>a.status==="committed");
-  const guru=new Map(guruList.map(g=>[g.id,g.namaGuru]));
-  const mapel=new Map(mapelList.map(m=>[m.id,m.nama]));
-  const kelas=new Map(kelasList.map(k=>[k.id,`${k.tingkat} ${k.namaRombel}`]));
-  const ruang=new Map(ruanganList.map(r=>[r.id,r.nama]));
+  const guru=new Map(guruList.map(g=>[g.id,guruName(g)]));
+  const mapel=new Map(mapelList.map(m=>[m.id,subjectName(m)]));
+  const kelas=new Map(kelasList.map(k=>[k.id,className(k)]));
+  const ruang=new Map(ruanganList.map(r=>[r.id,roomName(r)]));
   const slots=new Map(jam.filter(j=>j.status==="aktif"&&j.jenis==="pembelajaran").map(j=>[`${j.hari}:${j.nomorUrut}`,j]));
 
   const totals=new Map<HariSekolah,number>();
@@ -56,10 +86,19 @@ export async function getDashboardIntelligence(supabase:SupabaseClient, contextI
   const current=todayIndex();
   const upcoming=committed.map(a=>({a,distance:(DAYS.indexOf(a.day)-current+7)%7})).sort((x,y)=>x.distance-y.distance||x.a.periodStart-y.a.periodStart).slice(0,6).map(({a})=>{
     const s=slots.get(`${a.day}:${a.periodStart}`);
-    const teacherName=guru.get(a.teacherId) ?? "Guru";
-    const className=kelas.get(a.classId) ?? "Kelas";
-    const subject=mapel.get(a.subjectId) ?? "Mata pelajaran";
-    return {id:a.id,dayLabel:LABEL[a.day],time:s?`${s.waktuMulai}–${s.waktuSelesai}`:`Jam ke-${a.periodStart}`,subject,teacher:teacherName,teacherId:guru.has(a.teacherId)?a.teacherId:null,className,room:a.roomId?ruang.get(a.roomId)??null:null};
+    const teacherName=guru.get(a.teacherId) ?? null;
+    const classLabel=kelas.get(a.classId) ?? null;
+    const subject=mapel.get(a.subjectId) ?? null;
+    return {
+      id:a.id,
+      dayLabel:LABEL[a.day],
+      time:s?`${s.waktuMulai}–${s.waktuSelesai}`:`Jam ke-${a.periodStart}`,
+      subject:subject ?? "Mata pelajaran belum teridentifikasi",
+      teacher:teacherName ?? "Guru belum teridentifikasi",
+      teacherId:teacherName ? a.teacherId : null,
+      className:classLabel ?? "Kelas belum teridentifikasi",
+      room:a.roomId?ruang.get(a.roomId)??null:null,
+    };
   });
   const recentActivity=audit.items.map(i=>({id:i.id,action:humanizeActivity(i.action,i.entityType,i.entityLabel),entityType:i.entityType,entityLabel:i.entityLabel,createdAt:i.createdAt}));
   return {heatmap,upcomingAgenda:upcoming,recentActivity};
