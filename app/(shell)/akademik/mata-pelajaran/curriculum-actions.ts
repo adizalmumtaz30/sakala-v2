@@ -3,8 +3,81 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { CurriculumInstitution } from "@/lib/domain/curriculumIntelligence";
+import { recordAuditEvent } from "@/lib/application/auditLog.usecases";
 
 export type CurriculumActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
+
+export type CurriculumDraftCandidate = { itemId: string; manualTarget: number | null };
+
+export interface CurriculumDraft {
+  curriculumVersionId: string | null;
+  level: string;
+  classIds: string[];
+  candidate: CurriculumDraftCandidate[];
+  baseline: Record<string, number | null>;
+  updatedAt: string;
+}
+
+// GENERATE-KURIKULUM-MASTER-UX-FLOW poin 11 (Persistence). Satu draft per
+// Active Academic Context — dibaca saat workspace dibuka, ditulis (debounced
+// dari client) tiap kali sumber/parameter/candidate berubah, dihapus setelah
+// Commit berhasil supaya sesi berikutnya mulai bersih.
+export async function getCurriculumDraftAction(academicContextId: string): Promise<CurriculumActionResult<CurriculumDraft | null>> {
+  if (!academicContextId) return { ok: true, data: null };
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("curriculum_generate_draft")
+    .select("curriculum_version_id,level,class_ids,candidate,baseline,updated_at")
+    .eq("academic_context_id", academicContextId)
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: true, data: null };
+  return {
+    ok: true,
+    data: {
+      curriculumVersionId: data.curriculum_version_id,
+      level: data.level ?? "",
+      classIds: data.class_ids ?? [],
+      candidate: Array.isArray(data.candidate) ? data.candidate : [],
+      baseline: (data.baseline as Record<string, number | null>) ?? {},
+      updatedAt: data.updated_at,
+    },
+  };
+}
+
+export async function saveCurriculumDraftAction(input: {
+  academicContextId: string;
+  curriculumVersionId: string | null;
+  level: string;
+  classIds: string[];
+  candidate: CurriculumDraftCandidate[];
+  baseline: Record<string, number | null>;
+}): Promise<CurriculumActionResult<null>> {
+  if (!input.academicContextId) return { ok: false, error: "Academic Context wajib ada untuk menyimpan draft." };
+  const supabase = await createClient();
+  const { error } = await supabase.from("curriculum_generate_draft").upsert(
+    {
+      academic_context_id: input.academicContextId,
+      curriculum_version_id: input.curriculumVersionId,
+      level: input.level || null,
+      class_ids: input.classIds,
+      candidate: input.candidate,
+      baseline: input.baseline,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "academic_context_id" }
+  );
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: null };
+}
+
+export async function clearCurriculumDraftAction(academicContextId: string): Promise<CurriculumActionResult<null>> {
+  if (!academicContextId) return { ok: true, data: null };
+  const supabase = await createClient();
+  const { error } = await supabase.from("curriculum_generate_draft").delete().eq("academic_context_id", academicContextId);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: null };
+}
 
 export async function getActiveAcademicContextAction() {
   const supabase = await createClient();
@@ -196,7 +269,49 @@ export async function adoptCurriculumItemsAction(input: {
     if (targetError) return { ok: false, error: targetError.message };
   }
 
+  // GENERATE-KURIKULUM-MASTER-UX-FLOW poin 17 (Audit Trail) — commit adalah
+  // satu-satunya titik yang benar-benar mengubah data resmi, jadi ini yang
+  // wajib tercatat: sumber apa, berapa item, ke kelas mana, kapan.
+  await recordAuditEvent({
+    supabase,
+    academicContextId: input.academicContextId,
+    action: "commit",
+    entityType: "kurikulum",
+    entityId: null,
+    entityLabel: classes.map((c) => `${c.tingkat} ${c.nama_rombel}`).join(", "),
+    before: null,
+    after: { adoptedCount: rows.length, itemIds: selectedIds, classIds: input.classIds },
+    source: "manual",
+    reason: null,
+  });
+
   revalidatePath("/akademik/mata-pelajaran");
   revalidatePath("/akademik/target-jp");
   return { ok: true, data: { adopted: rows.length } };
+}
+
+// GENERATE-KURIKULUM-MASTER-UX-FLOW poin 17 (Audit Trail) — Generate tidak
+// mengubah data resmi (Generate ≠ Commit), tapi tetap dicatat sebagai jejak:
+// kapan Candidate dibuat, dari sumber apa, berapa item.
+export async function recordCurriculumGenerateEventAction(input: {
+  academicContextId: string;
+  curriculumVersionName: string;
+  itemCount: number;
+  classCount: number;
+}): Promise<CurriculumActionResult<null>> {
+  if (!input.academicContextId) return { ok: true, data: null };
+  const supabase = await createClient();
+  await recordAuditEvent({
+    supabase,
+    academicContextId: input.academicContextId,
+    action: "generate",
+    entityType: "kurikulum",
+    entityId: null,
+    entityLabel: input.curriculumVersionName,
+    before: null,
+    after: { itemCount: input.itemCount, classCount: input.classCount },
+    source: "manual",
+    reason: null,
+  });
+  return { ok: true, data: null };
 }

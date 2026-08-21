@@ -1,9 +1,9 @@
 "use client";
 
-import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, CheckCircle2, ChevronRight, FileUp, Link2, RefreshCw, Save, Search, X } from "lucide-react";
-import { adoptCurriculumItemsAction, listCurriculumIntelligenceAction } from "../mata-pelajaran/curriculum-actions";
+import { adoptCurriculumItemsAction, listCurriculumIntelligenceAction, getCurriculumDraftAction, saveCurriculumDraftAction, clearCurriculumDraftAction, recordCurriculumGenerateEventAction } from "../mata-pelajaran/curriculum-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -74,29 +74,59 @@ export default function GenerateKurikulumPage() {
     return { status: "valid", text: "Konteks siap · Kurikulum siap · Sumber siap" } as const;
   }, [activeContext, activeVersion, classIds.length, candidate.length, reviewIds.length]);
 
+  const draftHydrated = useRef(false);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     let mounted = true;
     void (async () => {
       const result = await listCurriculumIntelligenceAction("all");
       if (!mounted) return;
+      let loadedVersions: Version[] = [];
       if (result.ok) {
         setSources(result.data.sources as Source[]);
-        setVersions(result.data.versions as Version[]);
+        loadedVersions = result.data.versions as Version[];
+        setVersions(loadedVersions);
         setItems(result.data.items as Item[]);
-        const verified = (result.data.versions as Version[]).filter((v) => v.verification_status === "verified");
-        if (verified.length === 1) setVersionId(verified[0].id);
       } else setMessage(result.error);
       try {
         const response = await fetch("/api/target-jp/import?mode=data", { cache: "no-store" });
         if (!response.ok) throw new Error("Data context belum dapat dibaca.");
         const data = await response.json();
         if (!mounted) return;
-        setContexts(Array.isArray(data.contexts) ? data.contexts : []);
+        const loadedContexts: Context[] = Array.isArray(data.contexts) ? data.contexts : [];
+        setContexts(loadedContexts);
         setClasses(Array.isArray(data.classes) ? data.classes : []);
+
+        // GENERATE-KURIKULUM-MASTER-UX-FLOW poin 11 (Persistence) — muat draft
+        // tersimpan (kalau ada) sebelum fallback ke auto-pilih versi/kelas,
+        // supaya progress sebelumnya tidak tertimpa.
+        const activeCtx = loadedContexts.find((c) => c.is_active) ?? null;
+        let restoredFromDraft = false;
+        if (activeCtx) {
+          const draftResult = await getCurriculumDraftAction(activeCtx.id);
+          if (mounted && draftResult.ok && draftResult.data) {
+            const draft = draftResult.data;
+            if (draft.curriculumVersionId) setVersionId(draft.curriculumVersionId);
+            if (draft.level) setLevel(draft.level);
+            if (draft.classIds.length) setClassIds(draft.classIds);
+            if (draft.candidate.length) {
+              const itemMap = new Map((result.ok ? (result.data.items as Item[]) : []).map((i) => [i.id, i]));
+              const restored: Candidate[] = draft.candidate
+                .map((c) => { const item = itemMap.get(c.itemId); return item ? { ...item, manualTarget: c.manualTarget } : null; })
+                .filter((x): x is Candidate => x !== null);
+              if (restored.length) { setCandidate(restored); setBaseline(draft.baseline); restoredFromDraft = true; }
+            }
+          }
+        }
+        if (!restoredFromDraft) {
+          const verified = loadedVersions.filter((v) => v.verification_status === "verified");
+          if (verified.length === 1) setVersionId(verified[0].id);
+        }
       } catch (error) {
         if (mounted) setMessage(error instanceof Error ? error.message : "Data context belum dapat dibaca.");
       } finally {
-        if (mounted) setBusy(false);
+        if (mounted) { setBusy(false); draftHydrated.current = true; }
       }
     })();
     return () => { mounted = false; };
@@ -110,6 +140,28 @@ export default function GenerateKurikulumPage() {
     const matchingClasses = classes.filter((c) => c.tahun_ajaran === activeContext.tahun_pelajaran && c.semester === activeContext.semester);
     if (matchingClasses.length) setClassIds(matchingClasses.map((c) => c.id));
   }, [busy, activeContext, classes, classIds.length]);
+
+  // GENERATE-KURIKULUM-MASTER-UX-FLOW poin 11 (Persistence) — simpan draft
+  // (debounced) tiap kali sumber/parameter/candidate berubah, supaya progress
+  // tidak hilang saat operator pindah halaman lalu balik lagi. Tidak menulis
+  // draft kosong, dan menunggu hydration awal selesai supaya tidak menimpa
+  // draft yang baru saja dimuat dengan state kosong sesaat.
+  useEffect(() => {
+    if (!draftHydrated.current || !activeContext) return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    if (!versionId && candidate.length === 0 && classIds.length === 0) return;
+    saveTimer.current = setTimeout(() => {
+      void saveCurriculumDraftAction({
+        academicContextId: activeContext.id,
+        curriculumVersionId: versionId || null,
+        level,
+        classIds,
+        candidate: candidate.map((c) => ({ itemId: c.id, manualTarget: c.manualTarget })),
+        baseline,
+      });
+    }, 800);
+    return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
+  }, [activeContext, versionId, level, classIds, candidate, baseline]);
 
   function toggleClass(id: string) { setClassIds((current) => current.includes(id) ? current.filter((x) => x !== id) : [...current, id]); }
   function openUpdate(mode: "previous" | "new") { setUpdateMode(mode); setUpdateReady(false); setMessage(""); setUpdateOpen(true); }
@@ -155,6 +207,11 @@ export default function GenerateKurikulumPage() {
         setBaseline(Object.fromEntries(next.map((item) => [item.id, item.weekly_target])));
         setSelectedIds([]); setFilter("all"); setQuery("");
         setMessage(next.length ? "Kurikulum siap ditinjau." : "Belum ada item valid untuk dibuat.");
+        // GENERATE-KURIKULUM-MASTER-UX-FLOW poin 17 (Audit Trail) — catat kapan
+        // Candidate dibuat, meski ini belum mengubah data resmi (Generate ≠ Commit).
+        if (next.length && activeContext) {
+          void recordCurriculumGenerateEventAction({ academicContextId: activeContext.id, curriculumVersionName: activeVersion.curriculum_name, itemCount: next.length, classCount: classIds.length });
+        }
       }
     }, 180);
   }
@@ -163,7 +220,12 @@ export default function GenerateKurikulumPage() {
     if (validation.status !== "valid" || !activeContext) return;
     setCompareOpen(false); setCommitting(true); setMessage("Menyinkronkan…");
     const result = await adoptCurriculumItemsAction({ academicContextId: activeContext.id, classIds, items: candidate.map((item) => ({ id: item.id, weeklyTarget: item.manualTarget })) });
-    if (result.ok) { setSuccess(true); setMessage(`Kurikulum tersimpan: ${result.data.adopted} kombinasi.`); }
+    if (result.ok) {
+      setSuccess(true); setMessage(`Kurikulum tersimpan: ${result.data.adopted} kombinasi.`);
+      // Draft sudah "terpakai" — hapus supaya sesi berikutnya mulai bersih,
+      // bukan merehidrasi candidate yang sudah di-commit.
+      void clearCurriculumDraftAction(activeContext.id);
+    }
     else setMessage(result.error);
     setCommitting(false);
   }
