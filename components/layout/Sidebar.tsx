@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, GraduationCap, Sparkles, CalendarDays, BarChart3, History, Bell, Bot, Compass, BrainCircuit, ChevronLeft, ChevronRight } from "lucide-react";
+import { LayoutDashboard, Users, GraduationCap, Sparkles, CalendarDays, BarChart3, History, Bell, Bot, Compass, BrainCircuit, ChevronLeft, ChevronRight, LifeBuoy, ArrowUpRight } from "lucide-react";
 
 const coreNav = [
   { key: "dashboard", label: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -79,6 +79,14 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
           })}
         </div>
       </nav>
+      {!collapsed && (
+        <div className="mx-3 mb-3 rounded-2xl border border-border/70 bg-gradient-to-br from-brand-50 to-surface p-3.5">
+          <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-brand-100 text-brand-600"><LifeBuoy size={16} strokeWidth={1.8} /></span>
+          <p className="mt-2.5 text-[11.5px] font-semibold leading-tight text-ink-800">Butuh bantuan?</p>
+          <p className="mt-1 text-[9.5px] leading-4 text-ink-400">Panduan &amp; dukungan tim SAKALA siap membantu Anda.</p>
+          <Link href="/navigasi" className="mt-2.5 inline-flex items-center gap-1 text-[9.5px] font-semibold text-brand-600 hover:text-brand-700">Pelajari lebih lanjut<ArrowUpRight size={11} /></Link>
+        </div>
+      )}
       {!collapsed && <p className="px-5 pb-4 text-center text-[10px] text-ink-300">© 2026 SAKALA V2</p>}
     </aside>
   );
