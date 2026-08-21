@@ -3,7 +3,7 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, CheckCircle2, ChevronRight, FileUp, Link2, RefreshCw, Save, Search, X } from "lucide-react";
-import { adoptCurriculumItemsAction, listCurriculumIntelligenceAction, getCurriculumDraftAction, saveCurriculumDraftAction, clearCurriculumDraftAction, recordCurriculumGenerateEventAction } from "../mata-pelajaran/curriculum-actions";
+import { adoptCurriculumItemsAction, listCurriculumIntelligenceAction, getCurriculumDraftAction, saveCurriculumDraftAction, clearCurriculumDraftAction, recordCurriculumGenerateEventAction, getPreviouslyAdoptedSubjectsAction } from "../mata-pelajaran/curriculum-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +47,9 @@ export default function GenerateKurikulumPage() {
   // nyata (localStorage tahun/semester terakhir dibuka di halaman ini),
   // bukan status buatan.
   const [contextChangeNotice, setContextChangeNotice] = useState<{ from: string; to: string } | null>(null);
+  // V4 poin 31 — Data Tidak Ditemukan: mata pelajaran yang pernah di-Commit
+  // untuk konteks ini tapi hilang dari hasil Generate terbaru.
+  const [previousSubjects, setPreviousSubjects] = useState<{ subjectName: string; classLevel: string }[]>([]);
 
   const activeContext = contexts.find((x) => x.is_active) ?? null;
   const verifiedVersions = useMemo(() => versions.filter((v) => v.verification_status === "verified"), [versions]);
@@ -60,6 +63,8 @@ export default function GenerateKurikulumPage() {
   const newIds = candidate.filter((x) => baseline[x.id] === undefined).map((x) => x.id);
   const changedOnlyIds = changedIds.filter((id) => !newIds.includes(id));
   const unchangedCount = candidate.length - changedIds.length;
+  // V4 poin 31 — subjek yang pernah di-Commit tapi tidak muncul di candidate saat ini.
+  const missingSubjects = candidate.length > 0 ? previousSubjects.filter((p) => !candidate.some((c) => c.subject_name === p.subjectName && c.class_level === p.classLevel)) : [];
   const reviewIds = candidate.filter((x) => x.manualTarget == null || !Number.isInteger(x.manualTarget) || x.manualTarget < 0).map((x) => x.id);
   const totalTarget = candidate.reduce((sum, x) => sum + (x.manualTarget ?? 0), 0);
   const officialTotal = candidate.reduce((sum, x) => sum + (x.official_allocation ?? 0), 0);
@@ -143,6 +148,13 @@ export default function GenerateKurikulumPage() {
         if (!restoredFromDraft) {
           const verified = loadedVersions.filter((v) => v.verification_status === "verified");
           if (verified.length === 1) setVersionId(verified[0].id);
+        }
+        // V4 poin 31 (Data Tidak Ditemukan) — muat daftar mapel yang pernah
+        // di-Commit untuk konteks ini, dipakai untuk deteksi "hilang" setelah
+        // Generate berikutnya.
+        if (activeCtx) {
+          const prevResult = await getPreviouslyAdoptedSubjectsAction(activeCtx.id);
+          if (mounted && prevResult.ok) setPreviousSubjects(prevResult.data);
         }
       } catch (error) {
         if (mounted) setMessage(error instanceof Error ? error.message : "Data context belum dapat dibaca.");
@@ -296,6 +308,7 @@ export default function GenerateKurikulumPage() {
         {selectedIds.length > 0 && <div className="sticky top-2 z-20 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-brand-200 bg-brand-50 p-3 text-sm"><strong>{selectedIds.length} mata pelajaran dipilih</strong><div className="flex gap-2"><button onClick={bulkTarget} className="rounded-lg bg-brand-600 px-3 py-2 font-bold text-white">Atur Target JP</button><button onClick={() => setSelectedIds([])} className="rounded-lg border border-border bg-surface px-3 py-2">Batalkan</button></div></div>}
         <div className="overflow-x-auto rounded-xl border border-border"><table className="w-full min-w-[820px] text-left text-sm"><thead className="bg-surface-muted"><tr><th className="w-10 px-3 py-3"><input type="checkbox" aria-label="Pilih semua" checked={visibleCandidate.length > 0 && visibleCandidate.every((x) => selectedIds.includes(x.id))} onChange={(e) => setSelectedIds(e.target.checked ? visibleCandidate.map((x) => x.id) : [])} /></th><th className="px-3 py-3">Mata Pelajaran</th><th className="px-3 py-3">JP Resmi</th><th className="px-3 py-3">Target JP</th><th className="px-3 py-3">Status</th><th className="px-3 py-3">Aksi</th></tr></thead><tbody>{visibleCandidate.map((item) => { const changed = changedIds.includes(item.id); const invalid = reviewIds.includes(item.id); return <tr key={item.id} className={`border-t border-border transition ${selectedIds.includes(item.id) ? "bg-brand-50/50" : "hover:bg-surface-muted"}`}><td className="px-3 py-3"><input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggleSelected(item.id)} aria-label={`Pilih ${item.subject_name}`} /></td><td className="px-3 py-3"><p className="font-semibold text-ink-900">{item.subject_name}</p><p className="text-xs text-ink-500">{item.class_level}</p></td><td className="px-3 py-3">{item.official_allocation ?? "—"}</td><td className="px-3 py-3"><input type="number" min="0" step="1" value={item.manualTarget ?? ""} onChange={(e) => updateTarget(item.id, e.target.value)} className={`w-24 rounded-lg border px-3 py-2 font-semibold ${invalid ? "border-amber-400 bg-amber-50" : "border-border bg-surface"}`} aria-label={`Target JP ${item.subject_name}`} />{changed && <p className="mt-1 text-[11px] text-amber-700">{baseline[item.id] ?? "—"} → {item.manualTarget ?? "—"}</p>}</td><td className="px-3 py-3">{invalid ? <span className="text-amber-700">⚠ Perlu ditinjau</span> : newIds.includes(item.id) ? <span className="text-brand-700">Baru</span> : changed ? <span className="text-amber-700">Berubah</span> : <span className="text-emerald-700">✓ Tetap</span>}</td><td className="px-3 py-3"><button onClick={() => restoreTarget(item.id)} className="text-xs font-semibold text-ink-600 hover:text-brand-700">Kembalikan</button></td></tr>; })}</tbody></table></div>
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-surface-muted p-4"><div><p className="font-bold text-ink-900">Total Target JP: {totalTarget}</p><p className="mt-1 text-xs text-ink-500">JP resmi: {officialTotal} · Perubahan: {totalTarget - candidate.reduce((s, x) => s + (baseline[x.id] ?? 0), 0) >= 0 ? "+" : ""}{totalTarget - candidate.reduce((s, x) => s + (baseline[x.id] ?? 0), 0)} JP</p></div><span className={`text-sm font-semibold ${totalTarget > 0 ? "text-emerald-700" : "text-amber-700"}`}>{totalTarget > 0 ? "✓ Target diterima" : "⚠ Total perlu ditinjau"}</span></div>
+        {missingSubjects.length > 0 && <div className="rounded-xl border border-amber/30 bg-amber-50 p-4 text-sm"><p className="font-bold text-amber-700">{missingSubjects.length} mata pelajaran sebelumnya tidak ditemukan.</p><ul className="mt-2 space-y-1 text-ink-700">{missingSubjects.map((m) => <li key={`${m.subjectName}::${m.classLevel}`}>{m.subjectName} <span className="text-ink-400">· {m.classLevel}</span></li>)}</ul><p className="mt-2 text-xs text-ink-500">Data sebelumnya tetap dipertahankan — Commit tidak menghapus apapun, hanya menambah/memperbarui data yang ada di hasil Generate ini.</p></div>}
       </section>}
 
       {candidate.length > 0 && !success && <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface/95 px-4 py-3 shadow-lg backdrop-blur"><div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3"><p className="text-sm font-semibold text-ink-700">{changedIds.length} perubahan belum disimpan</p><button type="button" onClick={() => setCompareOpen(true)} disabled={validation.status !== "valid" || committing} className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-5 py-3 text-sm font-bold text-white disabled:opacity-50"><Save className="h-4 w-4" /> Simpan &amp; Sinkronkan</button></div></div>}

@@ -315,3 +315,29 @@ export async function recordCurriculumGenerateEventAction(input: {
   });
   return { ok: true, data: null };
 }
+
+// GENERATE-KURIKULUM-MASTER-UX/UI-V4 poin 31 (Data Tidak Ditemukan) — mata
+// pelajaran yang sebelumnya sudah di-Commit (curriculum_adoption) untuk
+// konteks ini, dipakai client untuk mendeteksi kalau ada yang hilang dari
+// hasil Generate terbaru. Tidak menghapus apapun — adoptCurriculumItemsAction
+// selalu upsert, jadi baris lama tetap ada; ini murni sinyal untuk ditinjau.
+export async function getPreviouslyAdoptedSubjectsAction(academicContextId: string): Promise<CurriculumActionResult<{ subjectName: string; classLevel: string }[]>> {
+  if (!academicContextId) return { ok: true, data: [] };
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("curriculum_adoption")
+    .select("curriculum_item:curriculum_item_id(subject_name,class_level)")
+    .eq("academic_context_id", academicContextId);
+  if (error) return { ok: false, error: error.message };
+  const seen = new Set<string>();
+  const result: { subjectName: string; classLevel: string }[] = [];
+  for (const row of data ?? []) {
+    const item = row.curriculum_item as unknown as { subject_name: string; class_level: string } | null;
+    if (!item) continue;
+    const key = `${item.subject_name}::${item.class_level}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push({ subjectName: item.subject_name, classLevel: item.class_level });
+  }
+  return { ok: true, data: result };
+}
