@@ -129,7 +129,7 @@ function BebanDonut({ distribution }: { distribution: DashboardBebanDistribution
   const total = Math.max(distribution.ringan + distribution.normal + distribution.berat, 1);
   const a = (distribution.ringan / total) * 360;
   const b = ((distribution.ringan + distribution.normal) / total) * 360;
-  const bg = `conic-gradient(#10b981 0deg ${a}deg, #f59e0b ${a}deg ${b}deg, #f43f5e ${b}deg 360deg)`;
+  const bg = `conic-gradient(var(--color-emerald) 0deg ${a}deg, var(--color-amber) ${a}deg ${b}deg, var(--color-rose) ${b}deg 360deg)`;
   const pct = (n: number) => Math.round((n / total) * 100);
   return <div className="flex items-center gap-5">
     <div className="relative h-28 w-28 shrink-0 rounded-full p-[11px] transition-transform hover:scale-[1.02]" style={{ background: bg }}>
