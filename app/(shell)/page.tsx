@@ -29,6 +29,7 @@ export default async function DashboardPage() {
     const notifications = await getRecentNotifications(supabase, summary.activeContext.id).catch(() => []);
     return <DashboardExperience
       schoolName={summary.schoolProfile?.namaSekolah ?? "Sekolah"}
+      adminName={summary.schoolProfile?.nama ?? null}
       context={formatContextLabel(summary.activeContext)}
       metrics={summary.metrics}
       jpInsight={summary.jpInsight}
