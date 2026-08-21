@@ -36,6 +36,8 @@ export default async function DashboardPage() {
       workload={summary.workloadTop}
       heatmap={intelligence.heatmap}
       heatmapGrid={intelligence.heatmapGrid}
+      rooms={intelligence.rooms}
+      heatmapGridByRoom={intelligence.heatmapGridByRoom}
       bebanDistribution={intelligence.bebanDistribution}
       workloadFull={intelligence.workloadFull}
       agenda={intelligence.upcomingAgenda}

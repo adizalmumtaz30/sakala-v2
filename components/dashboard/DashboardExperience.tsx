@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { Activity, ArrowRight, Bell, BookOpen, CalendarCheck2, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, DoorOpen, Info, AlertTriangle, Layers, Lightbulb, Plus, Sparkles, ShieldCheck, Upload, MoreHorizontal, Search, Users, X } from "lucide-react";
 import type { ReactNode } from "react";
 import type { DashboardKeyMetrics, DashboardJpInsight, DashboardWorkloadEntry } from "@/lib/application/dashboard.usecases";
-import type { DashboardActivityEntry, DashboardAgendaEntry, DashboardHeatmapDay, DashboardHeatmapGridDay, DashboardBebanDistribution, DashboardWorkloadFullEntry } from "@/lib/application/dashboard.intelligence";
+import type { DashboardActivityEntry, DashboardAgendaEntry, DashboardHeatmapDay, DashboardHeatmapGridDay, DashboardBebanDistribution, DashboardWorkloadFullEntry, DashboardRoomLite } from "@/lib/application/dashboard.intelligence";
 import type { NotificationEntry } from "@/lib/application/notifications.usecases";
 import type { HariSekolah } from "@/lib/domain/jamPelajaran";
 
@@ -67,6 +67,7 @@ function yTicks(max: number): number[] {
 }
 
 function LineChart({ days }: { days: DashboardHeatmapDay[] }) {
+  const [hover, setHover] = useState<number | null>(null);
   const rawMax = Math.max(...days.map((d) => d.total), 1);
   const ticks = yTicks(rawMax);
   const max = Math.max(ticks[ticks.length - 1], rawMax, 1);
@@ -74,8 +75,11 @@ function LineChart({ days }: { days: DashboardHeatmapDay[] }) {
   const plotW = width - padL - padR;
   const points = days.map((d, i) => ({ x: days.length <= 1 ? padL + plotW / 2 : padL + (i * plotW) / Math.max(days.length - 1, 1), y: height - padY - (d.total / max) * (height - padY * 2), d }));
   const path = points.map((p, i) => `${i ? "L" : "M"}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
-  return <div className="relative h-[164px] w-full overflow-hidden rounded-xl bg-surface-muted/45 px-1 pt-1">
-    <svg viewBox={`0 0 ${width} ${height}`} className="h-[142px] w-full" role="img" aria-label="Distribusi JP committed per hari">
+  const active = hover !== null ? points[hover] : null;
+  const prevTotal = hover !== null && hover > 0 ? points[hover - 1].d.total : null;
+  const trendPct = active && prevTotal !== null && prevTotal > 0 ? Math.round(((active.d.total - prevTotal) / prevTotal) * 100) : null;
+  return <div className="relative h-[164px] w-full overflow-visible rounded-xl bg-surface-muted/45 px-1 pt-1">
+    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="h-[142px] w-full overflow-visible" role="img" aria-label="Distribusi JP committed per hari">
       {ticks.map((t) => {
         const y = height - padY - (t / max) * (height - padY * 2);
         return <g key={t}>
@@ -84,13 +88,19 @@ function LineChart({ days }: { days: DashboardHeatmapDay[] }) {
         </g>;
       })}
       <path d={path} fill="none" stroke="currentColor" className="text-brand-600" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-      {points.map(({ x, y, d }) => <circle key={d.day} cx={x} cy={y} r="4.5" fill="currentColor" className="text-brand-600" />)}
+      {points.map(({ x, y, d }, i) => <circle key={d.day} cx={x} cy={y} r={hover === i ? 6 : 4.5} fill="currentColor" className="text-brand-600 transition-all" />)}
+      {active && <line x1={active.x} y1={active.y} x2={active.x} y2={height - padY} stroke="currentColor" className="text-brand-600/50" strokeWidth="1" strokeDasharray="3 3" />}
     </svg>
     <div className="absolute inset-x-0 bottom-1 flex justify-between px-[30px] text-[9px] font-medium text-ink-400">{days.map((d) => <Link key={d.day} href={`/analitik?day=${encodeURIComponent(d.day)}`} className="rounded px-1 hover:text-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">{d.label.slice(0, 3)}</Link>)}</div>
     <div className="absolute inset-y-0 right-0" style={{ left: 30 }} aria-label="Buka analitik per hari">
-      <div className="grid h-full grid-cols-6">{days.map((d) => <Link key={d.day} href={`/analitik?day=${encodeURIComponent(d.day)}`} aria-label={`Buka analitik ${d.label}: ${d.total} JP`} title={`${d.label}: ${d.total} JP`} className="rounded-xl focus-visible:ring-2 focus-visible:ring-brand-500/40" />)}</div>
+      <div className="grid h-full grid-cols-6">{days.map((d, i) => <Link key={d.day} href={`/analitik?day=${encodeURIComponent(d.day)}`} aria-label={`Buka analitik ${d.label}: ${d.total} JP`} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)} onFocus={() => setHover(i)} onBlur={() => setHover(null)} className="rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40" />)}</div>
     </div>
-    <div className="pointer-events-none absolute right-3 top-2 rounded-lg border border-border/70 bg-surface/95 px-2 py-1 text-[8.5px] text-ink-500 shadow-sm">Klik area hari untuk membuka Analitik</div>
+    {active && <div className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-[calc(100%+9px)] rounded-lg border border-border bg-surface px-2.5 py-1.5 text-center shadow-lg" style={{ left: `${(active.x / width) * 100}%`, top: `${(active.y / height) * 100}%` }}>
+      <p className="whitespace-nowrap text-[9px] font-semibold text-ink-700">{active.d.label}</p>
+      <p className="whitespace-nowrap text-[13px] font-bold leading-tight tabular-nums text-ink-900">{active.d.total} JP</p>
+      {trendPct !== null && <p className={`whitespace-nowrap text-[8.5px] font-semibold ${trendPct >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{trendPct >= 0 ? "↑" : "↓"} {Math.abs(trendPct)}% dari hari sebelumnya</p>}
+    </div>}
+    {!active && <div className="pointer-events-none absolute right-3 top-2 rounded-lg border border-border/70 bg-surface/95 px-2 py-1 text-[8.5px] text-ink-500 shadow-sm">Arahkan kursor untuk detail per hari</div>}
   </div>;
 }
 
@@ -135,22 +145,53 @@ function BebanDonut({ distribution }: { distribution: DashboardBebanDistribution
   </div>;
 }
 
-function HeatmapGrid({ grid }: { grid: DashboardHeatmapGridDay[] }) {
-  const rows = Math.max(...grid.map((d) => d.cells.length), 1);
-  const LEVEL_BG: Record<0 | 1 | 2 | 3 | 4, string> = { 0: "bg-surface-muted", 1: "bg-brand-50", 2: "bg-brand-100", 3: "bg-brand-200", 4: "bg-brand-300" };
-  return <div className="overflow-x-auto">
-    <div className="grid min-w-[420px] gap-1.5" style={{ gridTemplateColumns: `repeat(${grid.length}, minmax(0,1fr))` }}>
-      {grid.map((d) => <div key={d.day} className="text-center text-[8px] font-semibold text-ink-400">{d.label.slice(0, 3)}</div>)}
-      {Array.from({ length: rows }).map((_, r) => grid.map((d) => {
-        const cell = d.cells[r];
-        if (!cell) return <div key={`${d.day}-${r}`} className="h-6 rounded-md" />;
-        return <Link key={`${d.day}-${r}`} href={`/jadwal?day=${encodeURIComponent(d.day)}`} title={`${d.label} · Jam ke-${cell.periode} (${cell.time}) · ${cell.total} jadwal`} aria-label={`${d.label} jam ke-${cell.periode}: ${cell.total} jadwal`} className={`h-6 rounded-md ${LEVEL_BG[cell.level]} transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40`} />;
-      }))}
+const DENSITY_OPTIONS: { key: 0 | 1 | 2 | 3 | 4; label: string }[] = [{ key: 0, label: "Semua tingkat" }, { key: 1, label: "Ringan ke atas" }, { key: 2, label: "Sedang ke atas" }, { key: 3, label: "Padat ke atas" }, { key: 4, label: "Sangat padat saja" }];
+const LEVEL_BG: Record<0 | 1 | 2 | 3 | 4, string> = { 0: "bg-surface-muted", 1: "bg-brand-50", 2: "bg-brand-100", 3: "bg-brand-200", 4: "bg-brand-300" };
+
+function HeatmapGrid({ grid, rooms, gridByRoom }: { grid: DashboardHeatmapGridDay[]; rooms: DashboardRoomLite[]; gridByRoom: Record<string, DashboardHeatmapGridDay[]> }) {
+  const [roomId, setRoomId] = useState<string>("all");
+  const [minLevel, setMinLevel] = useState<0 | 1 | 2 | 3 | 4>(0);
+  const [hover, setHover] = useState<{ dayIdx: number; rowIdx: number } | null>(null);
+  const activeGrid = roomId === "all" ? grid : (gridByRoom[roomId] ?? grid);
+  const rows = Math.max(...activeGrid.map((d) => d.cells.length), 1);
+  const hoverCell = hover ? activeGrid[hover.dayIdx]?.cells[hover.rowIdx] : null;
+  const hoverDay = hover ? activeGrid[hover.dayIdx] : null;
+  return <div>
+    <div className="mb-2.5 flex flex-wrap gap-1.5">
+      <div className="relative">
+        <select value={roomId} onChange={(e) => setRoomId(e.target.value)} className="appearance-none rounded-lg border border-border bg-surface py-1 pl-2.5 pr-6 text-[9.5px] font-semibold text-ink-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">
+          <option value="all">Semua Ruangan</option>
+          {rooms.map((r) => <option key={r.id} value={r.id}>{r.nama}</option>)}
+        </select>
+        <ChevronRight size={10} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rotate-90 text-ink-400" />
+      </div>
+      <div className="relative">
+        <select value={minLevel} onChange={(e) => setMinLevel(Number(e.target.value) as 0 | 1 | 2 | 3 | 4)} className="appearance-none rounded-lg border border-border bg-surface py-1 pl-2.5 pr-6 text-[9.5px] font-semibold text-ink-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">
+          {DENSITY_OPTIONS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+        </select>
+        <ChevronRight size={10} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rotate-90 text-ink-400" />
+      </div>
+    </div>
+    <div className="relative overflow-x-auto">
+      <div className="grid min-w-[420px] gap-1.5" style={{ gridTemplateColumns: `repeat(${activeGrid.length}, minmax(0,1fr))` }}>
+        {activeGrid.map((d) => <div key={d.day} className="text-center text-[8px] font-semibold text-ink-400">{d.label.slice(0, 3)}</div>)}
+        {Array.from({ length: rows }).map((_, r) => activeGrid.map((d, dayIdx) => {
+          const cell = d.cells[r];
+          if (!cell) return <div key={`${d.day}-${r}`} className="h-6 rounded-md" />;
+          const dimmed = cell.level < minLevel;
+          return <Link key={`${d.day}-${r}`} href={`/jadwal?day=${encodeURIComponent(d.day)}`} aria-label={`${d.label} jam ke-${cell.periode}: ${cell.total} jadwal`} onMouseEnter={() => setHover({ dayIdx, rowIdx: r })} onMouseLeave={() => setHover(null)} onFocus={() => setHover({ dayIdx, rowIdx: r })} onBlur={() => setHover(null)} className={`h-6 rounded-md transition-all hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 ${LEVEL_BG[cell.level]} ${dimmed ? "opacity-25" : ""}`} />;
+        }))}
+      </div>
+      {hover && hoverCell && hoverDay && <div className="pointer-events-none absolute z-10 -translate-x-1/2 rounded-lg border border-border bg-surface px-2.5 py-2 text-left shadow-lg" style={{ left: `${((hover.dayIdx + 0.5) / activeGrid.length) * 100}%`, top: `${((hover.rowIdx + 1) / rows) * 100}%`, marginTop: 6 }}>
+        <p className="whitespace-nowrap text-[9.5px] font-semibold text-ink-800">{hoverDay.label} · Jam ke-{hoverCell.periode}</p>
+        <p className="whitespace-nowrap text-[8.5px] text-ink-400">{hoverCell.time}</p>
+        <p className="mt-1 whitespace-nowrap text-[9px] text-ink-600"><b className="tabular-nums">{hoverCell.kelasCount}</b> kelas · <b className="tabular-nums">{hoverCell.guruCount}</b> guru{roomId === "all" && <> · <b className="tabular-nums">{hoverCell.ruanganCount}</b> ruangan</>}</p>
+      </div>}
     </div>
     <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1">
       {([["0", 0], ["1–2", 1], ["3–4", 2], ["5–6", 3], ["7+", 4]] as [string, 0 | 1 | 2 | 3 | 4][]).map(([label, level]) => <span key={level} className="flex items-center gap-1 text-[8.5px] text-ink-400"><span className={`h-2.5 w-2.5 rounded-sm ${LEVEL_BG[level]}`} />{label} jadwal</span>)}
     </div>
-    <p className="mt-1.5 text-[9px] text-ink-400">Arahkan kursor ke sel untuk melihat detail jam &amp; jumlah jadwal.</p>
+    <p className="mt-1.5 text-[9px] text-ink-400">Arahkan kursor ke sel untuk melihat detail.</p>
   </div>;
 }
 
@@ -278,7 +319,7 @@ function greetingSalutation(): string {
   return "Selamat malam";
 }
 
-export default function DashboardExperience({ schoolName, adminName, context, metrics, jpInsight, workload, heatmap, heatmapGrid, bebanDistribution, workloadFull, agenda, activity, guruList, notifications }: { schoolName: string; adminName: string | null; context: string | null; metrics: DashboardKeyMetrics; jpInsight: DashboardJpInsight; workload: DashboardWorkloadEntry[]; heatmap: DashboardHeatmapDay[]; heatmapGrid: DashboardHeatmapGridDay[]; bebanDistribution: DashboardBebanDistribution; workloadFull: DashboardWorkloadFullEntry[]; agenda: DashboardAgendaEntry[]; activity: DashboardActivityEntry[]; guruList: GuruLite[]; notifications: NotificationEntry[] }) {
+export default function DashboardExperience({ schoolName, adminName, context, metrics, jpInsight, workload, heatmap, heatmapGrid, rooms, heatmapGridByRoom, bebanDistribution, workloadFull, agenda, activity, guruList, notifications }: { schoolName: string; adminName: string | null; context: string | null; metrics: DashboardKeyMetrics; jpInsight: DashboardJpInsight; workload: DashboardWorkloadEntry[]; heatmap: DashboardHeatmapDay[]; heatmapGrid: DashboardHeatmapGridDay[]; rooms: DashboardRoomLite[]; heatmapGridByRoom: Record<string, DashboardHeatmapGridDay[]>; bebanDistribution: DashboardBebanDistribution; workloadFull: DashboardWorkloadFullEntry[]; agenda: DashboardAgendaEntry[]; activity: DashboardActivityEntry[]; guruList: GuruLite[]; notifications: NotificationEntry[] }) {
   const guruByName = new Map(guruList.map((g) => [g.namaGuru, g]));
   const bebanTertinggi = workloadFull.slice(0, 4);
   const salutation = useMemo(() => greetingSalutation(), []);
@@ -300,7 +341,7 @@ export default function DashboardExperience({ schoolName, adminName, context, me
           <Section title="Distribusi Beban Guru" description="Ringan/Normal/Berat berdasarkan JP committed." href="/guru" icon={<Users size={14} />}><BebanDonut distribution={bebanDistribution} /></Section>
         </div>
         <div className="grid min-h-0 gap-3 lg:grid-cols-[1.2fr_1fr]">
-          <Section title="Heatmap Jadwal" description="Kepadatan tiap jam pelajaran sepekan." href="/jadwal" icon={<Activity size={14} />}><HeatmapGrid grid={heatmapGrid} /></Section>
+          <Section title="Heatmap Jadwal" description="Kepadatan tiap jam pelajaran sepekan." href="/jadwal" icon={<Activity size={14} />}><HeatmapGrid grid={heatmapGrid} rooms={rooms} gridByRoom={heatmapGridByRoom} /></Section>
           <Section title="Beban Guru Tertinggi" description="Guru dengan JP committed tertinggi." href="/guru" icon={<Users size={14} />} badge={<span className="ml-1 inline-flex items-center gap-1 rounded-full border border-border bg-surface-muted px-2 py-0.5 text-[9px] font-bold text-ink-500">Top 5</span>}><div className="space-y-2">{bebanTertinggi.map((e) => { const style = BEBAN_STYLE[e.beban]; const g = guruList.find((item) => item.id === e.guruId); return <Link key={e.guruId} href={`/guru?teacher=${encodeURIComponent(e.guruId)}`} aria-label={`${e.namaGuru}: ${e.totalJamMengajar} JP, ${style.label}`} className="group flex items-center gap-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"><Avatar name={e.namaGuru} size="md" kodeGuru={g?.kodeGuru} jenisKelamin={g?.jenisKelamin} /><span className="min-w-0 flex-1 truncate text-[10px] font-medium text-ink-800 group-hover:text-brand-700">{e.namaGuru}</span><span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[8px] font-bold ${style.badge}`}>{style.label}</span><span className="text-[10px] font-bold tabular-nums text-ink-800">{e.totalJamMengajar} JP</span></Link>; })}{bebanTertinggi.length === 0 && <p className="text-[10px] text-ink-400">Belum ada guru aktif dengan jadwal committed.</p>}</div></Section>
         </div>
         <div className="grid min-h-0 gap-3 lg:grid-cols-2">
