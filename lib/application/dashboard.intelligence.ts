@@ -9,8 +9,9 @@ export interface DashboardHeatmapDay { day: HariSekolah; label: string; total: n
 export interface DashboardAgendaEntry { id:string; dayLabel:string; time:string; subject:string; teacher:string; teacherId:string|null; className:string; room:string|null; }
 export interface DashboardActivityEntry { id:string; action:string; entityType:string; entityLabel:string|null; createdAt:string; }
 export interface DashboardBebanDistribution { ringan:number; normal:number; berat:number; }
-export interface DashboardHeatmapCell { periode:number; time:string; total:number; level:0|1|2|3|4; }
+export interface DashboardHeatmapCell { periode:number; time:string; total:number; level:0|1|2|3|4; kelasCount:number; guruCount:number; ruanganCount:number; }
 export interface DashboardHeatmapGridDay { day:HariSekolah; label:string; cells:DashboardHeatmapCell[]; }
+export interface DashboardRoomLite { id:string; nama:string; }
 export interface DashboardWorkloadFullEntry { guruId:string; namaGuru:string; totalJamMengajar:number; beban:"ringan"|"normal"|"berat"; }
 
 const DAYS:HariSekolah[]=["senin","selasa","rabu","kamis","jumat","sabtu"];
@@ -59,22 +60,42 @@ export async function getDashboardIntelligence(supabase:SupabaseClient, contextI
   const max=Math.max(...DAYS.map(d=>totals.get(d)??0),1);
   const heatmap=DAYS.map(day=>{const total=totals.get(day)??0;const r=total/max;const level=(total===0?0:r<=.25?1:r<=.5?2:r<=.75?3:4) as 0|1|2|3|4;return {day,label:LABEL[day],total,level};});
 
-  // Heatmap Jadwal grid penuh: hari x periode pembelajaran, cell = jumlah assignment committed yang menutupi periode itu.
-  const cellCounts=new Map<string,number>();
-  for(const a of committed){
-    for(let p=a.periodStart;p<=a.periodEnd;p++) cellCounts.set(`${a.day}:${p}`,(cellCounts.get(`${a.day}:${p}`)??0)+1);
-  }
-  const gridMax=Math.max(...Array.from(cellCounts.values()),1);
-  const heatmapGrid=DAYS.map(day=>{
-    const periods=pembelajaranJam.filter(j=>j.hari===day).sort((x,y)=>x.nomorUrut-y.nomorUrut);
-    const cells=periods.map(j=>{
-      const total=cellCounts.get(`${day}:${j.nomorUrut}`)??0;
-      const r=total/gridMax;
-      const level=(total===0?0:r<=.25?1:r<=.5?2:r<=.75?3:4) as 0|1|2|3|4;
-      return {periode:j.nomorUrut,time:`${j.waktuMulai}–${j.waktuSelesai}`,total,level};
+  // Heatmap Jadwal grid penuh: hari x periode pembelajaran, cell = jumlah assignment committed yang menutupi periode itu,
+  // plus breakdown kelas/guru/ruangan unik (utk tooltip custom) — dipakai reusable jg utk filter per-ruangan.
+  function buildHeatmapGrid(subset: typeof committed): DashboardHeatmapGridDay[] {
+    const cellCounts = new Map<string, number>();
+    const cellKelas = new Map<string, Set<string>>();
+    const cellGuru = new Map<string, Set<string>>();
+    const cellRuang = new Map<string, Set<string>>();
+    for (const a of subset) {
+      for (let p = a.periodStart; p <= a.periodEnd; p++) {
+        const key = `${a.day}:${p}`;
+        cellCounts.set(key, (cellCounts.get(key) ?? 0) + 1);
+        if (!cellKelas.has(key)) cellKelas.set(key, new Set());
+        if (!cellGuru.has(key)) cellGuru.set(key, new Set());
+        if (!cellRuang.has(key)) cellRuang.set(key, new Set());
+        cellKelas.get(key)!.add(a.classId);
+        cellGuru.get(key)!.add(a.teacherId);
+        if (a.roomId) cellRuang.get(key)!.add(a.roomId);
+      }
+    }
+    const gridMax = Math.max(...Array.from(cellCounts.values()), 1);
+    return DAYS.map(day => {
+      const periods = pembelajaranJam.filter(j => j.hari === day).sort((x, y) => x.nomorUrut - y.nomorUrut);
+      const cells = periods.map(j => {
+        const key = `${day}:${j.nomorUrut}`;
+        const total = cellCounts.get(key) ?? 0;
+        const r = total / gridMax;
+        const level = (total === 0 ? 0 : r <= .25 ? 1 : r <= .5 ? 2 : r <= .75 ? 3 : 4) as 0 | 1 | 2 | 3 | 4;
+        return { periode: j.nomorUrut, time: `${j.waktuMulai}–${j.waktuSelesai}`, total, level, kelasCount: cellKelas.get(key)?.size ?? 0, guruCount: cellGuru.get(key)?.size ?? 0, ruanganCount: cellRuang.get(key)?.size ?? 0 };
+      });
+      return { day, label: LABEL[day], cells };
     });
-    return {day,label:LABEL[day],cells};
-  });
+  }
+  const heatmapGrid = buildHeatmapGrid(committed);
+  const rooms: DashboardRoomLite[] = ruanganList.map(r => ({ id: r.id, nama: r.nama }));
+  const heatmapGridByRoom: Record<string, DashboardHeatmapGridDay[]> = {};
+  for (const room of rooms) heatmapGridByRoom[room.id] = buildHeatmapGrid(committed.filter(a => a.roomId === room.id));
 
   // Distribusi Beban Guru (Ringan/Normal/Berat) — semua guru aktif, termasuk yang belum punya jadwal committed (0 JP = ringan).
   const jamByGuruId=new Map<string,number>();
@@ -95,5 +116,5 @@ export async function getDashboardIntelligence(supabase:SupabaseClient, contextI
     return {id:a.id,dayLabel:LABEL[a.day],time:s?`${s.waktuMulai}–${s.waktuSelesai}`:`Jam ke-${a.periodStart}`,subject,teacher:teacherName,teacherId:guru.has(a.teacherId)?a.teacherId:null,className,room:a.roomId?ruang.get(a.roomId)??null:null};
   });
   const recentActivity=audit.items.map(i=>({id:i.id,action:humanizeActivity(i.action,i.entityType,i.entityLabel),entityType:i.entityType,entityLabel:i.entityLabel,createdAt:i.createdAt}));
-  return {heatmap,heatmapGrid,bebanDistribution,workloadFull,upcomingAgenda:upcoming,recentActivity};
+  return {heatmap,heatmapGrid,rooms,heatmapGridByRoom,bebanDistribution,workloadFull,upcomingAgenda:upcoming,recentActivity};
 }
