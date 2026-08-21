@@ -13,9 +13,11 @@ import {
 } from "lucide-react";
 import type { AnalitikView } from "@/lib/application/analitik.usecases";
 import { Badge, Card, EmptyState } from "@/components/ui/primitives";
+import ReportExportBar from "@/components/ui/ReportExportBar";
 
 interface Props {
   activeContextLabel: string;
+  schoolName?: string;
   view: AnalitikView;
 }
 
@@ -49,27 +51,32 @@ function SectionHeader({
   eyebrow,
   title,
   description,
+  action,
 }: {
   icon: typeof BarChart3;
   eyebrow: string;
   title: string;
   description: string;
+  action?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-start gap-3 px-5 pt-5">
-      <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
-        <Icon size={17} aria-hidden="true" />
+    <div className="flex items-start justify-between gap-3 px-5 pt-5">
+      <div className="flex items-start gap-3 min-w-0">
+        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
+          <Icon size={17} aria-hidden="true" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-400">{eyebrow}</p>
+          <h2 className="mt-0.5 text-[14px] font-semibold text-ink-900">{title}</h2>
+          <p className="mt-0.5 text-[11.5px] leading-5 text-ink-500">{description}</p>
+        </div>
       </div>
-      <div className="min-w-0">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-400">{eyebrow}</p>
-        <h2 className="mt-0.5 text-[14px] font-semibold text-ink-900">{title}</h2>
-        <p className="mt-0.5 text-[11.5px] leading-5 text-ink-500">{description}</p>
-      </div>
+      {action && <div className="shrink-0">{action}</div>}
     </div>
   );
 }
 
-export default function AnalitikWorkspace({ activeContextLabel, view }: Props) {
+export default function AnalitikWorkspace({ activeContextLabel, schoolName, view }: Props) {
   const maxJam = Math.max(1, ...view.bebanGuru.map((g) => g.totalJamCommitted));
   const maxJpCount = Math.max(1, ...view.jpBreakdown.map((b) => b.count));
   const totalScheduledJp = view.bebanGuru.reduce((sum, guru) => sum + guru.totalJamCommitted, 0);
@@ -177,6 +184,28 @@ export default function AnalitikWorkspace({ activeContextLabel, view }: Props) {
             eyebrow="Workload"
             title="Distribusi Beban Mengajar"
             description="Total JP committed per guru. Warna identitas membantu membaca baris dengan cepat tanpa bergantung pada warna sebagai satu-satunya informasi."
+            action={
+              <ReportExportBar
+                compact
+                title="Distribusi Beban Mengajar"
+                context={activeContextLabel}
+                schoolName={schoolName}
+                periodLabel={activeContextLabel}
+                filterLabel="Distribusi beban mengajar per guru"
+                summary={[
+                  { label: "Total Guru", value: view.bebanGuru.length },
+                  { label: "Total JP Committed", value: totalScheduledJp },
+                  { label: "Guru Beban Tertinggi", value: busiestTeacher ? `${busiestTeacher.guruNama} (${busiestTeacher.totalJamCommitted} JP)` : "-" },
+                ]}
+                columns={[
+                  { key: "guru", label: "Guru" },
+                  { key: "jp", label: "JP Committed" },
+                  { key: "kelas", label: "Jumlah Kelas" },
+                  { key: "persentase", label: "Persentase Relatif" },
+                ]}
+                rows={view.bebanGuru.map((g) => ({ guru: g.guruNama, jp: g.totalJamCommitted, kelas: g.jumlahKombinasi, persentase: `${Math.round((g.totalJamCommitted / maxJam) * 100)}%` }))}
+              />
+            }
           />
           {view.bebanGuru.length === 0 ? (
             <div className="px-5 pb-4">
@@ -224,6 +253,26 @@ export default function AnalitikWorkspace({ activeContextLabel, view }: Props) {
             eyebrow="Target health"
             title="Status JP per Kombinasi"
             description={`${view.totalKombinasiAktif} kombinasi Guru + Mapel + Kelas pada konteks aktif.`}
+            action={
+              <ReportExportBar
+                compact
+                title="Status JP per Kombinasi"
+                context={activeContextLabel}
+                schoolName={schoolName}
+                periodLabel={activeContextLabel}
+                filterLabel="Status JP per kombinasi Guru + Mapel + Kelas"
+                summary={[
+                  { label: "Total Kombinasi Aktif", value: view.totalKombinasiAktif },
+                  { label: "JP Terpenuhi", value: `${completionRate}%` },
+                ]}
+                columns={[
+                  { key: "status", label: "Status" },
+                  { key: "jumlah", label: "Jumlah Kombinasi" },
+                  { key: "persentase", label: "Persentase dari Total" },
+                ]}
+                rows={view.jpBreakdown.map((b) => ({ status: b.label, jumlah: b.count, persentase: `${view.totalKombinasiAktif ? Math.round((b.count / view.totalKombinasiAktif) * 100) : 0}%` }))}
+              />
+            }
           />
           <div className="px-5 pb-5 pt-4">
             <div className="mb-4 flex h-2.5 overflow-hidden rounded-full bg-surface-muted" aria-label="Distribusi status JP">
@@ -270,6 +319,27 @@ export default function AnalitikWorkspace({ activeContextLabel, view }: Props) {
           eyebrow="Exceptions"
           title="Konflik JP Aktif"
           description="Prioritaskan kombinasi yang belum lengkap atau melebihi target. Ini adalah daftar pengecualian, bukan daftar semua data."
+          action={
+            <ReportExportBar
+              compact
+              title="Konflik JP Aktif"
+              context={activeContextLabel}
+              schoolName={schoolName}
+              periodLabel={activeContextLabel}
+              filterLabel="Konflik JP aktif — belum lengkap atau melebihi target"
+              summary={[{ label: "Total Konflik Aktif", value: totalConflicts }]}
+              columns={[
+                { key: "guru", label: "Guru" },
+                { key: "mapel", label: "Mata Pelajaran" },
+                { key: "kelas", label: "Kelas" },
+                { key: "terjadwal", label: "JP Terjadwal" },
+                { key: "target", label: "Target JP" },
+                { key: "selisih", label: "Selisih" },
+                { key: "status", label: "Status" },
+              ]}
+              rows={view.konflikAktif.map((k) => ({ guru: k.guruNama, mapel: k.mataPelajaranNama, kelas: k.kelasLabel, terjadwal: k.scheduledJp, target: k.targetJp, selisih: `${k.difference > 0 ? "-" : "+"}${Math.abs(k.difference)}`, status: k.status === "lebih" ? "Melebihi Target" : "Belum Lengkap" }))}
+            />
+          }
         />
         {view.konflikAktif.length === 0 ? (
           <div className="px-5 pb-4">
