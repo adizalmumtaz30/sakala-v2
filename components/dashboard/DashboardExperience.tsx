@@ -34,9 +34,9 @@ function Section({ title, description, href, children, icon, badge, className }:
 }
 
 const BEBAN_STYLE: Record<"ringan" | "normal" | "berat", { label: string; badge: string; dot: string }> = {
-  ringan: { label: "Ringan", badge: "border-emerald-200 bg-emerald-50 text-emerald-700", dot: "bg-emerald-500" },
-  normal: { label: "Normal", badge: "border-amber-200 bg-amber-50 text-amber-700", dot: "bg-amber-500" },
-  berat: { label: "Berat", badge: "border-rose-200 bg-rose-50 text-rose-700", dot: "bg-rose-500" },
+  ringan: { label: "Ringan", badge: "border-emerald/30 bg-emerald-50 text-emerald", dot: "bg-emerald" },
+  normal: { label: "Normal", badge: "border-amber/30 bg-amber-50 text-amber", dot: "bg-amber" },
+  berat: { label: "Berat", badge: "border-rose/30 bg-rose-50 text-rose", dot: "bg-rose" },
 };
 
 function KpiCard({ label, value, suffix, icon, href }: { label: string; value: number; suffix?: string; icon: ReactNode; href: string }) {
@@ -98,7 +98,7 @@ function LineChart({ days }: { days: DashboardHeatmapDay[] }) {
     {active && <div className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-[calc(100%+9px)] rounded-lg border border-border bg-surface px-2.5 py-1.5 text-center shadow-lg" style={{ left: `${(active.x / width) * 100}%`, top: `${(active.y / height) * 100}%` }}>
       <p className="whitespace-nowrap text-[9px] font-semibold text-ink-700">{active.d.label}</p>
       <p className="whitespace-nowrap text-[13px] font-bold leading-tight tabular-nums text-ink-900">{active.d.total} JP</p>
-      {trendPct !== null && <p className={`whitespace-nowrap text-[8.5px] font-semibold ${trendPct >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{trendPct >= 0 ? "↑" : "↓"} {Math.abs(trendPct)}% dari hari sebelumnya</p>}
+      {trendPct !== null && <p className={`whitespace-nowrap text-[8.5px] font-semibold ${trendPct >= 0 ? "text-emerald" : "text-rose"}`}>{trendPct >= 0 ? "↑" : "↓"} {Math.abs(trendPct)}% dari hari sebelumnya</p>}
     </div>}
     {!active && <div className="pointer-events-none absolute right-3 top-2 rounded-lg border border-border/70 bg-surface/95 px-2 py-1 text-[8.5px] text-ink-500 shadow-sm">Arahkan kursor untuk detail per hari</div>}
   </div>;
@@ -138,15 +138,15 @@ function BebanDonut({ distribution }: { distribution: DashboardBebanDistribution
       </Link>
     </div>
     <div className="min-w-0 flex-1 space-y-2 text-[10px]">
-      <Link href="/guru" className="flex items-center justify-between gap-3 rounded px-1 hover:bg-emerald-50 hover:text-emerald-700 focus-visible:ring-2 focus-visible:ring-brand-500/40"><span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Ringan <span className="text-ink-400">(≤ 20 JP)</span></span><span className="flex items-baseline gap-1 tabular-nums"><b>{distribution.ringan}</b><span className="text-[8.5px] text-ink-400">({pct(distribution.ringan)}%)</span></span></Link>
-      <Link href="/guru" className="flex items-center justify-between gap-3 rounded px-1 hover:bg-amber-50 hover:text-amber-700 focus-visible:ring-2 focus-visible:ring-brand-500/40"><span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-amber-500" />Normal <span className="text-ink-400">(21–32 JP)</span></span><span className="flex items-baseline gap-1 tabular-nums"><b>{distribution.normal}</b><span className="text-[8.5px] text-ink-400">({pct(distribution.normal)}%)</span></span></Link>
-      <Link href="/guru" className="flex items-center justify-between gap-3 rounded px-1 hover:bg-rose-50 hover:text-rose-700 focus-visible:ring-2 focus-visible:ring-brand-500/40"><span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-rose-500" />Berat <span className="text-ink-400">(≥ 33 JP)</span></span><span className="flex items-baseline gap-1 tabular-nums"><b>{distribution.berat}</b><span className="text-[8.5px] text-ink-400">({pct(distribution.berat)}%)</span></span></Link>
+      <Link href="/guru" className="flex items-center justify-between gap-3 rounded px-1 hover:bg-emerald-50 hover:text-emerald focus-visible:ring-2 focus-visible:ring-brand-500/40"><span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-emerald" />Ringan <span className="text-ink-400">(≤ 20 JP)</span></span><span className="flex items-baseline gap-1 tabular-nums"><b>{distribution.ringan}</b><span className="text-[8.5px] text-ink-400">({pct(distribution.ringan)}%)</span></span></Link>
+      <Link href="/guru" className="flex items-center justify-between gap-3 rounded px-1 hover:bg-amber-50 hover:text-amber focus-visible:ring-2 focus-visible:ring-brand-500/40"><span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-amber" />Normal <span className="text-ink-400">(21–32 JP)</span></span><span className="flex items-baseline gap-1 tabular-nums"><b>{distribution.normal}</b><span className="text-[8.5px] text-ink-400">({pct(distribution.normal)}%)</span></span></Link>
+      <Link href="/guru" className="flex items-center justify-between gap-3 rounded px-1 hover:bg-rose-50 hover:text-rose focus-visible:ring-2 focus-visible:ring-brand-500/40"><span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-rose" />Berat <span className="text-ink-400">(≥ 33 JP)</span></span><span className="flex items-baseline gap-1 tabular-nums"><b>{distribution.berat}</b><span className="text-[8.5px] text-ink-400">({pct(distribution.berat)}%)</span></span></Link>
     </div>
   </div>;
 }
 
 const DENSITY_OPTIONS: { key: 0 | 1 | 2 | 3 | 4; label: string }[] = [{ key: 0, label: "Semua tingkat" }, { key: 1, label: "Ringan ke atas" }, { key: 2, label: "Sedang ke atas" }, { key: 3, label: "Padat ke atas" }, { key: 4, label: "Sangat padat saja" }];
-const LEVEL_BG: Record<0 | 1 | 2 | 3 | 4, string> = { 0: "bg-surface-muted", 1: "bg-brand-50", 2: "bg-brand-100", 3: "bg-brand-200", 4: "bg-brand-300" };
+const LEVEL_BG: Record<0 | 1 | 2 | 3 | 4, string> = { 0: "bg-surface-muted", 1: "bg-brand-50", 2: "bg-brand-100", 3: "bg-brand-600/50", 4: "bg-brand-600" };
 
 function HeatmapGrid({ grid, rooms, gridByRoom }: { grid: DashboardHeatmapGridDay[]; rooms: DashboardRoomLite[]; gridByRoom: Record<string, DashboardHeatmapGridDay[]> }) {
   const [roomId, setRoomId] = useState<string>("all");
@@ -241,7 +241,7 @@ function MiniCalendar({ heatmap }: { heatmap: DashboardHeatmapDay[] }) {
 
 const NOTIF_TONE: Record<NotificationEntry["tone"], { icon: typeof Info; cls: string }> = {
   info: { icon: Info, cls: "bg-brand-50 text-brand-600" },
-  success: { icon: CheckCircle2, cls: "bg-emerald-50 text-emerald-600" },
+  success: { icon: CheckCircle2, cls: "bg-emerald-50 text-emerald" },
   warning: { icon: AlertTriangle, cls: "bg-amber-50 text-amber" },
 };
 
@@ -345,7 +345,7 @@ export default function DashboardExperience({ schoolName, adminName, context, me
           <Section title="Beban Guru Tertinggi" description="Guru dengan JP committed tertinggi." href="/guru" icon={<Users size={14} />} badge={<span className="ml-1 inline-flex items-center gap-1 rounded-full border border-border bg-surface-muted px-2 py-0.5 text-[9px] font-bold text-ink-500">Top 5</span>}><div className="space-y-2">{bebanTertinggi.map((e) => { const style = BEBAN_STYLE[e.beban]; const g = guruList.find((item) => item.id === e.guruId); return <Link key={e.guruId} href={`/guru?teacher=${encodeURIComponent(e.guruId)}`} aria-label={`${e.namaGuru}: ${e.totalJamMengajar} JP, ${style.label}`} className="group flex items-center gap-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"><Avatar name={e.namaGuru} size="md" kodeGuru={g?.kodeGuru} jenisKelamin={g?.jenisKelamin} /><span className="min-w-0 flex-1 truncate text-[10px] font-medium text-ink-800 group-hover:text-brand-700">{e.namaGuru}</span><span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[8px] font-bold ${style.badge}`}>{style.label}</span><span className="text-[10px] font-bold tabular-nums text-ink-800">{e.totalJamMengajar} JP</span></Link>; })}{bebanTertinggi.length === 0 && <p className="text-[10px] text-ink-400">Belum ada guru aktif dengan jadwal committed.</p>}</div></Section>
         </div>
         <div className="grid min-h-0 gap-3 lg:grid-cols-2">
-          <Section title="Aktivitas Terbaru" description="Perubahan terakhir pada konteks aktif." href="/riwayat" icon={<Clock3 size={14} />}><div className="space-y-2.5">{activity.slice(0, 4).map((a) => { const isGuru = a.entityType.toLowerCase().replace(/[- ]+/g, "_") === "guru"; const guru = isGuru && a.entityLabel ? guruByName.get(a.entityLabel) : undefined; return <Link key={a.id} href="/riwayat" className="group flex items-start gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">{isGuru ? <Avatar name={a.entityLabel} size="sm" kodeGuru={guru?.kodeGuru} jenisKelamin={guru?.jenisKelamin} /> : <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600"><CheckCircle2 size={12} aria-hidden="true" /></span>}<div className="min-w-0"><p className="truncate text-[10px] font-medium text-ink-800 group-hover:text-brand-700">{a.action}</p><time className="text-[8.5px] text-ink-400">{new Date(a.createdAt).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" })}</time></div></Link>; })}</div></Section>
+          <Section title="Aktivitas Terbaru" description="Perubahan terakhir pada konteks aktif." href="/riwayat" icon={<Clock3 size={14} />}><div className="space-y-2.5">{activity.slice(0, 4).map((a) => { const isGuru = a.entityType.toLowerCase().replace(/[- ]+/g, "_") === "guru"; const guru = isGuru && a.entityLabel ? guruByName.get(a.entityLabel) : undefined; return <Link key={a.id} href="/riwayat" className="group flex items-start gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">{isGuru ? <Avatar name={a.entityLabel} size="sm" kodeGuru={guru?.kodeGuru} jenisKelamin={guru?.jenisKelamin} /> : <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald"><CheckCircle2 size={12} aria-hidden="true" /></span>}<div className="min-w-0"><p className="truncate text-[10px] font-medium text-ink-800 group-hover:text-brand-700">{a.action}</p><time className="text-[8.5px] text-ink-400">{new Date(a.createdAt).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" })}</time></div></Link>; })}</div></Section>
           <Section title="Insight" description="Sinyal yang layak diperhatikan." href="/analitik" icon={<Lightbulb size={14} />}><Link href="/analitik" className="group block rounded-xl bg-brand-50/60 p-3 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"><p className="text-[11px] font-semibold leading-4 text-ink-900">{bebanTertinggi[0]?.namaGuru ? `${bebanTertinggi[0].namaGuru} memiliki beban JP tertinggi.` : "Jadwal akademik siap dianalisis."}</p><p className="mt-1 text-[9.5px] leading-4 text-ink-500">Buka Analitik untuk melihat distribusi dan pola yang lebih lengkap.</p><span className="mt-2 inline-flex items-center gap-1 text-[9.5px] font-semibold text-brand-600">Analisis <ArrowRight size={11} /></span></Link></Section>
         </div>
       </div>
