@@ -323,7 +323,7 @@ export default function DashboardExperience({ schoolName, adminName, context, me
   const guruByName = new Map(guruList.map((g) => [g.namaGuru, g]));
   const bebanTertinggi = workloadFull.slice(0, 4);
   const salutation = useMemo(() => greetingSalutation(), []);
-  return <main className="mx-auto flex min-h-[calc(100vh-5.5rem)] max-w-[1440px] flex-col gap-3 px-2 pb-4 pt-3 sm:px-3 lg:gap-3.5">
+  return <main className="mx-auto flex min-h-[calc(100vh-5.5rem)] max-w-[1760px] flex-col gap-3 px-1 pb-4 pt-3 sm:px-2 lg:gap-3.5">
     <header className="flex items-end justify-between gap-4 px-1">
       <div className="min-w-0">
         <p className="mb-1 text-[9px] font-bold uppercase tracking-[.14em] text-brand-600">{context ?? "Konteks akademik belum aktif"}</p>

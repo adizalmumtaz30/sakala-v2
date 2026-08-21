@@ -1,4 +1,4 @@
-import Sidebar from "@/components/layout/Sidebar";
+import ShellFrame from "@/components/layout/ShellFrame";
 import Header from "@/components/layout/Header";
 import CommandPalette from "@/components/layout/CommandPalette";
 import SplashScreen from "@/components/splash/SplashScreen";
@@ -27,11 +27,10 @@ export default async function ShellLayout({ children }: { children: React.ReactN
   return (
     <div className="flex min-h-screen">
       <SplashScreen schoolProfileNama={schoolProfileNama} activeContextLabel={activeContextLabel} />
-      <Sidebar />
-      <div className="flex flex-1 flex-col" style={{ marginLeft: "var(--shell-sidebar-w)" }}>
+      <ShellFrame>
         <Header schoolProfileNama={schoolProfileNama} activeContextLabel={activeContextLabel} notifications={notifications} />
-        <main className="flex-1 px-8 pb-16 pt-6">{children}</main>
-      </div>
+        <main className="flex-1 px-5 pb-16 pt-6 lg:px-6">{children}</main>
+      </ShellFrame>
       <CommandPalette />
     </div>
   );
