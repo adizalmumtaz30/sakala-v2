@@ -233,6 +233,10 @@ export default function Header({
             <div aria-hidden="true" className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-50 text-[12px] font-bold text-brand-700 ring-2 ring-surface ring-offset-1 ring-offset-brand-100">
               {schoolProfileNama ? initialsOf(schoolProfileNama) : "?"}
             </div>
+            <span className="hidden flex-col items-start leading-tight lg:flex">
+              <span className="max-w-[140px] truncate text-[12px] font-semibold text-ink-800">{schoolProfileNama ?? "Admin Sekolah"}</span>
+              <span className="text-[9.5px] font-medium text-ink-400">Admin Sekolah</span>
+            </span>
             <ChevronDown size={15} className="text-ink-400" aria-hidden="true" />
           </button>
 
