@@ -26,14 +26,24 @@ export function exportCsv(title: string, columns: ReportColumn[], rows: ReportRo
   downloadBlob(new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" }), `${title.toLowerCase().replace(/[^a-z0-9]+/gi, "-")}-${stamp()}.csv`);
 }
 
-export function exportExcel(title: string, columns: ReportColumn[], rows: ReportRow[], context?: string) {
+export function exportExcel(
+  title: string,
+  columns: ReportColumn[],
+  rows: ReportRow[],
+  options?: { context?: string; filterLabel?: string; summary?: { label: string; value: string | number }[] },
+) {
   const data = rows.map((r) => Object.fromEntries(columns.map((c) => [c.label, r[c.key] ?? ""])));
+  const summary = options?.summary ?? [{ label: "Total data", value: rows.length }];
   const sheetRows = [
     [title],
-    context ? [context] : [],
+    options?.context ? [options.context] : [],
+    options?.filterLabel ? [`Filter: ${options.filterLabel}`] : [],
     [],
     columns.map((c) => c.label),
     ...data.map((r) => columns.map((c) => r[c.label] ?? "")),
+    [],
+    ["Ringkasan"],
+    ...summary.map((s) => [s.label, s.value]),
   ].filter((r) => r.length);
   const ws = XLSX.utils.aoa_to_sheet(sheetRows);
   ws["!cols"] = columns.map((c) => ({ wch: Math.max(14, Math.min(34, c.label.length + 8)) }));

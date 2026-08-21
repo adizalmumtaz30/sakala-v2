@@ -11,6 +11,7 @@ export default function ReportExportBar({
   schoolName,
   periodLabel,
   filterLabel,
+  summary,
   columns,
   rows,
   landscape = true,
@@ -21,6 +22,7 @@ export default function ReportExportBar({
   schoolName?: string;
   periodLabel?: string;
   filterLabel?: string;
+  summary?: { label: string; value: string | number }[];
   columns: ReportColumn[];
   rows: ReportRow[];
   landscape?: boolean;
@@ -34,7 +36,7 @@ export default function ReportExportBar({
     setBusy(kind);
     try {
       if (kind === "pdf") await exportPdf(title, columns, rows, { context, schoolName, periodLabel: periodLabel ?? context, filterLabel, landscape });
-      if (kind === "excel") exportExcel(title, columns, rows, context);
+      if (kind === "excel") exportExcel(title, columns, rows, { context, filterLabel, summary });
       if (kind === "csv") exportCsv(title, columns, rows);
     } catch {
       // Keep export controls non-blocking; the caller's normal page state remains intact.
