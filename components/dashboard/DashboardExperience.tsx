@@ -40,11 +40,11 @@ const BEBAN_STYLE: Record<"ringan" | "normal" | "berat", { label: string; badge:
 };
 
 function KpiCard({ label, value, suffix, icon, href }: { label: string; value: number; suffix?: string; icon: ReactNode; href: string }) {
-  return <Link href={href} className="group flex items-center gap-3 rounded-[16px] border border-border/70 bg-surface/95 px-3.5 py-3 shadow-[0_1px_2px_rgba(15,23,42,.03)] transition-all hover:-translate-y-0.5 hover:border-brand-600/25 hover:shadow-[0_8px_20px_rgba(15,23,42,.06)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">
-    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">{icon}</span>
+  return <Link href={href} className="group flex flex-col gap-2.5 rounded-[16px] border border-border/70 bg-surface/95 p-3.5 shadow-[0_1px_2px_rgba(15,23,42,.03)] transition-all hover:-translate-y-0.5 hover:border-brand-600/25 hover:shadow-[0_8px_20px_rgba(15,23,42,.06)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">
+    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">{icon}</span>
     <span className="min-w-0">
-      <span className="flex items-baseline gap-1"><strong className="text-[19px] font-bold leading-none tabular-nums text-ink-900 group-hover:text-brand-700">{value}</strong>{suffix && <span className="text-[9.5px] font-medium text-ink-400">{suffix}</span>}</span>
-      <span className="mt-1 block truncate text-[9.5px] font-medium text-ink-400">{label}</span>
+      <span className="flex items-baseline gap-1"><strong className="text-[16px] font-bold leading-none tabular-nums text-ink-900 group-hover:text-brand-700">{value}</strong>{suffix && <span className="text-[8.5px] font-medium text-ink-400">{suffix}</span>}</span>
+      <span className="mt-1.5 block truncate text-[9px] font-medium text-ink-400">{label}</span>
     </span>
   </Link>;
 }
@@ -112,7 +112,7 @@ function RekapJtm({ heatmap }: { heatmap: DashboardHeatmapDay[] }) {
   const busiestDay = heatmap.reduce((best, d) => (d.total > (best?.total ?? -1) ? d : best), heatmap[0]);
   return <div>
     <div className="mb-2 flex items-end justify-between gap-2">
-      <div><strong className="text-[24px] font-bold leading-none tabular-nums text-ink-900">{totalMinggu}</strong><span className="ml-1 text-[10px] font-medium text-ink-400">JP minggu ini</span>
+      <div><strong className="text-[21px] font-bold leading-none tabular-nums text-ink-900">{totalMinggu}</strong><span className="ml-1 text-[10px] font-medium text-ink-400">JP minggu ini</span>
         {busiestDay && busiestDay.total > 0 && <p className="mt-1 text-[9.5px] text-ink-400">Puncak: <span className="font-semibold text-ink-600">{busiestDay.label}</span> ({busiestDay.total} JP)</p>}
       </div>
     </div>
@@ -134,7 +134,7 @@ function BebanDonut({ distribution }: { distribution: DashboardBebanDistribution
   return <div className="flex items-center gap-5">
     <div className="relative h-28 w-28 shrink-0 rounded-full p-[11px] transition-transform hover:scale-[1.02]" style={{ background: bg }}>
       <Link href="/guru" aria-label="Buka Data Guru" className="flex h-full w-full items-center justify-center rounded-full bg-surface text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">
-        <span><strong className="block text-[23px] leading-none tabular-nums text-ink-900">{distribution.ringan + distribution.normal + distribution.berat}</strong><small className="mt-1 block text-[8px] text-ink-400">guru aktif</small></span>
+        <span><strong className="block text-[20px] leading-none tabular-nums text-ink-900">{distribution.ringan + distribution.normal + distribution.berat}</strong><small className="mt-1 block text-[8px] text-ink-400">guru aktif</small></span>
       </Link>
     </div>
     <div className="min-w-0 flex-1 space-y-2 text-[10px]">
@@ -327,7 +327,7 @@ export default function DashboardExperience({ schoolName, adminName, context, me
     <header className="flex items-end justify-between gap-4 px-1">
       <div className="min-w-0">
         <p className="mb-1 text-[9px] font-bold uppercase tracking-[.14em] text-brand-600">{context ?? "Konteks akademik belum aktif"}</p>
-        <h1 className="text-[25px] font-semibold leading-none tracking-[-.03em] text-ink-900">{salutation}{adminName ? `, ${adminName.split(/\s+/)[0]}` : ""} 👋</h1>
+        <h1 className="text-[21px] font-semibold leading-none tracking-[-.03em] text-ink-900">{salutation}{adminName ? `, ${adminName.split(/\s+/)[0]}` : ""} 👋</h1>
         <p className="mt-1.5 text-[11px] text-ink-500">Ringkasan kondisi akademik <span className="font-semibold text-ink-700">{schoolName}</span> dan jadwal sekolah.</p>
       </div>
       <Link href="/analitik" className="hidden items-center gap-1 rounded-full border border-border bg-surface px-3 py-1.5 text-[10px] font-semibold text-ink-600 shadow-sm hover:border-brand-600/25 hover:text-brand-700 sm:flex">Analitik <ArrowRight size={12} /></Link>

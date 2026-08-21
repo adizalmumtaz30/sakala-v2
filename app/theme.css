@@ -11,10 +11,10 @@
   --color-ink-500: #68736B;
   --color-ink-400: #879188;
   --color-ink-300: #AAB2AB;
-  --color-brand: #2F7D55;
-  --color-brand-50: #EDF7F0;
-  --color-brand-100: #D9EDDF;
-  --color-brand-700: #21613F;
+  --color-brand: #2F6FED;
+  --color-brand-50: #EEF3FE;
+  --color-brand-100: #DCE6FD;
+  --color-brand-700: #1F52BA;
   --color-cyan: #147E9A;
   --color-cyan-50: #EAF7FA;
   --color-amber: #A86500;
@@ -30,7 +30,7 @@
   --color-chart-tooltip: #FFFFFF;
   --shadow-soft: 0 1px 2px rgba(23,32,25,.04), 0 6px 18px -14px rgba(23,32,25,.14);
   --shadow-float: 0 14px 32px -18px rgba(23,32,25,.20);
-  --focus-ring: 0 0 0 3px rgba(47,125,85,.18);
+  --focus-ring: 0 0 0 3px rgba(47,111,237,.18);
   --radius-input: 10px;
   --radius-card: 12px;
   --radius-panel: 16px;
@@ -49,10 +49,10 @@ html.dark {
   --color-ink-500: #9CA9A0;
   --color-ink-400: #7E8B82;
   --color-ink-300: #5F6C63;
-  --color-brand: #67B889;
-  --color-brand-50: #172D21;
-  --color-brand-100: #214632;
-  --color-brand-700: #8FD0A8;
+  --color-brand: #6E9CF5;
+  --color-brand-50: #16233D;
+  --color-brand-100: #1E3358;
+  --color-brand-700: #A9C4FA;
   --color-cyan: #56B9D0;
   --color-cyan-50: #12323A;
   --color-amber: #F0B45A;
@@ -68,7 +68,7 @@ html.dark {
   --color-chart-tooltip: #1B251F;
   --shadow-soft: 0 1px 2px rgba(0,0,0,.20), 0 8px 22px -14px rgba(0,0,0,.48);
   --shadow-float: 0 16px 36px -16px rgba(0,0,0,.60);
-  --focus-ring: 0 0 0 3px rgba(103,184,137,.26);
+  --focus-ring: 0 0 0 3px rgba(110,156,245,.26);
 }
 
 html, body {
@@ -78,7 +78,7 @@ html, body {
 }
 
 html.dark ::selection {
-  background: rgba(103,184,137,.28);
+  background: rgba(110,156,245,.28);
   color: var(--color-ink-900);
 }
 
