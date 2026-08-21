@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, GraduationCap, Sparkles, CalendarDays, BarChart3, History, Bell, Bot, Compass, BrainCircuit } from "lucide-react";
+import { LayoutDashboard, Users, GraduationCap, Sparkles, CalendarDays, BarChart3, History, Bell, Bot, Compass, BrainCircuit, ChevronLeft, ChevronRight } from "lucide-react";
 
 const coreNav = [
   { key: "dashboard", label: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -32,40 +32,40 @@ const academicSubnav = [
   { label: "Target JP", href: "/akademik/target-jp", icon: CalendarDays },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   const pathname = usePathname();
   const inDataCore = dataSubnav.some((s) => pathname.startsWith(s.href));
   const inAcademic = academicSubnav.some((s) => pathname.startsWith(s.href));
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-30 flex flex-col border-r border-border bg-surface" style={{ width: "var(--shell-sidebar-w)" }}>
-      <div className="flex items-center gap-3 border-b border-border px-5 py-4">
+    <aside className="fixed inset-y-0 left-0 z-30 flex flex-col overflow-visible border-r border-border bg-surface transition-[width] duration-200 ease-out" style={{ width: collapsed ? 68 : 240 }}>
+      <button type="button" onClick={onToggle} aria-label={collapsed ? "Perluas sidebar" : "Ciutkan sidebar"} title={collapsed ? "Perluas sidebar" : "Ciutkan sidebar"} className="absolute -right-3 top-16 z-40 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-surface text-ink-500 shadow-sm transition-colors hover:border-brand-600/30 hover:text-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">
+        {collapsed ? <ChevronRight size={13} /> : <ChevronLeft size={13} />}
+      </button>
+      <div className={`flex items-center gap-3 border-b border-border py-4 ${collapsed ? "justify-center px-2" : "px-5"}`}>
         <Image src="/logo.png" alt="SAKALA" width={30} height={30} className="shrink-0" />
-        <div className="leading-tight">
-          <p className="text-sm font-bold tracking-tight text-ink-900">SAKALA</p>
-          <p className="text-[10px] font-semibold tracking-widest text-ink-400">V2 ENTERPRISE</p>
-        </div>
+        {!collapsed && <div className="min-w-0 leading-tight"><p className="truncate text-sm font-bold tracking-tight text-ink-900">SAKALA</p><p className="truncate text-[10px] font-semibold tracking-widest text-ink-400">V2 ENTERPRISE</p></div>}
       </div>
-      <nav className="flex-1 overflow-y-auto px-3 py-4">
+      <nav className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-4">
         <div className="flex flex-col gap-1">
           {coreNav.map((item) => {
             const active = item.key === "data" ? inDataCore : item.key === "akademik" ? inAcademic : pathname === item.href;
             const Icon = item.icon;
             return (
               <div key={item.key}>
-                <Link href={item.href} className={`group relative flex items-center gap-3 rounded-[10px] px-3 py-2 text-[13px] font-medium transition-all duration-150 ${active ? "bg-brand-50 text-brand-700" : "text-ink-700 hover:bg-surface-muted"}`}>
-                  {active && <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-brand-600" />}
+                <Link href={item.href} title={collapsed ? item.label : undefined} className={`group relative flex items-center gap-3 rounded-[10px] py-2 text-[13px] font-medium transition-all duration-150 ${collapsed ? "justify-center px-0" : "px-3"} ${active ? "bg-brand-50 text-brand-700" : "text-ink-700 hover:bg-surface-muted"}`}>
+                  {active && <span className={`absolute top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-brand-600 ${collapsed ? "left-0.5" : "left-0"}`} />}
                   <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] ${active ? "bg-brand-100 text-brand-600" : "text-ink-400 group-hover:text-ink-700"}`}>
                     <Icon size={18} strokeWidth={1.8} />
                   </span>
-                  {item.label}
+                  {!collapsed && item.label}
                 </Link>
-                {item.key === "data" && inDataCore && (
+                {!collapsed && item.key === "data" && inDataCore && (
                   <div className="ml-[26px] mt-1 flex flex-col gap-0.5 border-l border-border pl-3">
                     {dataSubnav.map((sub) => <Link key={sub.href} href={sub.href} className={`rounded-md px-2.5 py-1.5 text-[12px] font-medium ${pathname.startsWith(sub.href) ? "text-brand-700" : "text-ink-500 hover:text-ink-900"}`}>{sub.label}</Link>)}
                   </div>
                 )}
-                {item.key === "akademik" && inAcademic && (
+                {!collapsed && item.key === "akademik" && inAcademic && (
                   <div className="ml-[26px] mt-1 flex flex-col gap-0.5 border-l border-border pl-3">
                     {academicSubnav.map((sub) => {
                       const SubIcon = sub.icon;
@@ -79,7 +79,7 @@ export default function Sidebar() {
           })}
         </div>
       </nav>
-      <p className="px-5 pb-4 text-center text-[10px] text-ink-300">© 2026 SAKALA V2</p>
+      {!collapsed && <p className="px-5 pb-4 text-center text-[10px] text-ink-300">© 2026 SAKALA V2</p>}
     </aside>
   );
 }
