@@ -27,6 +27,7 @@ export default function KelasWorkspace({ initialData }: { initialData: Kelas[] }
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Kelas | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const filtered = data.filter((k) => k.namaRombel.toLowerCase().includes(query.toLowerCase()) || k.tingkat.toLowerCase().includes(query.toLowerCase()));
@@ -53,6 +54,15 @@ export default function KelasWorkspace({ initialData }: { initialData: Kelas[] }
     startTransition(async () => { const result = await deleteKelasAction(id); if (result.ok) setData((prev) => prev.filter((k) => k.id !== id)); });
   }
 
+  async function toggleStatus(k: Kelas) {
+    const nextStatus: StatusAktif = k.status === "aktif" ? "nonaktif" : "aktif";
+    setTogglingId(k.id);
+    setData((prev) => prev.map((x) => (x.id === k.id ? { ...x, status: nextStatus } : x)));
+    const result = await updateKelasAction(k.id, k.tingkat, k.namaRombel, nextStatus, k.tahunAjaran, k.semester);
+    if (!result.ok) setData((prev) => prev.map((x) => (x.id === k.id ? { ...x, status: k.status } : x)));
+    setTogglingId(null);
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -76,7 +86,7 @@ export default function KelasWorkspace({ initialData }: { initialData: Kelas[] }
             <th className="px-5 py-3 font-medium">Tingkat</th><th className="px-5 py-3 font-medium">Nama Kelas</th><th className="px-5 py-3 font-medium">Tahun Ajaran</th><th className="px-5 py-3 font-medium">Semester</th><th className="px-5 py-3 font-medium">Status</th><th className="px-5 py-3 font-medium text-right">Aksi</th>
           </tr></thead><tbody>{filtered.map((k) => <tr key={k.id} className="border-b border-border last:border-0 hover:bg-surface-muted/60">
             <td className="px-5 py-3.5 font-medium text-ink-900">{k.tingkat}</td><td className="px-5 py-3.5 text-ink-700">{k.namaRombel}</td><td className="px-5 py-3.5 text-ink-500">{k.tahunAjaran}</td><td className="px-5 py-3.5 text-ink-500 capitalize">{k.semester}</td>
-            <td className="px-5 py-3.5"><Badge tone={k.status === "aktif" ? "success" : "neutral"}>{k.status === "aktif" ? "Aktif" : "Tidak Aktif"}</Badge></td>
+            <td className="px-5 py-3.5"><button onClick={() => void toggleStatus(k)} disabled={togglingId === k.id} aria-label={`Ubah status ${k.namaRombel} jadi ${k.status === "aktif" ? "Tidak Aktif" : "Aktif"}`} title="Klik untuk ubah status" className="disabled:opacity-50"><Badge tone={k.status === "aktif" ? "success" : "neutral"} className="cursor-pointer transition-opacity hover:opacity-75">{k.status === "aktif" ? "Aktif" : "Tidak Aktif"}</Badge></button></td>
             <td className="px-5 py-3.5"><div className="flex items-center justify-end gap-1"><button onClick={() => openEdit(k)} className="rounded-lg p-1.5 text-ink-400 hover:bg-surface hover:text-ink-900" aria-label="Ubah Kelas" title="Ubah Kelas"><Pencil size={15} /></button><button onClick={() => handleDelete(k.id)} className="rounded-lg p-1.5 text-ink-400 hover:bg-rose-50 hover:text-rose" aria-label="Hapus Kelas" title="Hapus Kelas"><Trash2 size={15} /></button></div></td>
           </tr>)}</tbody></table>
         )}

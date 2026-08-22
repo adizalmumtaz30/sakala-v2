@@ -25,6 +25,7 @@ export default function GuruWorkspace({ initialData }: { initialData: Guru[] }) 
   const [editing, setEditing] = useState<Guru | null>(null);
   const [showMore, setShowMore] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => setData(initialData), [initialData]);
@@ -65,6 +66,16 @@ export default function GuruWorkspace({ initialData }: { initialData: Guru[] }) 
     startTransition(async () => { const result = await deleteGuruAction(id); if (result.ok) setData((prev) => prev.filter((g) => g.id !== id)); });
   }
 
+  async function toggleStatus(guru: Guru) {
+    const nextStatus: StatusAktif = guru.status === "aktif" ? "nonaktif" : "aktif";
+    setTogglingId(guru.id);
+    setData((prev) => prev.map((g) => (g.id === guru.id ? { ...g, status: nextStatus } : g))); // optimistic
+    const draft: GuruDraft = { namaGuru: guru.namaGuru, status: nextStatus, nip: guru.nip, nuptk: guru.nuptk, email: guru.email, noTelepon: guru.noTelepon, jenisKelamin: guru.jenisKelamin };
+    const result = await updateGuruAction(guru.id, draft);
+    if (!result.ok) setData((prev) => prev.map((g) => (g.id === guru.id ? { ...g, status: guru.status } : g))); // revert kalau gagal
+    setTogglingId(null);
+  }
+
   async function handleValidateImport(rows: Record<string, string>[]): Promise<ImportRowResult[]> {
     const result = await validateGuruImportAction(rows);
     if (!result.ok) return [];
@@ -93,7 +104,9 @@ export default function GuruWorkspace({ initialData }: { initialData: Guru[] }) 
           <ul>{filtered.map((guru) => { const color = teacherColor(guru.kodeGuru || guru.id); return <li key={guru.id} style={{ borderLeft: `3px solid ${color.accent}` }} className="flex items-center gap-3.5 border-b border-border px-5 py-3.5 last:border-0 hover:bg-surface-muted/60">
             <Avatar name={guru.namaGuru} jenisKelamin={guru.jenisKelamin} kodeGuru={guru.kodeGuru} />
             <Link href={`/guru/${guru.id}`} className="min-w-0 flex-1 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"><p className="truncate text-[13.5px] font-medium text-ink-900">{guru.namaGuru}</p><p className="text-[12px] text-ink-400">{guru.kodeGuru}</p></Link>
-            <Badge tone={guru.status === "aktif" ? "success" : "neutral"}>{guru.status === "aktif" ? "Aktif" : "Tidak Aktif"}</Badge>
+            <button onClick={() => void toggleStatus(guru)} disabled={togglingId === guru.id} aria-label={`Ubah status ${guru.namaGuru} jadi ${guru.status === "aktif" ? "Tidak Aktif" : "Aktif"}`} title="Klik untuk ubah status" className="shrink-0 disabled:opacity-50">
+              <Badge tone={guru.status === "aktif" ? "success" : "neutral"} className="cursor-pointer transition-opacity hover:opacity-75">{guru.status === "aktif" ? "Aktif" : "Tidak Aktif"}</Badge>
+            </button>
             <div className="flex items-center gap-1">
               <button onClick={() => router.push(`/guru/${guru.id}/jadwal`)} className="group/act rounded-lg p-1.5 transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40" aria-label={`Lihat jadwal ${guru.namaGuru}`} title="Lihat Jadwal"><IconChip icon={<Eye size={14} />} tone="cyan" size="sm" className="opacity-85 group-hover/act:opacity-100" /></button>
               <button onClick={() => router.push(`/jadwal?viewBy=guru&entityId=${guru.id}&autoAdd=1`)} className="group/act rounded-lg p-1.5 transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40" aria-label={`Tambah jadwal ${guru.namaGuru}`} title="Tambah Jadwal"><IconChip icon={<CalendarPlus size={14} />} tone="brand" size="sm" className="opacity-85 group-hover/act:opacity-100" /></button>
