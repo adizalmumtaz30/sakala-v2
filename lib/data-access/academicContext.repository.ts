@@ -88,6 +88,23 @@ export const academicContextRepository = {
     return rowToEntity(data as Row);
   },
 
+  async update(supabase: SupabaseClient, id: string, draft: AcademicContextDraft): Promise<AcademicContext> {
+    const { data, error } = await supabase
+      .from("academic_context")
+      .update({
+        tahun_pelajaran: draft.tahunPelajaran.trim(),
+        semester: draft.semester,
+        jenjang: draft.jenjang,
+        institution: draft.institution,
+      })
+      .eq("id", id)
+      .select(SELECT_COLUMNS)
+      .single();
+
+    if (error) throw error;
+    return rowToEntity(data as Row);
+  },
+
   /**
    * Set satu context menjadi aktif dan menonaktifkan semua yang lain.
    * Bukan transaksi database sungguhan (Supabase JS client tidak expose multi-
@@ -105,6 +122,22 @@ export const academicContextRepository = {
     const { data, error } = await supabase
       .from("academic_context")
       .update({ is_active: true })
+      .eq("id", id)
+      .select(SELECT_COLUMNS)
+      .single();
+
+    if (error) throw error;
+    return rowToEntity(data as Row);
+  },
+
+  // Menonaktifkan tanpa mengaktifkan konteks lain — aman secara skema
+  // (unique index parsial cuma mencegah DUA baris aktif sekaligus, bukan nol).
+  // Halaman lain sudah menangani "tidak ada konteks aktif" sebagai empty
+  // state yang valid (bukan error).
+  async deactivate(supabase: SupabaseClient, id: string): Promise<AcademicContext> {
+    const { data, error } = await supabase
+      .from("academic_context")
+      .update({ is_active: false })
       .eq("id", id)
       .select(SELECT_COLUMNS)
       .single();
