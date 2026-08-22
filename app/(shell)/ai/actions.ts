@@ -7,6 +7,7 @@ import { listAcademicContexts } from "@/lib/application/academicContext.usecases
 import { listKelas } from "@/lib/application/kelas.usecases";
 import { listMataPelajaran } from "@/lib/application/mata-pelajaran.usecases";
 import { listPembagianMengajar } from "@/lib/application/pembagianMengajar.usecases";
+import { listGuru } from "@/lib/application/guru.usecases";
 import { getSchoolProfile } from "@/lib/application/schoolProfile.usecases";
 import { formatContextLabel } from "@/lib/domain/academicContext";
 
@@ -33,6 +34,9 @@ export interface AiCopilotContext {
   contextLabel: string;
   classes: AiCopilotClassStatus[];
   activeClassId: string | null;
+  /** Peta id→nama supaya UI tidak perlu menampilkan raw id (dipakai Solution Drawer & Preview). */
+  subjectNames: Record<string, string>;
+  teacherNames: Record<string, string>;
 }
 
 async function getActiveContext() {
@@ -47,11 +51,12 @@ async function getActiveContext() {
 export async function getAiCopilotContextAction(): Promise<AiActionResult<AiCopilotContext>> {
   try {
     const { supabase, active } = await getActiveContext();
-    const [kelas, mapel, pembagian, schoolProfile] = await Promise.all([
+    const [kelas, mapel, pembagian, schoolProfile, guru] = await Promise.all([
       listKelas(supabase),
       listMataPelajaran(supabase),
       listPembagianMengajar(supabase, active.id),
       getSchoolProfile(supabase),
+      listGuru(supabase),
     ]);
 
     const activeAssignments = pembagian.filter((p) => p.status === "aktif");
@@ -86,7 +91,9 @@ export async function getAiCopilotContextAction(): Promise<AiActionResult<AiCopi
       };
     }).filter((x) => x.targetJp > 0);
 
-    return { ok: true, data: { academicContextId: active.id, schoolName: schoolProfile?.namaSekolah ?? "Sekolah", contextLabel: formatContextLabel(active), classes, activeClassId: classes[0]?.id ?? null } };
+    const subjectNames = Object.fromEntries(mapel.map((m) => [m.id, m.nama]));
+    const teacherNames = Object.fromEntries(guru.map((g) => [g.id, g.namaGuru]));
+    return { ok: true, data: { academicContextId: active.id, schoolName: schoolProfile?.namaSekolah ?? "Sekolah", contextLabel: formatContextLabel(active), classes, activeClassId: classes[0]?.id ?? null, subjectNames, teacherNames } };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Gagal membaca kondisi jadwal AI." };
   }

@@ -11,19 +11,13 @@
 // kontrak dibangun di atasnya.
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { Sparkles, CheckCircle2, AlertTriangle, RotateCcw, Target, CalendarDays, WandSparkles, ChevronDown, Check } from "lucide-react";
-import { getAiCopilotContextAction, planScheduleAction, runAiCopilotIntentAction, saveAiCandidatesAction, type AiCopilotContext, type AiCopilotClassStatus, type AiCopilotIntent } from "./actions";
+import { Sparkles, CheckCircle2, AlertTriangle, RotateCcw, ChevronDown, Check } from "lucide-react";
+import { getAiCopilotContextAction, planScheduleAction, saveAiCandidatesAction, type AiCopilotContext, type AiCopilotClassStatus } from "./actions";
 import Button from "@/components/ui/Button";
 import { Card, Badge, EmptyState, ErrorState } from "@/components/ui/primitives";
+import RecommendationFlow from "@/components/ai/RecommendationFlow";
 
 type AiPlan = Extract<Awaited<ReturnType<typeof planScheduleAction>>, { ok: true }>["data"];
-
-// §12 Action Microcopy — hindari istilah teknis (Execute/Query/AI Tool/dst).
-const quickActions: Array<{ intent: AiCopilotIntent; title: string; description: string; icon: typeof Target }> = [
-  { intent: "complete_remaining_jp", title: "Lengkapi JP Kurang", description: "Cari kandidat untuk seluruh JP yang belum terpenuhi.", icon: Target },
-  { intent: "schedule_full_week", title: "Susun Semua Mapel", description: "Buat rancangan jadwal dari target aktif.", icon: CalendarDays },
-  { intent: "fill_empty_slots", title: "Isi Slot Kosong", description: "Manfaatkan slot valid yang masih tersedia.", icon: WandSparkles },
-];
 
 function classStatusTone(remainingJp: number): "success" | "warning" {
   return remainingJp === 0 ? "success" : "warning";
@@ -58,7 +52,6 @@ export default function AiPage() {
 
   const selectedClass = context?.classes.find((c) => c.id === selectedClassId) ?? null;
   const hasClasses = Boolean(context?.classes.length);
-  const canAct = !contextLoading && hasClasses && Boolean(selectedClassId) && !isPending;
 
   const kondisiKelas = useMemo(() => {
     if (!selectedClass) return null;
@@ -73,16 +66,6 @@ export default function AiPage() {
     setSelectedClassId(id);
     setClassPickerOpen(false);
     setPlan(null); setError(null); setSaved(null);
-  }
-
-  function runIntent(intent: AiCopilotIntent) {
-    if (!selectedClassId) return;
-    setError(null); setSaved(null); setPlan(null);
-    startTransition(async () => {
-      const result = await runAiCopilotIntentAction(intent, selectedClassId);
-      if (!result.ok) { setError(result.error); return; }
-      setPlan(result.data);
-    });
   }
 
   function runPlan() {
@@ -175,32 +158,21 @@ export default function AiPage() {
             </div>}
           </Card>
 
-          {/* Area tindakan sementara — akan digantikan komponen Recommendation→Action
-              (✦ Yang Saya Temukan → Rekomendasi → Langkah Berikutnya) pada fase berikutnya. */}
-          <Card className="space-y-6">
-            <div>
-              <div className="mb-3 text-[13px] font-semibold text-ink-900">Apa yang bisa dilakukan sekarang?</div>
-              <div className="grid gap-3 md:grid-cols-3">
-                {quickActions.map(({ intent, title, description, icon: Icon }) => (
-                  <button key={intent} type="button" onClick={() => runIntent(intent)} disabled={!canAct} className="group rounded-xl bg-surface-muted p-4 text-left transition-all hover:-translate-y-0.5 hover:bg-brand-50 hover:shadow-soft disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0 disabled:hover:bg-surface-muted">
-                    <Icon className="h-5 w-5 text-brand-600 transition-transform group-hover:scale-105" />
-                    <div className="mt-3 font-semibold text-ink-900">{title}</div>
-                    <div className="mt-1 text-xs leading-5 text-ink-500">{description}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {selectedClass.subjectDeficits.length > 0 && <div id="mapel-kurang" className="rounded-xl bg-surface-muted p-4">
-              <div className="mb-3 text-[12.5px] font-semibold text-ink-900">JP yang masih kurang</div>
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {selectedClass.subjectDeficits.slice(0, 9).map((item) => <div key={item.subjectId} className="rounded-lg bg-surface p-3">
-                  <div className="text-[12.5px] font-medium text-ink-900">{item.subjectName}</div>
-                  <div className="mt-1 text-[11px] text-ink-500">Target {item.targetJp} JP · Terjadwal {item.scheduledJp} JP · <strong className="text-ink-700">Kurang {item.remainingJp} JP</strong></div>
-                </div>)}
-              </div>
-            </div>}
-          </Card>
+          {/* §08-25 — Recommendation→Action: Yang Saya Temukan → Solusi → Preview → Terapkan → Verifikasi. */}
+          <div id="mapel-kurang">
+            <RecommendationFlow
+              key={selectedClass.id}
+              classStatus={selectedClass}
+              subjectNames={context?.subjectNames ?? {}}
+              teacherNames={context?.teacherNames ?? {}}
+              onCandidatesSaved={() => {
+                startTransition(async () => {
+                  const result = await getAiCopilotContextAction();
+                  if (result.ok) setContext(result.data);
+                });
+              }}
+            />
+          </div>
 
           <Card className="space-y-4">
             <div><div className="text-[12.5px] font-semibold text-ink-900">Atau katakan kebutuhanmu</div><div className="mt-1 text-[11px] leading-5 text-ink-500">Jalur tambahan — Anda tidak perlu mengetahui struktur intent atau constraint engine.</div></div>
