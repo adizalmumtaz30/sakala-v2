@@ -1,196 +1,252 @@
 "use client";
 
-import Link from "next/link";
+// Kontrak UI/UX SAKALA AI (FINAL/LOCKED) — bagian yang diimplementasikan di file
+// ini: §03 First Screen, §04 Class Selection, §05 Header setelah kelas dipilih,
+// §06 Top Summary. Bagian Recommendation→Action (§08-25: "Yang Saya Temukan",
+// Solution Drawer, Preview, Approval, Execution, Verification) BELUM
+// diimplementasikan di sini — menyusul di fase berikutnya. Fungsi
+// runIntent/runPlan/saveCandidate di bawah ini adalah jembatan sementara ke
+// backend planner yang sudah ada (candidate-only, tidak pernah mengubah
+// jadwal committed) sambil menunggu komponen Recommendation→Action yang sesuai
+// kontrak dibangun di atasnya.
+
 import { useEffect, useMemo, useState, useTransition } from "react";
-import {
-  AlertTriangle,
-  ArrowRight,
-  BookOpenCheck,
-  CheckCircle2,
-  ChevronDown,
-  ExternalLink,
-  GraduationCap,
-  Info,
-  Layers3,
-  RefreshCw,
-  Search,
-  Sparkles,
-  Target,
-  X,
-} from "lucide-react";
-import { getAiCopilotContextAction, type AiCopilotContext, type AiSubjectInsight } from "./actions";
+import { Sparkles, CheckCircle2, AlertTriangle, RotateCcw, ChevronDown, Check, Search, X } from "lucide-react";
+import { getAiCopilotContextAction, planScheduleAction, saveAiCandidatesAction, type AiCopilotContext, type AiCopilotClassStatus } from "./actions";
+import Button from "@/components/ui/Button";
+import { Card, Badge, EmptyState, ErrorState } from "@/components/ui/primitives";
+import RecommendationFlow from "@/components/ai/RecommendationFlow";
 
-const statusLabel: Record<AiSubjectInsight["status"], string> = {
-  siap: "Siap",
-  belum_terintegrasi: "Belum terintegrasi",
-  target_belum_diisi: "Target belum diisi",
-  berbeda: "Berbeda",
-  perlu_ditinjau: "Perlu ditinjau",
-};
+type AiPlan = Extract<Awaited<ReturnType<typeof planScheduleAction>>, { ok: true }>["data"];
 
-function StatusPill({ status }: { status: AiSubjectInsight["status"] }) {
-  const tone = status === "siap" ? "bg-emerald-50 text-emerald-700" : status === "berbeda" || status === "perlu_ditinjau" ? "bg-amber-50 text-amber-700" : "bg-rose-50 text-rose-700";
-  return <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${tone}`}>{statusLabel[status]}</span>;
+function classStatusTone(remainingJp: number): "success" | "warning" {
+  return remainingJp === 0 ? "success" : "warning";
 }
 
-function Metric({ value, label, tone = "neutral", onClick }: { value: string | number; label: string; tone?: "neutral" | "good" | "warning" | "danger"; onClick?: () => void }) {
-  const tones = { neutral: "text-ink-900", good: "text-emerald-700", warning: "text-amber-700", danger: "text-rose-700" };
-  return (
-    <button type="button" onClick={onClick} className={`rounded-2xl bg-surface-muted p-4 text-left transition hover:-translate-y-0.5 hover:bg-surface hover:shadow-soft ${onClick ? "cursor-pointer" : "cursor-default"}`}>
-      <div className={`text-2xl font-semibold tracking-tight ${tones[tone]}`}>{value}</div>
-      <div className="mt-1 text-xs text-ink-500">{label}</div>
-    </button>
-  );
+// §32 AI State — bahasa status sederhana, tanpa animasi "berpikir" berlebihan.
+type AiState = "checking" | "watching" | "checked";
+const AI_STATE_LABEL: Record<AiState, string> = { checking: "Sedang diperiksa", watching: "Memeriksa perubahan", checked: "Data diperiksa" };
+function AiStateBadge({ state }: { state: AiState }) {
+  return <span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10.5px] font-semibold ${state === "checked" ? "bg-emerald-50 text-emerald" : "bg-surface-muted text-ink-500"}`}>
+    {state === "checking" ? <Search size={11} className="animate-pulse" /> : state === "watching" ? <RotateCcw size={11} className="animate-spin" /> : <Check size={11} />}
+    {AI_STATE_LABEL[state]}
+  </span>;
+}
+
+// §28 Search — bahasa natural sederhana atas data kelas yang sudah ada di context
+// (tidak perlu panggilan backend baru; hasil selalu berupa data + tindakan, bukan
+// sekadar daftar pencarian).
+function searchClasses(query: string, classes: AiCopilotClassStatus[]): AiCopilotClassStatus[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  const wantsKurang = q.includes("kurang");
+  const wantsSesuai = !wantsKurang && /sesuai|cukup|lengkap|terpenuhi/.test(q);
+  if (wantsKurang) return classes.filter((c) => c.remainingJp > 0).sort((a, b) => b.remainingJp - a.remainingJp);
+  if (wantsSesuai) return classes.filter((c) => c.remainingJp === 0);
+  return classes.filter((c) => c.label.toLowerCase().includes(q) || c.subjectDeficits.some((d) => d.subjectName.toLowerCase().includes(q)));
 }
 
 export default function AiPage() {
   const [context, setContext] = useState<AiCopilotContext | null>(null);
+  const [contextLoading, setContextLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [detail, setDetail] = useState<AiSubjectInsight | null>(null);
-  const [scopeOpen, setScopeOpen] = useState(false);
+  const [classPickerOpen, setClassPickerOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [command, setCommand] = useState("");
+  const [plan, setPlan] = useState<AiPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, startTransition] = useTransition();
+  const [saved, setSaved] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
     startTransition(async () => {
       const result = await getAiCopilotContextAction();
-      if (!result.ok) setError(result.error);
-      else setContext(result.data);
+      if (!result.ok) {
+        setLoadError(result.error);
+        setContextLoading(false);
+        return;
+      }
+      setContext(result.data);
+      // Belum ada kelas yang dipilih operator di First Screen — jangan auto-select
+      // (§03: operator memilih sendiri, bukan AI yang menebak).
+      setContextLoading(false);
     });
   }, []);
 
-  const selectedClass = context?.classes.find((item) => item.id === selectedClassId) ?? null;
-  const selectedSubjects = useMemo(() => {
-    if (!context || !selectedClass) return [];
-    const rows = context.subjects.filter((item) => item.level === selectedClass.level);
-    return rows.filter((item) => item.name.toLowerCase().includes(search.toLowerCase()));
-  }, [context, selectedClass, search]);
+  const selectedClass = context?.classes.find((c) => c.id === selectedClassId) ?? null;
+  const hasClasses = Boolean(context?.classes.length);
+  const searchResults = useMemo(() => searchClasses(searchQuery, context?.classes ?? []), [searchQuery, context]);
 
-  const insights = useMemo(() => {
-    if (!selectedClass) return [] as Array<{ title: string; text: string; tone: "danger" | "warning" | "good" | "neutral"; action: "generate" | "target" | "subjects" }>; 
-    const result: Array<{ title: string; text: string; tone: "danger" | "warning" | "good" | "neutral"; action: "generate" | "target" | "subjects" }> = [];
-    if (selectedClass.missingSubjects > 0) result.push({ title: `${selectedClass.missingSubjects} mapel belum terintegrasi`, text: `Data kurikulum resmi untuk ${selectedClass.label} belum seluruhnya masuk ke integrasi kelas.`, tone: "danger", action: "generate" });
-    if (selectedClass.gapJp > 0) result.push({ title: `${selectedClass.gapJp} JP belum terpenuhi`, text: "Target sekolah masih berada di bawah alokasi kurikulum yang terbaca.", tone: "warning", action: "target" });
-    if (selectedClass.emptyTargets > 0) result.push({ title: `${selectedClass.emptyTargets} target JP belum diisi`, text: "Beberapa kombinasi kelas dan mapel belum memiliki Target JP aktif.", tone: "warning", action: "target" });
-    if (selectedClass.ready) result.push({ title: "Integrasi kurikulum siap", text: "Mapel, integrasi, dan Target JP pada kelas ini sudah terbaca konsisten.", tone: "good", action: "subjects" });
-    if (!result.length) result.push({ title: "Ada data yang bisa ditinjau", text: "SAKALA AI menemukan data kurikulum yang dapat diperiksa lebih lanjut.", tone: "neutral", action: "subjects" });
-    return result;
+  const kondisiKelas = useMemo(() => {
+    if (!selectedClass) return null;
+    return {
+      jpLabel: `${selectedClass.scheduledJp} / ${selectedClass.targetJp}`,
+      jpSubtitle: "JP terpenuhi",
+      mapelKurang: selectedClass.subjectDeficits.length,
+    };
   }, [selectedClass]);
 
-  function reload() {
-    setError(null);
+  function selectClass(id: string) {
+    setSelectedClassId(id);
+    setClassPickerOpen(false);
+    setPlan(null); setError(null); setSaved(null);
+  }
+
+  function runPlan() {
+    setError(null); setSaved(null);
     startTransition(async () => {
-      const result = await getAiCopilotContextAction();
-      if (!result.ok) setError(result.error);
-      else setContext(result.data);
+      const result = await planScheduleAction(command);
+      if (!result.ok) { setPlan(null); setError(result.error); return; }
+      setPlan(result.data);
     });
   }
 
-  function actionHref(action: "generate" | "target" | "subjects") {
-    if (action === "generate") return "/akademik/generate-kurikulum";
-    if (action === "target") return "/akademik/target-jp";
-    return "/akademik/mata-pelajaran";
+  function saveCandidate() {
+    if (!plan) return;
+    startTransition(async () => {
+      const result = await saveAiCandidatesAction(plan.result.candidates.map((c) => c.draft));
+      if (!result.ok) { setError(result.error); return; }
+      setSaved(`${result.data.savedCount} candidate disimpan.${result.data.skippedCount ? ` ${result.data.skippedCount} dilewati karena conflict.` : ""}`);
+    });
+  }
+
+  function reset() { setCommand(""); setPlan(null); setError(null); setSaved(null); }
+
+  if (loadError) {
+    return <div className="mx-auto max-w-3xl px-4 pt-10"><ErrorState message={loadError} /></div>;
   }
 
   return (
-    <main className="mx-auto max-w-6xl space-y-7 pb-16">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-brand"><Sparkles className="h-5 w-5" /><span className="text-xs font-semibold uppercase tracking-[0.18em]">Intelligent Academic Workspace</span></div>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-ink-950">SAKALA AI</h1>
-          <p className="mt-1 text-sm text-ink-500">Pahami data. Temukan solusi.</p>
+    <div className="mx-auto max-w-6xl space-y-6 pb-10">
+      {/* §03/§05 — Header: identitas + konteks selalu terlihat, tidak pernah hilang. */}
+      <header className="flex flex-wrap items-center justify-between gap-2">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-brand-600" /><h1 className="text-[19px] font-semibold tracking-tight text-ink-900">SAKALA AI</h1></div>
+          <p className="text-[12.5px] text-ink-500">Pahami data. Temukan solusi.</p>
         </div>
-        <div className="flex items-center gap-2">
-          <button type="button" onClick={reload} disabled={loading} className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-surface px-3.5 text-sm font-semibold text-ink-700 transition hover:bg-surface-muted disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />Periksa ulang</button>
-          <button type="button" onClick={() => setScopeOpen(true)} className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-surface px-3.5 text-sm font-semibold text-ink-700 transition hover:bg-surface-muted"><Info className="h-4 w-4" />Data yang diperiksa</button>
-        </div>
+        {/* §32 AI State — mencerminkan status nyata (fetch/pending), bukan animasi berpikir dibuat-buat. */}
+        <AiStateBadge state={contextLoading ? "checking" : isPending ? "watching" : "checked"} />
       </header>
 
-      <section className="overflow-hidden rounded-[26px] border border-border bg-surface shadow-soft">
-        <div className="border-b border-border px-5 py-5 sm:px-7">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-400">Konteks aktif</div>
-              <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm font-semibold text-ink-900">
-                <span>{context ? `${context.academicYear} · ${context.semester}` : "Menyiapkan konteks…"}</span>
-                <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">● Aktif</span>
-              </div>
-            </div>
-            <span className="text-xs text-ink-400">SAKALA AI hanya membaca data · tidak mengubah data</span>
+      {contextLoading ? (
+        <Card className="space-y-3">
+          <p className="text-[11.5px] font-medium text-ink-400">Memeriksa data kelas…</p>
+          <div className="h-3 w-40 animate-pulse rounded bg-surface-muted" />
+          <div className="h-6 w-64 animate-pulse rounded bg-surface-muted" />
+        </Card>
+      ) : !hasClasses ? (
+        <Card><EmptyState title="Belum ada kelas" description="Belum ada kelas dengan target JP aktif untuk konteks akademik ini." action={<a href="/akademik" className="mt-1 text-[12.5px] font-semibold text-brand-600">Buka Data Akademik →</a>} /></Card>
+      ) : !selectedClass ? (
+        // §03 First Screen — tanpa chat kosong, tanpa "ada yang bisa saya bantu", langsung ke pemilihan kelas.
+        <Card className="space-y-4">
+          <div>
+            <p className="text-[9.5px] font-bold uppercase tracking-[.14em] text-brand-600">Konteks Aktif</p>
+            <p className="mt-1 text-[13px] font-semibold text-ink-800">{context?.schoolName} · {context?.contextLabel}</p>
           </div>
-        </div>
-
-        <div className="px-5 py-6 sm:px-7">
-          <div className="mx-auto max-w-4xl">
-            <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-brand-50 text-brand"><GraduationCap className="h-5 w-5" /></div><div><h2 className="text-lg font-semibold text-ink-950">Pilih kelas</h2><p className="text-xs text-ink-500">Pilih kelas terlebih dahulu. Setelah itu SAKALA AI langsung membaca kondisinya.</p></div></div>
-
-            {loading && !context ? (
-              <div className="mt-5 grid gap-3 sm:grid-cols-3">{[1, 2, 3].map((item) => <div key={item} className="h-28 animate-pulse rounded-2xl bg-surface-muted" />)}</div>
-            ) : context?.classes.length ? (
-              <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {context.classes.map((kelas) => {
-                  const active = selectedClassId === kelas.id;
-                  return <button key={kelas.id} type="button" onClick={() => { setSelectedClassId(kelas.id); setSearch(""); setDetail(null); }} className={`group rounded-2xl border p-4 text-left transition-all ${active ? "border-brand bg-brand-50/60 shadow-soft" : "border-border bg-surface hover:-translate-y-0.5 hover:border-brand/30 hover:shadow-soft"}`}>
-                    <div className="flex items-start justify-between gap-3"><div><div className="text-base font-semibold text-ink-950">Kelas {kelas.label}</div><div className="mt-1 text-xs text-ink-500">{kelas.integratedSubjects}/{kelas.expectedSubjects} mapel terintegrasi</div></div><span className={`flex h-8 w-8 items-center justify-center rounded-xl ${active ? "bg-brand text-white" : "bg-surface-muted text-ink-400"}`}><ArrowRight className="h-4 w-4" /></span></div>
-                    <div className="mt-4 flex items-end justify-between"><div><div className={`text-xl font-semibold ${kelas.gapJp > 0 ? "text-amber-700" : "text-emerald-700"}`}>{kelas.schoolJp} / {kelas.officialJp} JP</div><div className="mt-0.5 text-[11px] text-ink-400">Target sekolah / kurikulum</div></div><span className={`text-[11px] font-semibold ${kelas.ready ? "text-emerald-700" : "text-amber-700"}`}>{kelas.ready ? "✓ Siap" : `Perlu perhatian`}</span></div>
-                  </button>;
-                })}
+          <div>
+            <p className="mb-2.5 text-[12.5px] font-semibold text-ink-700">Pilih kelas</p>
+            {/* §28 Search — bahasa natural, hasil = data + tindakan langsung. */}
+            <div className="relative mb-3">
+              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-300" />
+              <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder='Cari kelas… mis. "kelas yang kurang JP"' className="w-full rounded-xl border border-border bg-surface py-2 pl-9 pr-8 text-[12.5px] text-ink-900 outline-none transition focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/10" />
+              {searchQuery && <button type="button" onClick={() => setSearchQuery("")} aria-label="Bersihkan pencarian" className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-ink-300 hover:bg-surface-muted hover:text-ink-600"><X size={13} /></button>}
+            </div>
+            {searchQuery.trim() ? (
+              <div className="space-y-1.5">
+                <p className="text-[11.5px] text-ink-500">{searchResults.length > 0 ? `Saya menemukan ${searchResults.length} kelas.` : "Saya belum menemukan kelas yang cocok dengan itu."}</p>
+                {searchResults.map((c) => <button key={c.id} type="button" onClick={() => selectClass(c.id)} className="flex w-full items-center justify-between gap-3 rounded-xl border border-border bg-surface px-3 py-2.5 text-left hover:border-brand-600/30 hover:bg-brand-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">
+                  <span className="flex items-center gap-2.5"><span className="text-[13px] font-semibold text-ink-900">{c.label}</span><Badge tone={classStatusTone(c.remainingJp)}>{c.remainingJp === 0 ? "Sesuai" : `${c.remainingJp} JP kurang`}</Badge></span>
+                  <span className="text-[10.5px] font-semibold text-brand-600">Tinjau →</span>
+                </button>)}
               </div>
-            ) : <div className="mt-5 rounded-2xl bg-surface-muted p-6 text-sm text-ink-600">Belum ada kelas pada konteks aktif.</div>}
+            ) : (
+              // §04 Class Selection — kartu berisi status JP, bukan sekadar nama kelas.
+              <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+                {context?.classes.map((c) => <ClassCard key={c.id} status={c} onSelect={() => selectClass(c.id)} />)}
+              </div>
+            )}
           </div>
-        </div>
-      </section>
-
-      {error && <section className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700"><AlertTriangle className="mr-2 inline h-4 w-4" />{error}<button type="button" onClick={reload} className="ml-3 font-semibold underline">Coba lagi</button></section>}
-
-      {selectedClass && context && (
-        <div className="space-y-6">
-          <section className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border bg-surface px-5 py-4 shadow-soft sm:px-6">
-            <div><div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-400">Kelas terpilih</div><div className="mt-1 text-xl font-semibold text-ink-950">Kelas {selectedClass.label}</div></div>
-            <div className="relative"><button type="button" onClick={() => setSelectedClassId(null)} className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-surface px-3.5 text-sm font-semibold text-ink-700 hover:bg-surface-muted">Ganti kelas <ChevronDown className="h-4 w-4" /></button></div>
-          </section>
-
-          <section className="space-y-4">
-            <div><div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-400">Kondisi kelas</div><h2 className="mt-1 text-xl font-semibold tracking-tight text-ink-950">Ringkasan yang perlu diketahui</h2></div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Metric value={`${selectedClass.schoolJp}/${selectedClass.officialJp}`} label="JP terpenuhi" tone={selectedClass.gapJp ? "warning" : "good"} />
-              <Metric value={selectedClass.gapJp} label="JP belum terpenuhi" tone={selectedClass.gapJp ? "danger" : "good"} />
-              <Metric value={selectedClass.missingSubjects} label="Mapel belum terintegrasi" tone={selectedClass.missingSubjects ? "danger" : "good"} />
-              <Metric value={selectedClass.emptyTargets} label="Target JP belum diisi" tone={selectedClass.emptyTargets ? "warning" : "good"} />
-            </div>
-          </section>
-
-          <section className="grid gap-5 lg:grid-cols-[1.25fr_.75fr]">
-            <div className="space-y-4">
-              <div><div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-400">Insight</div><h2 className="mt-1 text-xl font-semibold tracking-tight text-ink-950">✦ Yang saya temukan</h2></div>
-              <div className="space-y-3">
-                {insights.map((item) => <div key={item.title} className="rounded-2xl border border-border bg-surface p-5 shadow-soft transition hover:shadow-md"><div className="flex gap-4"><div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${item.tone === "danger" ? "bg-rose-50 text-rose-600" : item.tone === "warning" ? "bg-amber-50 text-amber-600" : item.tone === "good" ? "bg-emerald-50 text-emerald-600" : "bg-brand-50 text-brand"}`}>{item.tone === "good" ? <CheckCircle2 className="h-5 w-5" /> : <Sparkles className="h-5 w-5" />}</div><div className="min-w-0 flex-1"><div className="font-semibold text-ink-950">{item.title}</div><p className="mt-1 text-sm leading-6 text-ink-500">{item.text}</p><Link href={actionHref(item.action)} className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-brand hover:underline">{item.action === "generate" ? "Tinjau integrasi" : item.action === "target" ? "Atur Target JP" : "Lihat mata pelajaran"}<ArrowRight className="h-4 w-4" /></Link></div></div></div>)}
+        </Card>
+      ) : (
+        <>
+          {/* §05 — Header setelah kelas dipilih: konteks + kelas tetap terlihat, dengan Ganti kelas. */}
+          <Card className="space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-[9.5px] font-bold uppercase tracking-[.14em] text-brand-600">{context?.schoolName} · {context?.contextLabel}</p>
+                <h2 className="mt-1 text-[17px] font-semibold text-ink-900">Kelas {selectedClass.label}</h2>
+              </div>
+              <div className="relative">
+                <button type="button" onClick={() => setClassPickerOpen((v) => !v)} aria-expanded={classPickerOpen} className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-[11px] font-semibold text-ink-600 hover:border-brand-600/25 hover:text-brand-700">
+                  Ganti kelas <ChevronDown size={13} className={`transition-transform ${classPickerOpen ? "rotate-180" : ""}`} />
+                </button>
+                {classPickerOpen && <div className="absolute right-0 top-full z-20 mt-2 max-h-72 w-64 overflow-y-auto rounded-2xl border border-border bg-surface p-1.5 shadow-xl">
+                  {context?.classes.map((c) => <button key={c.id} type="button" onClick={() => selectClass(c.id)} className={`flex w-full items-center justify-between gap-2 rounded-xl px-2.5 py-2 text-left text-[12px] hover:bg-surface-muted ${c.id === selectedClassId ? "text-brand-700" : "text-ink-700"}`}>
+                    <span className="font-medium">{c.label}</span>
+                    <span className="flex items-center gap-1.5"><span className="text-[10.5px] tabular-nums text-ink-400">{c.scheduledJp}/{c.targetJp} JP</span>{c.id === selectedClassId && <Check size={13} className="text-brand-600" />}</span>
+                  </button>)}
+                </div>}
               </div>
             </div>
 
-            <aside className="h-fit rounded-2xl border border-border bg-surface p-5 shadow-soft">
-              <div className="flex items-center gap-2"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-50 text-brand"><Sparkles className="h-4 w-4" /></div><div><div className="text-sm font-semibold text-ink-950">Langkah berikutnya</div><div className="text-xs text-ink-500">SAKALA menyarankan yang paling relevan.</div></div></div>
-              <div className="mt-5 rounded-2xl bg-surface-muted p-4"><div className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-400">Prioritas</div><div className="mt-1 text-base font-semibold text-ink-950">{insights[0]?.title ?? "Periksa data kelas"}</div><p className="mt-1 text-xs leading-5 text-ink-500">{insights[0]?.text}</p><Link href={actionHref(insights[0]?.action ?? "subjects")} className="mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-brand px-4 text-sm font-semibold text-white transition hover:opacity-90">Mulai <ArrowRight className="h-4 w-4" /></Link></div>
-              <div className="mt-4 text-[11px] leading-5 text-ink-400">SAKALA AI tidak menjalankan perubahan otomatis. Anda tetap menyetujui tindakan di fitur asalnya.</div>
-            </aside>
-          </section>
+            {/* §06 Top Summary — Kondisi Kelas, metric interaktif menuju bagian relevan. */}
+            {kondisiKelas && <div className="grid gap-2.5 sm:grid-cols-2">
+              <div className={`rounded-xl p-4 ${selectedClass.remainingJp === 0 ? "bg-emerald-50" : "bg-amber-50"}`}>
+                <div className="text-[19px] font-bold leading-none tabular-nums text-ink-900">{kondisiKelas.jpLabel} JP</div>
+                <div className="mt-1.5 text-[11px] font-medium text-ink-600">{kondisiKelas.jpSubtitle}</div>
+                <div className="mt-1"><Badge tone={classStatusTone(selectedClass.remainingJp)}>{selectedClass.remainingJp === 0 ? "Sesuai" : `${selectedClass.remainingJp} JP kurang`}</Badge></div>
+              </div>
+              <button type="button" onClick={() => document.getElementById("mapel-kurang")?.scrollIntoView({ behavior: "smooth", block: "start" })} disabled={kondisiKelas.mapelKurang === 0} className="rounded-xl bg-surface-muted p-4 text-left transition-colors enabled:hover:bg-brand-50 disabled:cursor-default">
+                <div className="text-[19px] font-bold leading-none tabular-nums text-ink-900">{kondisiKelas.mapelKurang}</div>
+                <div className="mt-1.5 text-[11px] font-medium text-ink-600">Mapel perlu diatur</div>
+              </button>
+            </div>}
+          </Card>
 
-          <section className="rounded-2xl border border-border bg-surface shadow-soft">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4 sm:px-6"><div><h2 className="font-semibold text-ink-950">Detail kurikulum kelas</h2><p className="mt-1 text-xs text-ink-500">Data yang dipakai SAKALA AI untuk menyusun insight di atas.</p></div><div className="relative w-full sm:w-72"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cari mata pelajaran…" className="h-10 w-full rounded-xl border border-border bg-surface-muted pl-9 pr-3 text-sm outline-none transition focus:border-brand/50 focus:ring-2 focus:ring-brand/10" /></div></div>
-            <div className="divide-y divide-border">
-              {selectedSubjects.map((subject) => <button key={subject.id} type="button" onClick={() => setDetail(subject)} className="flex w-full items-center gap-4 px-5 py-4 text-left transition hover:bg-surface-muted sm:px-6"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-muted text-ink-500"><BookOpenCheck className="h-4 w-4" /></div><div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold text-ink-900">{subject.name}</div><div className="mt-1 text-xs text-ink-500">Kurikulum {subject.officialJp ?? 0} JP · Target aktif {subject.targetJp == null ? "—" : `${subject.targetJp} JP`}</div></div><StatusPill status={subject.status} /><ArrowRight className="h-4 w-4 shrink-0 text-ink-300" /></button>)}
-              {!selectedSubjects.length && <div className="p-10 text-center text-sm text-ink-500">Tidak ada mata pelajaran yang cocok.</div>}
-            </div>
-          </section>
-        </div>
+          {/* §08-25 — Recommendation→Action: Yang Saya Temukan → Solusi → Preview → Terapkan → Verifikasi. */}
+          <div id="mapel-kurang">
+            <RecommendationFlow
+              key={selectedClass.id}
+              classStatus={selectedClass}
+              subjectNames={context?.subjectNames ?? {}}
+              teacherNames={context?.teacherNames ?? {}}
+              onCandidatesSaved={() => {
+                startTransition(async () => {
+                  const result = await getAiCopilotContextAction();
+                  if (result.ok) setContext(result.data);
+                });
+              }}
+            />
+          </div>
+
+          <Card className="space-y-4">
+            <div><div className="text-[12.5px] font-semibold text-ink-900">Atau katakan kebutuhanmu</div><div className="mt-1 text-[11px] leading-5 text-ink-500">Jalur tambahan — Anda tidak perlu mengetahui struktur intent atau constraint engine.</div></div>
+            <textarea value={command} onChange={(e) => setCommand(e.target.value)} placeholder={'Contoh: "Isi jadwal kelas ini yang masih kosong."\nAtau: "Susun semua mapel untuk satu minggu."'} rows={3} className="w-full rounded-xl border border-border bg-surface-muted p-4 text-[12.5px] text-ink-900 outline-none transition focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/10" />
+            <div className="flex flex-wrap gap-2"><Button onClick={runPlan} disabled={isPending || !command.trim()}>{isPending ? "Memeriksa data…" : "Susun rancangan"}</Button><Button variant="secondary" onClick={reset} disabled={isPending}><RotateCcw className="mr-2 h-4 w-4" />Batal</Button></div>
+            {error && <div className="rounded-xl bg-rose-50 p-4 text-[12.5px] text-rose"><AlertTriangle className="mr-2 inline h-4 w-4" />{error}</div>}
+          </Card>
+
+          {plan && <Card className="space-y-5">
+            <div className="flex flex-wrap items-start justify-between gap-4"><div><div className="flex items-center gap-2"><h2 className="text-[15px] font-semibold text-ink-900">Rancangan Perubahan</h2><Badge tone="info">{plan.intent === "schedule_full_week" ? "Susun Mingguan" : "Target JP"}</Badge></div><p className="mt-1 max-w-4xl text-[12px] leading-6 text-ink-500">{plan.explanation}</p></div><Badge tone="neutral">{plan.result.candidates.length}/{plan.targetJp} JP</Badge></div>
+            {plan.interpretedTargets?.length ? <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{plan.interpretedTargets.map((item) => <div key={item.subjectId} className="rounded-lg bg-surface-muted p-3 text-[12px]"><strong>{item.subjectName}</strong><div className="mt-1 text-[11px] text-ink-500">Target {item.targetJp} · Terwakili {item.existingJp} · Sisa {item.remainingJp}</div></div>)}</div> : null}
+            <div className="overflow-x-auto rounded-xl border border-border"><table className="w-full text-[12.5px]"><thead><tr className="border-b border-border text-left"><th className="p-3">Hari</th><th className="p-3">Jam</th><th className="p-3">Kelas</th><th className="p-3">Mapel</th><th className="p-3">Guru</th><th className="p-3">Status</th></tr></thead><tbody>{plan.result.candidates.map((c, i) => <tr key={`${c.requirementId}-${i}`} className="border-b border-border last:border-0"><td className="p-3">{c.draft.day}</td><td className="p-3">JP {c.draft.periodStart}{c.draft.periodEnd !== c.draft.periodStart ? `–${c.draft.periodEnd}` : ""}</td><td className="p-3">{c.draft.classId}</td><td className="p-3">{c.draft.subjectId}</td><td className="p-3">{c.draft.teacherId}</td><td className="p-3"><Badge tone="neutral">rancangan</Badge></td></tr>)}</tbody></table></div>
+            {plan.needsClarification && <div className="rounded-xl border border-amber/30 bg-amber-50 p-4 text-[12.5px] text-amber"><AlertTriangle className="mr-2 inline h-4 w-4" />{plan.clarification}</div>}
+            <div className="flex flex-col gap-3 rounded-xl bg-surface-muted p-4 sm:flex-row sm:items-center sm:justify-between"><div className="text-[12.5px]"><strong>Belum ada perubahan yang diterapkan.</strong><br />Tinjau dahulu di Jadwal Cerdas sebelum diterapkan.</div><Button onClick={saveCandidate} disabled={isPending || plan.result.candidates.length === 0}><CheckCircle2 className="mr-2 h-4 w-4" />Simpan rancangan</Button></div>
+            {saved && <div className="text-[12.5px] text-emerald">{saved} Lanjutkan ke <strong>Jadwal Cerdas</strong> untuk meninjau dan menerapkan.</div>}
+          </Card>}
+        </>
       )}
-
-      {!selectedClass && context && <section className="rounded-2xl border border-dashed border-border bg-surface p-8 text-center"><div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-50 text-brand"><Sparkles className="h-5 w-5" /></div><h2 className="mt-4 text-lg font-semibold text-ink-950">Pilih kelas untuk mulai</h2><p className="mx-auto mt-1 max-w-md text-sm leading-6 text-ink-500">SAKALA AI akan langsung membaca integrasi kurikulum, Target JP, dan menemukan hal yang perlu Anda lakukan.</p></section>}
-
-      {detail && <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={`Detail ${detail.name}`}><button type="button" aria-label="Tutup" onClick={() => setDetail(null)} className="absolute inset-0 bg-black/25 backdrop-blur-[1px]" /><aside className="absolute right-0 top-0 flex h-full w-full max-w-md flex-col border-l border-border bg-surface shadow-2xl"><header className="flex items-center justify-between border-b border-border px-5 py-4"><div><div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-400">Detail</div><h2 className="mt-1 text-lg font-semibold text-ink-950">{detail.name}</h2></div><button type="button" onClick={() => setDetail(null)} className="flex h-9 w-9 items-center justify-center rounded-xl border border-border text-ink-500 hover:bg-surface-muted"><X className="h-4 w-4" /></button></header><div className="flex-1 overflow-auto p-5"><StatusPill status={detail.status} /><div className="mt-5 grid grid-cols-2 gap-3"><div className="rounded-xl bg-surface-muted p-4"><div className="text-xs text-ink-400">Kurikulum</div><div className="mt-1 text-xl font-semibold">{detail.officialJp ?? 0} JP</div></div><div className="rounded-xl bg-surface-muted p-4"><div className="text-xs text-ink-400">Target aktif</div><div className="mt-1 text-xl font-semibold">{detail.targetJp == null ? "—" : `${detail.targetJp} JP`}</div></div></div><div className="mt-5 rounded-2xl border border-border p-4"><div className="text-sm font-semibold text-ink-900">Apa yang terjadi?</div><p className="mt-2 text-sm leading-6 text-ink-500">{detail.reason}</p></div><div className="mt-4 rounded-2xl bg-surface-muted p-4"><div className="text-sm font-semibold text-ink-900">Tindakan yang tersedia</div><p className="mt-1 text-xs leading-5 text-ink-500">SAKALA AI tidak mengubah data dari sini. Gunakan fitur sumber agar perubahan tetap terkontrol.</p><Link href={detail.status === "belum_terintegrasi" ? "/akademik/generate-kurikulum" : "/akademik/target-jp"} className="mt-4 flex h-10 items-center justify-center gap-2 rounded-xl bg-brand px-4 text-sm font-semibold text-white">{detail.status === "belum_terintegrasi" ? "Tinjau integrasi" : "Buka Target JP"}<ArrowRight className="h-4 w-4" /></Link></div></div></aside></div>}
-
-      {scopeOpen && context?.source && <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Data yang diperiksa"><button type="button" aria-label="Tutup" onClick={() => setScopeOpen(false)} className="absolute inset-0 bg-black/25 backdrop-blur-[1px]" /><aside className="absolute right-0 top-0 flex h-full w-full max-w-md flex-col border-l border-border bg-surface shadow-2xl"><header className="flex items-center justify-between border-b border-border px-5 py-4"><div><div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-400">Transparansi</div><h2 className="mt-1 text-lg font-semibold text-ink-950">Data yang diperiksa</h2></div><button type="button" onClick={() => setScopeOpen(false)} className="flex h-9 w-9 items-center justify-center rounded-xl border border-border text-ink-500 hover:bg-surface-muted"><X className="h-4 w-4" /></button></header><div className="flex-1 overflow-auto p-5"><div className="rounded-2xl bg-surface-muted p-4"><div className="text-xs text-ink-400">Sumber aktif</div><div className="mt-1 font-semibold text-ink-950">{context.source.curriculumName}</div><div className="mt-1 text-xs text-ink-500">{context.source.name} · {context.source.regulationYear ?? "—"}</div><div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" /> Terverifikasi</div></div><div className="mt-4 space-y-2">{context.dataScope.map((item) => <div key={item} className="flex items-center gap-3 rounded-xl border border-border px-4 py-3 text-sm"><Layers3 className="h-4 w-4 text-brand" /><span>{item}</span></div>)}</div><div className="mt-5 text-xs leading-5 text-ink-400">SAKALA AI menggunakan data ini untuk membaca kondisi dan memberi rekomendasi. AI tidak membuat kurikulum dan tidak menulis perubahan otomatis.</div>{context.source.officialUrl && <a href={context.source.officialUrl} target="_blank" rel="noreferrer" className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-brand hover:underline">Lihat sumber resmi <ExternalLink className="h-4 w-4" /></a>}</div></aside></div>}
-    </main>
+    </div>
   );
+}
+
+// §04 Class Selection — kartu workspace, bukan form: tampilkan status JP sebelum dipilih.
+function ClassCard({ status, onSelect }: { status: AiCopilotClassStatus; onSelect: () => void }) {
+  const ok = status.remainingJp === 0;
+  return <button type="button" onClick={onSelect} className="group flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4 text-left transition-all hover:-translate-y-0.5 hover:border-brand-600/30 hover:shadow-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">
+    <span className="text-[14px] font-semibold text-ink-900 group-hover:text-brand-700">{status.label}</span>
+    <span className="text-[11px] tabular-nums text-ink-500">{status.scheduledJp} / {status.targetJp} JP</span>
+    <Badge tone={ok ? "success" : "warning"}>{ok ? "Sesuai" : `${status.remainingJp} JP kurang`}</Badge>
+  </button>;
 }
