@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Pencil, Trash2, Search, Upload, Check, BrainCircuit, ExternalLink } from "lucide-react";
+import Link from "next/link";
+import { Plus, Pencil, Trash2, Search, Upload, Check, BrainCircuit } from "lucide-react";
 import type {
   MataPelajaran,
   MataPelajaranDraft,
@@ -48,11 +49,11 @@ export default function MataPelajaranWorkspace({ initialData }: { initialData: M
   const [data, setData] = useState<MataPelajaran[]>(initialData);
   const [query, setQuery] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
-  const [curriculumOpen, setCurriculumOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState<MataPelajaran | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [formError, setFormError] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => setData(initialData), [initialData]);
@@ -123,6 +124,16 @@ export default function MataPelajaranWorkspace({ initialData }: { initialData: M
     });
   }
 
+  async function toggleStatus(m: MataPelajaran) {
+    const nextStatus: StatusAktif = m.status === "aktif" ? "nonaktif" : "aktif";
+    setTogglingId(m.id);
+    setData((prev) => prev.map((x) => (x.id === m.id ? { ...x, status: nextStatus } : x)));
+    const draft: MataPelajaranDraft = { nama: m.nama, kode: m.kode ?? "", status: nextStatus, targetJpPerRombel: m.targetJpPerRombel, kelompok: m.kelompok, warnaJadwal: m.warnaJadwal, prioritasPenjadwalan: m.prioritasPenjadwalan, jenisMapel: m.jenisMapel };
+    const result = await updateMataPelajaranAction(m.id, draft);
+    if (!result.ok) setData((prev) => prev.map((x) => (x.id === m.id ? { ...x, status: m.status } : x)));
+    setTogglingId(null);
+  }
+
   async function handleValidateImport(rows: Record<string, string>[]): Promise<ImportRowResult[]> {
     const result = await validateMapelImportAction(rows);
     if (!result.ok) return [];
@@ -152,9 +163,9 @@ export default function MataPelajaranWorkspace({ initialData }: { initialData: M
           <Button variant="secondary" onClick={() => setImportOpen(true)}>
             <Upload size={16} /> Import
           </Button>
-          <Button variant="secondary" onClick={() => setCurriculumOpen(true)} aria-label="Generate Kurikulum">
+          <Link href="/akademik/generate-kurikulum" className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink-700 hover:border-brand-600/30 hover:text-brand-700" aria-label="Generate Kurikulum">
             <BrainCircuit size={16} /> Generate Kurikulum
-          </Button>
+          </Link>
           <Button onClick={openCreate}>
             <Plus size={16} /> Tambah Mata Pelajaran
           </Button>
@@ -211,7 +222,7 @@ export default function MataPelajaranWorkspace({ initialData }: { initialData: M
                   <td className="px-5 py-3.5 text-ink-500">{m.kelompok ?? "—"}</td>
                   <td className="px-5 py-3.5 text-ink-500">{m.targetJpPerRombel ?? "—"}</td>
                   <td className="px-5 py-3.5 text-ink-500">{m.prioritasPenjadwalan ? PRIORITAS_LABEL[m.prioritasPenjadwalan] : "—"}</td>
-                  <td className="px-5 py-3.5"><Badge tone={m.status === "aktif" ? "success" : "neutral"}>{m.status === "aktif" ? "Aktif" : "Nonaktif"}</Badge></td>
+                  <td className="px-5 py-3.5"><button onClick={() => void toggleStatus(m)} disabled={togglingId === m.id} aria-label={`Ubah status ${m.nama} jadi ${m.status === "aktif" ? "Nonaktif" : "Aktif"}`} title="Klik untuk ubah status" className="disabled:opacity-50"><Badge tone={m.status === "aktif" ? "success" : "neutral"} className="cursor-pointer transition-opacity hover:opacity-75">{m.status === "aktif" ? "Aktif" : "Nonaktif"}</Badge></button></td>
                   <td className="px-5 py-3.5"><div className="flex items-center justify-end gap-1"><button onClick={() => openEdit(m)} className="rounded-lg p-1.5 text-ink-400 hover:bg-surface hover:text-ink-900" aria-label="Edit"><Pencil size={15} /></button><button onClick={() => handleDelete(m.id)} className="rounded-lg p-1.5 text-ink-400 hover:bg-rose-50 hover:text-rose" aria-label="Hapus"><Trash2 size={15} /></button></div></td>
                 </tr>
               ))}
@@ -219,42 +230,6 @@ export default function MataPelajaranWorkspace({ initialData }: { initialData: M
           </table>
         )}
       </Card>
-
-      <Modal open={curriculumOpen} onClose={() => setCurriculumOpen(false)} title="🧠 Curriculum Intelligence" size="lg">
-        <div className="flex flex-col gap-5">
-          <div className="rounded-2xl border border-border bg-surface-muted p-4">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-[15px] font-semibold text-ink-900">Generate Kurikulum dari sumber resmi</p>
-                <p className="mt-1 text-[13px] leading-5 text-ink-500">SAKALA membaca sumber resmi, memisahkan alokasi resmi dari target mingguan turunan, lalu meminta persetujuan sebelum data menjadi aktif.</p>
-              </div>
-              <Badge tone="success">Official Source</Badge>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="rounded-xl border border-border p-4"><p className="text-[11px] uppercase tracking-wide text-ink-400">Instansi</p><p className="mt-1 font-medium text-ink-900">Kementerian Agama RI</p></div>
-            <div className="rounded-xl border border-border p-4"><p className="text-[11px] uppercase tracking-wide text-ink-400">Jenjang</p><p className="mt-1 font-medium text-ink-900">MTs</p></div>
-            <div className="rounded-xl border border-border p-4 sm:col-span-2"><p className="text-[11px] uppercase tracking-wide text-ink-400">Regulasi acuan</p><p className="mt-1 font-medium text-ink-900">KMA Nomor 1503 Tahun 2025</p><p className="mt-1 text-[12px] text-ink-500">Perubahan atas KMA Nomor 450 Tahun 2024 tentang pedoman implementasi kurikulum pada madrasah.</p></div>
-          </div>
-
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4">
-            <div className="flex items-center gap-2"><Badge tone="success">Verified</Badge><span className="text-[13px] font-medium text-ink-900">Authority source teridentifikasi</span></div>
-            <p className="mt-2 text-[12.5px] leading-5 text-ink-600">Regulasi resmi menjadi authority. AI hanya bertindak sebagai interpreter dan tidak boleh menebak data yang tidak terverifikasi.</p>
-            <a href="https://jdih.kemenag.go.id/regulation/keputusan-menteri-agama-nomor-1503-tahun-2025-tentang-perubahan-atas-keputusan-menteri-agama-nomor-450-tahun-2024-tentang-pedoman-implementasi-kurikulum-pada-raudhatul-athfal-madrasah-ibtidaiyah-madrasah-tsanawiyah-madrasah-aliyah-dan-madrasah-aliyah-kejuruan" target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1.5 text-[12.5px] font-medium text-brand-700 hover:underline">Lihat sumber resmi <ExternalLink size={13} /></a>
-          </div>
-
-          <div className="rounded-xl border border-border p-4">
-            <p className="text-[12px] font-semibold uppercase tracking-wide text-ink-400">Academic Context</p>
-            <div className="mt-2 flex flex-wrap gap-2"><Badge tone="info">2026/2027</Badge><Badge tone="neutral">Ganjil</Badge><Badge tone="neutral">VII · VIII · IX</Badge></div>
-          </div>
-
-          <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
-            <p className="max-w-md text-[12px] leading-5 text-ink-500">Generate tetap melalui review. Tidak ada silent overwrite dan tidak ada perubahan otomatis pada kurikulum sekolah.</p>
-            <Button onClick={() => setCurriculumOpen(false)}>Tinjau Kurikulum</Button>
-          </div>
-        </div>
-      </Modal>
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editing ? "Edit Mata Pelajaran" : "Tambah Mata Pelajaran"} size="lg">
         <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_240px]">

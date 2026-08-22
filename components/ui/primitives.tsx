@@ -29,9 +29,9 @@ const badgeTone: Record<BadgeTone, string> = {
   neutral: "bg-surface-muted text-ink-500",
 };
 
-export function Badge({ tone = "neutral", children, title }: { tone?: BadgeTone; children: React.ReactNode; title?: string }) {
+export function Badge({ tone = "neutral", children, title, className }: { tone?: BadgeTone; children: React.ReactNode; title?: string; className?: string }) {
   return (
-    <span title={title} className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${badgeTone[tone]}`}>
+    <span title={title} className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${badgeTone[tone]} ${className ?? ""}`}>
       {children}
     </span>
   );
