@@ -552,7 +552,7 @@ export default function AkademikWorkspace({
 
           <div data-sakala-curriculum-launcher className="border-t border-border px-5 py-4">
             <Link
-              href="/akademik/mata-pelajaran?generate=1"
+              href="/akademik/generate-kurikulum"
               className="group flex items-center justify-between gap-4 rounded-xl border border-brand-200 bg-brand-50/60 px-4 py-3.5 transition hover:border-brand-300 hover:bg-brand-50"
             >
               <div className="flex min-w-0 items-center gap-3">
