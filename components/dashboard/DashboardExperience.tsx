@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Activity, ArrowRight, Bell, BookOpen, CalendarCheck2, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, DoorOpen, Info, AlertTriangle, Layers, Lightbulb, Plus, Sparkles, ShieldCheck, Upload, MoreHorizontal, Search, Users, X } from "lucide-react";
+import { Activity, ArrowRight, Bell, BookOpen, CalendarCheck2, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, DoorOpen, Info, AlertTriangle, Layers, Lightbulb, Plus, Sparkles, ShieldCheck, Upload, MoreHorizontal, Search, Users, X, Settings2, GripVertical, Minus, RotateCcw, BarChart3, LineChartIcon, PieChart } from "lucide-react";
 import type { ReactNode } from "react";
 import type { DashboardKeyMetrics, DashboardJpInsight, DashboardWorkloadEntry, DashboardMetricTrends, DashboardMetricSpark } from "@/lib/application/dashboard.usecases";
 import type { DashboardActivityEntry, DashboardAgendaEntry, DashboardHeatmapDay, DashboardHeatmapGridDay, DashboardBebanDistribution, DashboardWorkloadFullEntry, DashboardRoomLite } from "@/lib/application/dashboard.intelligence";
@@ -10,6 +10,7 @@ import type { NotificationEntry } from "@/lib/application/notifications.usecases
 import type { HariSekolah } from "@/lib/domain/jamPelajaran";
 
 import PremiumAvatar from "@/components/ui/Avatar";
+import { useDashboardPrefs, SPAN_PRESETS, FONT_SIZE_ZOOM, FONT_FAMILY_STACK, FONT_SIZE_LABEL, FONT_FAMILY_LABEL, type DashboardWidgetId, type FontSize, type FontFamily } from "@/lib/ui/dashboardPrefs";
 
 type GuruLite = { id: string; namaGuru: string; kodeGuru?: string; jenisKelamin?: "L" | "P" };
 type AvatarSize = "xs" | "sm" | "md" | "lg";
@@ -120,9 +121,21 @@ function LineChart({ days }: { days: DashboardHeatmapDay[] }) {
   </div>;
 }
 
+function BarChartJtm({ days }: { days: DashboardHeatmapDay[] }) {
+  const [hover, setHover] = useState<number | null>(null);
+  const max = Math.max(...days.map((d) => d.total), 1);
+  return <div className="flex h-[164px] items-end gap-2 rounded-xl bg-surface-muted/45 px-3 pb-6 pt-3">
+    {days.map((d, i) => <Link key={d.day} href={`/analitik?day=${encodeURIComponent(d.day)}`} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)} className="group relative flex h-full flex-1 flex-col items-center justify-end gap-1.5 focus-visible:outline-none">
+      {hover === i && <span className="absolute -top-1 -translate-y-full whitespace-nowrap rounded-lg border border-border bg-surface px-2 py-1 text-[9px] font-semibold text-ink-800 shadow-lg">{d.total} JP</span>}
+      <div className={`w-full rounded-t-md transition-all ${hover === i ? "bg-brand-600" : "bg-brand-500/70 group-hover:bg-brand-600"}`} style={{ height: `${Math.max((d.total / max) * 100, d.total > 0 ? 4 : 1)}%` }} />
+      <span className="text-[8.5px] font-medium text-ink-400 group-hover:text-brand-600">{d.label.slice(0, 3)}</span>
+    </Link>)}
+  </div>;
+}
+
 const JTM_MODES: { key: JtmMode; label: string }[] = [{ key: "hari", label: "Hari" }, { key: "minggu", label: "Minggu" }, { key: "bulan", label: "Bulan" }, { key: "semester", label: "Semester" }];
 
-function RekapJtm({ heatmap }: { heatmap: DashboardHeatmapDay[] }) {
+function RekapJtm({ heatmap, variant, onVariantChange }: { heatmap: DashboardHeatmapDay[]; variant: "garis" | "batang"; onVariantChange: (v: "garis" | "batang") => void }) {
   const [mode, setMode] = useState<JtmMode>("minggu");
   const totalMinggu = heatmap.reduce((s, d) => s + d.total, 0);
   const busiestDay = heatmap.reduce((best, d) => (d.total > (best?.total ?? -1) ? d : best), heatmap[0]);
@@ -131,33 +144,51 @@ function RekapJtm({ heatmap }: { heatmap: DashboardHeatmapDay[] }) {
       <div><strong className="text-[21px] font-bold leading-none tabular-nums text-ink-900">{totalMinggu}</strong><span className="ml-1 text-[10px] font-medium text-ink-400">JP minggu ini</span>
         {busiestDay && busiestDay.total > 0 && <p className="mt-1 text-[9.5px] text-ink-400">Puncak: <span className="font-semibold text-ink-600">{busiestDay.label}</span> ({busiestDay.total} JP)</p>}
       </div>
+      <button type="button" onClick={() => onVariantChange(variant === "garis" ? "batang" : "garis")} title="Ganti tipe grafik" aria-label="Ganti tipe grafik" className="flex shrink-0 items-center gap-1 rounded-lg border border-border bg-surface px-2 py-1 text-[9px] font-semibold text-ink-500 hover:border-brand-600/25 hover:text-brand-700">
+        {variant === "garis" ? <BarChart3 size={11} /> : <LineChartIcon size={11} />}{variant === "garis" ? "Batang" : "Garis"}
+      </button>
     </div>
     <div className="mb-3 flex gap-1 rounded-lg bg-surface-muted/60 p-0.5 text-[9.5px] font-semibold">
       {JTM_MODES.map((m) => <button key={m.key} type="button" onClick={() => setMode(m.key)} className={`flex-1 rounded-md px-2 py-1 transition-colors ${mode === m.key ? "bg-surface text-brand-700 shadow-sm" : "text-ink-400 hover:text-ink-700"}`}>{m.label}</button>)}
     </div>
-    {mode === "minggu" && <LineChart days={heatmap} />}
+    {mode === "minggu" && (variant === "garis" ? <LineChart days={heatmap} /> : <BarChartJtm days={heatmap} />)}
     {mode === "hari" && <div className="flex h-[164px] flex-col items-center justify-center rounded-xl bg-surface-muted/45 px-6 text-center"><span className="text-[10.5px] font-medium text-ink-500">Rincian per jam untuk hari ini belum tersedia.</span><span className="mt-1 text-[9px] text-ink-400">Gunakan tab Minggu untuk melihat distribusi JP per hari, atau buka Analitik untuk detail lebih lanjut.</span></div>}
     {(mode === "bulan" || mode === "semester") && <div className="flex h-[164px] flex-col items-center justify-center rounded-xl bg-surface-muted/45 px-6 text-center"><span className="text-[10.5px] font-medium text-ink-500">Data historis {mode === "bulan" ? "bulanan" : "semesteran"} belum tersedia.</span><span className="mt-1 text-[9px] text-ink-400">Akan terisi otomatis seiring histori jadwal committed bertambah dari minggu ke minggu.</span></div>}
   </div>;
 }
 
-function BebanDonut({ distribution }: { distribution: DashboardBebanDistribution }) {
+function BebanDonut({ distribution, variant, onVariantChange }: { distribution: DashboardBebanDistribution; variant: "donut" | "batang"; onVariantChange: (v: "donut" | "batang") => void }) {
   const total = Math.max(distribution.ringan + distribution.normal + distribution.berat, 1);
   const a = (distribution.ringan / total) * 360;
   const b = ((distribution.ringan + distribution.normal) / total) * 360;
   const bg = `conic-gradient(var(--color-emerald) 0deg ${a}deg, var(--color-amber) ${a}deg ${b}deg, var(--color-rose) ${b}deg 360deg)`;
   const pct = (n: number) => Math.round((n / total) * 100);
-  return <div className="flex items-center gap-5">
-    <div className="relative h-28 w-28 shrink-0 rounded-full p-[11px] transition-transform hover:scale-[1.02]" style={{ background: bg }}>
-      <Link href="/guru" aria-label="Buka Data Guru" className="flex h-full w-full items-center justify-center rounded-full bg-surface text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">
-        <span><strong className="block text-[20px] leading-none tabular-nums text-ink-900">{distribution.ringan + distribution.normal + distribution.berat}</strong><small className="mt-1 block text-[8px] text-ink-400">guru aktif</small></span>
-      </Link>
+  const rows: { key: "ringan" | "normal" | "berat"; label: string; range: string; dot: string; hover: string; value: number }[] = [
+    { key: "ringan", label: "Ringan", range: "(≤ 20 JP)", dot: "bg-emerald", hover: "hover:bg-emerald-50 hover:text-emerald", value: distribution.ringan },
+    { key: "normal", label: "Normal", range: "(21–32 JP)", dot: "bg-amber", hover: "hover:bg-amber-50 hover:text-amber", value: distribution.normal },
+    { key: "berat", label: "Berat", range: "(≥ 33 JP)", dot: "bg-rose", hover: "hover:bg-rose-50 hover:text-rose", value: distribution.berat },
+  ];
+  return <div>
+    <div className="mb-2 flex justify-end">
+      <button type="button" onClick={() => onVariantChange(variant === "donut" ? "batang" : "donut")} title="Ganti tipe grafik" aria-label="Ganti tipe grafik" className="flex shrink-0 items-center gap-1 rounded-lg border border-border bg-surface px-2 py-1 text-[9px] font-semibold text-ink-500 hover:border-brand-600/25 hover:text-brand-700">
+        {variant === "donut" ? <BarChart3 size={11} /> : <PieChart size={11} />}{variant === "donut" ? "Batang" : "Donut"}
+      </button>
     </div>
-    <div className="min-w-0 flex-1 space-y-2 text-[10px]">
-      <Link href="/guru" className="flex items-center justify-between gap-3 rounded px-1 hover:bg-emerald-50 hover:text-emerald focus-visible:ring-2 focus-visible:ring-brand-500/40"><span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-emerald" />Ringan <span className="text-ink-400">(≤ 20 JP)</span></span><span className="flex items-baseline gap-1 tabular-nums"><b>{distribution.ringan}</b><span className="text-[8.5px] text-ink-400">({pct(distribution.ringan)}%)</span></span></Link>
-      <Link href="/guru" className="flex items-center justify-between gap-3 rounded px-1 hover:bg-amber-50 hover:text-amber focus-visible:ring-2 focus-visible:ring-brand-500/40"><span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-amber" />Normal <span className="text-ink-400">(21–32 JP)</span></span><span className="flex items-baseline gap-1 tabular-nums"><b>{distribution.normal}</b><span className="text-[8.5px] text-ink-400">({pct(distribution.normal)}%)</span></span></Link>
-      <Link href="/guru" className="flex items-center justify-between gap-3 rounded px-1 hover:bg-rose-50 hover:text-rose focus-visible:ring-2 focus-visible:ring-brand-500/40"><span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-rose" />Berat <span className="text-ink-400">(≥ 33 JP)</span></span><span className="flex items-baseline gap-1 tabular-nums"><b>{distribution.berat}</b><span className="text-[8.5px] text-ink-400">({pct(distribution.berat)}%)</span></span></Link>
-    </div>
+    {variant === "donut" ? <div className="flex items-center gap-5">
+      <div className="relative h-28 w-28 shrink-0 rounded-full p-[11px] transition-transform hover:scale-[1.02]" style={{ background: bg }}>
+        <Link href="/guru" aria-label="Buka Data Guru" className="flex h-full w-full items-center justify-center rounded-full bg-surface text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">
+          <span><strong className="block text-[20px] leading-none tabular-nums text-ink-900">{distribution.ringan + distribution.normal + distribution.berat}</strong><small className="mt-1 block text-[8px] text-ink-400">guru aktif</small></span>
+        </Link>
+      </div>
+      <div className="min-w-0 flex-1 space-y-2 text-[10px]">
+        {rows.map((r) => <Link key={r.key} href="/guru" className={`flex items-center justify-between gap-3 rounded px-1 focus-visible:ring-2 focus-visible:ring-brand-500/40 ${r.hover}`}><span className="flex items-center gap-1.5"><span className={`h-1.5 w-1.5 rounded-full ${r.dot}`} />{r.label} <span className="text-ink-400">{r.range}</span></span><span className="flex items-baseline gap-1 tabular-nums"><b>{r.value}</b><span className="text-[8.5px] text-ink-400">({pct(r.value)}%)</span></span></Link>)}
+      </div>
+    </div> : <div className="space-y-2.5">
+      {rows.map((r) => <Link key={r.key} href="/guru" className={`block rounded-lg px-1 py-1 focus-visible:ring-2 focus-visible:ring-brand-500/40 ${r.hover}`}>
+        <div className="mb-1 flex items-center justify-between text-[10px]"><span className="flex items-center gap-1.5"><span className={`h-1.5 w-1.5 rounded-full ${r.dot}`} />{r.label} <span className="text-ink-400">{r.range}</span></span><span className="tabular-nums"><b>{r.value}</b><span className="ml-1 text-[8.5px] text-ink-400">({pct(r.value)}%)</span></span></div>
+        <div className="h-2 w-full overflow-hidden rounded-full bg-surface-muted"><div className={`h-full rounded-full ${r.dot}`} style={{ width: `${pct(r.value)}%` }} /></div>
+      </Link>)}
+    </div>}
   </div>;
 }
 
@@ -327,6 +358,55 @@ function FloatingActionDock() {
   </nav>;
 }
 
+function Widget({ id, title, editing, span, dragOverId, onDragStart, onDragOver, onDrop, onDragEnd, onResize, children }: {
+  id: DashboardWidgetId; title: string; editing: boolean; span: number; dragOverId: DashboardWidgetId | null;
+  onDragStart: (id: DashboardWidgetId) => void; onDragOver: (id: DashboardWidgetId) => void; onDrop: (id: DashboardWidgetId) => void; onDragEnd: () => void;
+  onResize: (id: DashboardWidgetId, dir: 1 | -1) => void; children: ReactNode;
+}) {
+  const isDragOver = dragOverId === id;
+  return <div
+    style={{ gridColumn: `span ${span} / span ${span}` }}
+    draggable={editing}
+    onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; onDragStart(id); }}
+    onDragOver={(e) => { if (editing) { e.preventDefault(); onDragOver(id); } }}
+    onDrop={(e) => { e.preventDefault(); onDrop(id); }}
+    onDragEnd={onDragEnd}
+    className={`min-w-0 transition-all ${editing ? `rounded-[18px] ring-2 ring-dashed ${isDragOver ? "ring-brand-600 bg-brand-50/40" : "ring-border"}` : ""}`}
+  >
+    {editing && <div className="mb-1.5 flex items-center justify-between gap-2 px-1 text-ink-400">
+      <span className="flex cursor-grab items-center gap-1 text-[9.5px] font-semibold active:cursor-grabbing"><GripVertical size={12} /> {title}</span>
+      <span className="flex items-center gap-0.5">
+        <button type="button" onClick={() => onResize(id, -1)} aria-label={`Perkecil ${title}`} className="flex h-5 w-5 items-center justify-center rounded-md border border-border bg-surface hover:border-brand-600/30 hover:text-brand-700"><Minus size={11} /></button>
+        <button type="button" onClick={() => onResize(id, 1)} aria-label={`Perbesar ${title}`} className="flex h-5 w-5 items-center justify-center rounded-md border border-border bg-surface hover:border-brand-600/30 hover:text-brand-700"><Plus size={11} /></button>
+      </span>
+    </div>}
+    {children}
+  </div>;
+}
+
+function DashboardCustomizeBar({ open, onToggle, fontSize, fontFamily, onFontSize, onFontFamily, onReset }: {
+  open: boolean; onToggle: () => void; fontSize: FontSize; fontFamily: FontFamily; onFontSize: (v: FontSize) => void; onFontFamily: (v: FontFamily) => void; onReset: () => void;
+}) {
+  return <div className="relative">
+    <button type="button" onClick={onToggle} aria-expanded={open} className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[10.5px] font-semibold shadow-sm transition-colors ${open ? "border-brand-600/40 bg-brand-50 text-brand-700" : "border-border bg-surface text-ink-600 hover:border-brand-600/25"}`}>
+      <Settings2 size={13} /> {open ? "Selesai kustomisasi" : "Kustomisasi"}
+    </button>
+    {open && <div className="absolute right-0 top-full z-20 mt-2 w-72 rounded-2xl border border-border bg-surface p-4 shadow-xl">
+      <p className="mb-2.5 text-[11px] font-bold text-ink-800">Tampilan Dashboard</p>
+      <div className="mb-3">
+        <p className="mb-1.5 text-[9.5px] font-semibold uppercase tracking-wide text-ink-400">Ukuran Font</p>
+        <div className="flex gap-1.5">{(["sm", "md", "lg"] as FontSize[]).map((s) => <button key={s} type="button" onClick={() => onFontSize(s)} className={`flex-1 rounded-lg border px-2 py-1.5 text-[10.5px] font-semibold ${fontSize === s ? "border-brand-600/40 bg-brand-50 text-brand-700" : "border-border text-ink-500 hover:border-brand-600/25"}`}>{FONT_SIZE_LABEL[s]}</button>)}</div>
+      </div>
+      <div className="mb-3.5">
+        <p className="mb-1.5 text-[9.5px] font-semibold uppercase tracking-wide text-ink-400">Jenis Font</p>
+        <div className="flex flex-col gap-1">{(["default", "serif", "mono"] as FontFamily[]).map((f) => <button key={f} type="button" onClick={() => onFontFamily(f)} className={`rounded-lg border px-2.5 py-1.5 text-left text-[10.5px] font-medium ${fontFamily === f ? "border-brand-600/40 bg-brand-50 text-brand-700" : "border-border text-ink-500 hover:border-brand-600/25"}`} style={{ fontFamily: FONT_FAMILY_STACK[f] }}>{FONT_FAMILY_LABEL[f]}</button>)}</div>
+      </div>
+      <p className="mb-3 text-[9.5px] leading-4 text-ink-400">Seret ikon <GripVertical size={10} className="inline" /> pada judul widget untuk memindahkan, atau pakai tombol +/− untuk mengubah ukurannya. Menggeser sebuah widget ke posisi lain akan menyesuaikan ukurannya dengan slot tujuan.</p>
+      <button type="button" onClick={onReset} className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-[10.5px] font-semibold text-ink-500 hover:border-rose/30 hover:text-rose"><RotateCcw size={11} /> Kembalikan ke Default</button>
+    </div>}
+  </div>;
+}
+
 function greetingSalutation(): string {
   const hour = new Date().getHours();
   if (hour < 11) return "Selamat pagi";
@@ -339,6 +419,36 @@ export default function DashboardExperience({ schoolName, adminName, context, me
   const guruByName = new Map(guruList.map((g) => [g.namaGuru, g]));
   const bebanTertinggi = workloadFull.slice(0, 4);
   const salutation = useMemo(() => greetingSalutation(), []);
+  const { prefs, reorder, setSpan, setFontSize, setFontFamily, setChartVariant, reset } = useDashboardPrefs();
+  const [customizeOpen, setCustomizeOpen] = useState(false);
+  const editing = customizeOpen;
+  const [draggedId, setDraggedId] = useState<DashboardWidgetId | null>(null);
+  const [dragOverId, setDragOverId] = useState<DashboardWidgetId | null>(null);
+
+  function handleResize(id: DashboardWidgetId, dir: 1 | -1) {
+    const current = prefs.spans[id] ?? 6;
+    const idx = SPAN_PRESETS.findIndex((s) => s >= current);
+    const nextIdx = Math.min(SPAN_PRESETS.length - 1, Math.max(0, (idx === -1 ? SPAN_PRESETS.length - 1 : idx) + dir));
+    setSpan(id, SPAN_PRESETS[nextIdx]);
+  }
+
+  const widgetTitle: Record<DashboardWidgetId, string> = {
+    rekapJtm: "Rekap JTM", bebanGuru: "Distribusi Beban Guru", heatmapGrid: "Heatmap Jadwal", bebanTertinggi: "Beban Guru Tertinggi",
+    aktivitas: "Aktivitas Terbaru", insight: "Insight", kalender: "Mini Kalender", agenda: "Agenda", notifikasi: "Notifikasi Terbaru",
+  };
+
+  const widgetContent: Record<DashboardWidgetId, ReactNode> = {
+    rekapJtm: <Section title="Rekap JTM" description="Jam Tatap Muka committed · klik titik/area untuk membuka analitik." href="/analitik" icon={<Activity size={14} />}><RekapJtm heatmap={heatmap} variant={prefs.chartVariant.rekapJtm === "batang" ? "batang" : "garis"} onVariantChange={(v) => setChartVariant("rekapJtm", v)} /></Section>,
+    bebanGuru: <Section title="Distribusi Beban Guru" description="Ringan/Normal/Berat berdasarkan JP committed." href="/guru" icon={<Users size={14} />}><BebanDonut distribution={bebanDistribution} variant={prefs.chartVariant.bebanGuru} onVariantChange={(v) => setChartVariant("bebanGuru", v)} /></Section>,
+    heatmapGrid: <Section title="Heatmap Jadwal" description="Kepadatan tiap jam pelajaran sepekan." href="/jadwal" icon={<Activity size={14} />}><HeatmapGrid grid={heatmapGrid} rooms={rooms} gridByRoom={heatmapGridByRoom} /></Section>,
+    bebanTertinggi: <Section title="Beban Guru Tertinggi" description="Guru dengan JP committed tertinggi." href="/guru" icon={<Users size={14} />} badge={<span className="ml-1 inline-flex items-center gap-1 rounded-full border border-border bg-surface-muted px-2 py-0.5 text-[9px] font-bold text-ink-500">Top 5</span>}><div className="space-y-2">{bebanTertinggi.map((e) => { const style = BEBAN_STYLE[e.beban]; const g = guruList.find((item) => item.id === e.guruId); return <Link key={e.guruId} href={`/guru?teacher=${encodeURIComponent(e.guruId)}`} aria-label={`${e.namaGuru}: ${e.totalJamMengajar} JP, ${style.label}`} className="group flex items-center gap-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"><Avatar name={e.namaGuru} size="md" kodeGuru={g?.kodeGuru} jenisKelamin={g?.jenisKelamin} /><span className="min-w-0 flex-1 truncate text-[10px] font-medium text-ink-800 group-hover:text-brand-700">{e.namaGuru}</span><span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[8px] font-bold ${style.badge}`}>{style.label}</span><span className="text-[10px] font-bold tabular-nums text-ink-800">{e.totalJamMengajar} JP</span></Link>; })}{bebanTertinggi.length === 0 && <p className="text-[10px] text-ink-400">Belum ada guru aktif dengan jadwal committed.</p>}</div></Section>,
+    aktivitas: <Section title="Aktivitas Terbaru" description="Perubahan terakhir pada konteks aktif." href="/riwayat" icon={<Clock3 size={14} />}><div className="space-y-2.5">{activity.slice(0, 4).map((a) => { const isGuru = a.entityType.toLowerCase().replace(/[- ]+/g, "_") === "guru"; const guru = isGuru && a.entityLabel ? guruByName.get(a.entityLabel) : undefined; return <Link key={a.id} href="/riwayat" className="group flex items-start gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">{isGuru ? <Avatar name={a.entityLabel} size="sm" kodeGuru={guru?.kodeGuru} jenisKelamin={guru?.jenisKelamin} /> : <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald"><CheckCircle2 size={12} aria-hidden="true" /></span>}<div className="min-w-0"><p className="truncate text-[10px] font-medium text-ink-800 group-hover:text-brand-700">{a.action}</p><time className="text-[8.5px] text-ink-400">{new Date(a.createdAt).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" })}</time></div></Link>; })}</div></Section>,
+    insight: <Section title="Insight" description="Sinyal yang layak diperhatikan." href="/analitik" icon={<Lightbulb size={14} />}><Link href="/analitik" className="group block rounded-xl bg-brand-50/60 p-3 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"><p className="text-[11px] font-semibold leading-4 text-ink-900">{bebanTertinggi[0]?.namaGuru ? `${bebanTertinggi[0].namaGuru} memiliki beban JP tertinggi.` : "Jadwal akademik siap dianalisis."}</p><p className="mt-1 text-[9.5px] leading-4 text-ink-500">Buka Analitik untuk melihat distribusi dan pola yang lebih lengkap.</p><span className="mt-2 inline-flex items-center gap-1 text-[9.5px] font-semibold text-brand-600">Analisis <ArrowRight size={11} /></span></Link></Section>,
+    kalender: <Section title="Mini Kalender" description="Bulan berjalan · titik menandai hari dengan jadwal committed." icon={<CalendarDays size={14} />}><MiniCalendar heatmap={heatmap} /></Section>,
+    agenda: <AgendaSection agenda={agenda} guruList={guruList} guruByName={guruByName} />,
+    notifikasi: <Section title="Notifikasi Terbaru" description="Aktivitas terbaru pada konteks aktif." href="/notifikasi" icon={<Bell size={14} />}><NotificationsPanel notifications={notifications} /></Section>,
+  };
+
   return <main className="mx-auto flex min-h-[calc(100vh-5.5rem)] max-w-[1760px] flex-col gap-3 px-1 pb-4 pt-3 sm:px-2 lg:gap-3.5">
     <header className="flex items-end justify-between gap-4 px-1">
       <div className="min-w-0">
@@ -346,30 +456,27 @@ export default function DashboardExperience({ schoolName, adminName, context, me
         <h1 className="text-[21px] font-semibold leading-none tracking-[-.03em] text-ink-900">{salutation}{adminName ? `, ${adminName.split(/\s+/)[0]}` : ""} 👋</h1>
         <p className="mt-1.5 text-[11px] text-ink-500">Ringkasan kondisi akademik <span className="font-semibold text-ink-700">{schoolName}</span> dan jadwal sekolah.</p>
       </div>
-      <Link href="/analitik" className="hidden items-center gap-1 rounded-full border border-border bg-surface px-3 py-1.5 text-[10px] font-semibold text-ink-600 shadow-sm hover:border-brand-600/25 hover:text-brand-700 sm:flex">Analitik <ArrowRight size={12} /></Link>
+      <div className="flex shrink-0 items-center gap-2">
+        <Link href="/analitik" className="hidden items-center gap-1 rounded-full border border-border bg-surface px-3 py-1.5 text-[10px] font-semibold text-ink-600 shadow-sm hover:border-brand-600/25 hover:text-brand-700 sm:flex">Analitik <ArrowRight size={12} /></Link>
+        <DashboardCustomizeBar open={customizeOpen} onToggle={() => setCustomizeOpen((v) => !v)} fontSize={prefs.fontSize} fontFamily={prefs.fontFamily} onFontSize={setFontSize} onFontFamily={setFontFamily} onReset={reset} />
+      </div>
     </header>
     <KpiRow metrics={metrics} metricTrends={metricTrends} />
-    <div className="grid min-h-0 items-start gap-3 lg:grid-cols-[1fr_320px]">
-      {/* Kolom kiri utama */}
-      <div className="flex min-w-0 flex-col gap-3">
-        <div className="grid min-h-0 gap-3 lg:grid-cols-[1.5fr_.72fr]">
-          <Section title="Rekap JTM" description="Jam Tatap Muka committed · klik titik/area untuk membuka analitik." href="/analitik" icon={<Activity size={14} />}><RekapJtm heatmap={heatmap} /></Section>
-          <Section title="Distribusi Beban Guru" description="Ringan/Normal/Berat berdasarkan JP committed." href="/guru" icon={<Users size={14} />}><BebanDonut distribution={bebanDistribution} /></Section>
-        </div>
-        <div className="grid min-h-0 gap-3 lg:grid-cols-[1.2fr_1fr]">
-          <Section title="Heatmap Jadwal" description="Kepadatan tiap jam pelajaran sepekan." href="/jadwal" icon={<Activity size={14} />}><HeatmapGrid grid={heatmapGrid} rooms={rooms} gridByRoom={heatmapGridByRoom} /></Section>
-          <Section title="Beban Guru Tertinggi" description="Guru dengan JP committed tertinggi." href="/guru" icon={<Users size={14} />} badge={<span className="ml-1 inline-flex items-center gap-1 rounded-full border border-border bg-surface-muted px-2 py-0.5 text-[9px] font-bold text-ink-500">Top 5</span>}><div className="space-y-2">{bebanTertinggi.map((e) => { const style = BEBAN_STYLE[e.beban]; const g = guruList.find((item) => item.id === e.guruId); return <Link key={e.guruId} href={`/guru?teacher=${encodeURIComponent(e.guruId)}`} aria-label={`${e.namaGuru}: ${e.totalJamMengajar} JP, ${style.label}`} className="group flex items-center gap-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"><Avatar name={e.namaGuru} size="md" kodeGuru={g?.kodeGuru} jenisKelamin={g?.jenisKelamin} /><span className="min-w-0 flex-1 truncate text-[10px] font-medium text-ink-800 group-hover:text-brand-700">{e.namaGuru}</span><span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[8px] font-bold ${style.badge}`}>{style.label}</span><span className="text-[10px] font-bold tabular-nums text-ink-800">{e.totalJamMengajar} JP</span></Link>; })}{bebanTertinggi.length === 0 && <p className="text-[10px] text-ink-400">Belum ada guru aktif dengan jadwal committed.</p>}</div></Section>
-        </div>
-        <div className="grid min-h-0 gap-3 lg:grid-cols-2">
-          <Section title="Aktivitas Terbaru" description="Perubahan terakhir pada konteks aktif." href="/riwayat" icon={<Clock3 size={14} />}><div className="space-y-2.5">{activity.slice(0, 4).map((a) => { const isGuru = a.entityType.toLowerCase().replace(/[- ]+/g, "_") === "guru"; const guru = isGuru && a.entityLabel ? guruByName.get(a.entityLabel) : undefined; return <Link key={a.id} href="/riwayat" className="group flex items-start gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">{isGuru ? <Avatar name={a.entityLabel} size="sm" kodeGuru={guru?.kodeGuru} jenisKelamin={guru?.jenisKelamin} /> : <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald"><CheckCircle2 size={12} aria-hidden="true" /></span>}<div className="min-w-0"><p className="truncate text-[10px] font-medium text-ink-800 group-hover:text-brand-700">{a.action}</p><time className="text-[8.5px] text-ink-400">{new Date(a.createdAt).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" })}</time></div></Link>; })}</div></Section>
-          <Section title="Insight" description="Sinyal yang layak diperhatikan." href="/analitik" icon={<Lightbulb size={14} />}><Link href="/analitik" className="group block rounded-xl bg-brand-50/60 p-3 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"><p className="text-[11px] font-semibold leading-4 text-ink-900">{bebanTertinggi[0]?.namaGuru ? `${bebanTertinggi[0].namaGuru} memiliki beban JP tertinggi.` : "Jadwal akademik siap dianalisis."}</p><p className="mt-1 text-[9.5px] leading-4 text-ink-500">Buka Analitik untuk melihat distribusi dan pola yang lebih lengkap.</p><span className="mt-2 inline-flex items-center gap-1 text-[9.5px] font-semibold text-brand-600">Analisis <ArrowRight size={11} /></span></Link></Section>
-        </div>
-      </div>
-      {/* Kolom kanan dedicated — Kalender → Agenda → Notifikasi bertumpuk (golden reference item M) */}
-      <div className="flex min-w-0 flex-col gap-3">
-        <Section title="Mini Kalender" description="Bulan berjalan · titik menandai hari dengan jadwal committed." icon={<CalendarDays size={14} />}><MiniCalendar heatmap={heatmap} /></Section>
-        <Section title="Agenda Mendatang" description="Jadwal terdekat dari konteks aktif." href="/jadwal" icon={<Clock3 size={14} />}><div className="space-y-1">{agenda.slice(0, 4).map((e) => { const teacher = e.teacher?.trim() || "Guru"; const className = e.className?.trim() || "Kelas"; const g = e.teacherId ? guruList.find((item) => item.id === e.teacherId) : guruByName.get(teacher); return <Link key={e.id} href={`/jadwal?assignment=${encodeURIComponent(e.id)}`} aria-label={`${e.subject} · ${teacher} · ${className}`} className="group flex items-center gap-2.5 border-b border-border/50 py-2 last:border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"><span className="w-[50px] shrink-0 text-[9px] font-bold tabular-nums text-brand-600">{e.time}</span><Avatar name={g?.namaGuru ?? teacher} size="md" kodeGuru={g?.kodeGuru} jenisKelamin={g?.jenisKelamin} /><span className="min-w-0 flex-1"><span className="block truncate text-[10.5px] font-semibold text-ink-900 group-hover:text-brand-700">{e.subject?.trim() || "Mata pelajaran"}</span><span className="block truncate text-[8.5px] text-ink-400">{className} · {teacher}{e.room ? ` · ${e.room}` : ""}</span></span><ChevronRight size={11} className="text-ink-300 group-hover:text-brand-600" /></Link>; })}{agenda.length === 0 && <p className="text-[10px] text-ink-400">Belum ada jadwal terdekat.</p>}</div></Section>
-        <Section title="Notifikasi Terbaru" description="Aktivitas terbaru pada konteks aktif." href="/notifikasi" icon={<Bell size={14} />}><NotificationsPanel notifications={notifications} /></Section>
+    <div style={{ zoom: FONT_SIZE_ZOOM[prefs.fontSize], fontFamily: FONT_FAMILY_STACK[prefs.fontFamily] }}>
+      <div className="grid min-h-0 grid-cols-12 items-start gap-3">
+        {prefs.order.map((id) => <Widget
+          key={id}
+          id={id}
+          title={widgetTitle[id]}
+          editing={editing}
+          span={Math.min(prefs.spans[id] ?? 6, 12)}
+          dragOverId={dragOverId}
+          onDragStart={setDraggedId}
+          onDragOver={setDragOverId}
+          onDrop={(targetId) => { if (draggedId) reorder(draggedId, targetId); setDraggedId(null); setDragOverId(null); }}
+          onDragEnd={() => { setDraggedId(null); setDragOverId(null); }}
+          onResize={handleResize}
+        >{widgetContent[id]}</Widget>)}
       </div>
     </div>
     <FloatingActionDock />
