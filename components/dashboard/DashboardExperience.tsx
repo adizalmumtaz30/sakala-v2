@@ -39,23 +39,49 @@ const BEBAN_STYLE: Record<"ringan" | "normal" | "berat", { label: string; badge:
   berat: { label: "Berat", badge: "border-rose/30 bg-rose-50 text-rose", dot: "bg-rose" },
 };
 
-function KpiCard({ label, value, suffix, icon, href }: { label: string; value: number; suffix?: string; icon: ReactNode; href: string }) {
+function Sparkline({ points }: { points: number[] }) {
+  const max = Math.max(...points, 1);
+  const w = 64, h = 22;
+  const step = points.length > 1 ? w / (points.length - 1) : 0;
+  const coords = points.map((v, i) => ({ x: i * step, y: h - (v / max) * (h - 3) - 1.5 }));
+  const path = coords.map((p, i) => `${i ? "L" : "M"}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+  const last = coords[coords.length - 1];
+  return <svg viewBox={`0 0 ${w} ${h}`} className="h-[22px] w-16 shrink-0 overflow-visible" aria-hidden="true">
+    <path d={path} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="text-brand-500/70" />
+    {last && <circle cx={last.x} cy={last.y} r="1.8" fill="currentColor" className="text-brand-600" />}
+  </svg>;
+}
+
+function KpiCard({ label, value, suffix, icon, href, sparkline, trendPct, trendLabel }: { label: string; value: number; suffix?: string; icon: ReactNode; href: string; sparkline?: number[]; trendPct?: number | null; trendLabel?: string }) {
+  const showTrend = sparkline && sparkline.length >= 2;
   return <Link href={href} className="group flex flex-col gap-2.5 rounded-[16px] border border-border/70 bg-surface/95 p-3.5 shadow-[0_1px_2px_rgba(15,23,42,.03)] transition-all hover:-translate-y-0.5 hover:border-brand-600/25 hover:shadow-[0_8px_20px_rgba(15,23,42,.06)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">
     <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">{icon}</span>
     <span className="min-w-0">
       <span className="flex items-baseline gap-1"><strong className="text-[16px] font-bold leading-none tabular-nums text-ink-900 group-hover:text-brand-700">{value}</strong>{suffix && <span className="text-[8.5px] font-medium text-ink-400">{suffix}</span>}</span>
       <span className="mt-1.5 block truncate text-[9px] font-medium text-ink-400">{label}</span>
     </span>
+    {showTrend && <span className="mt-0.5 flex items-center justify-between gap-2">
+      <Sparkline points={sparkline!} />
+      {trendPct !== null && trendPct !== undefined && <span className={`shrink-0 whitespace-nowrap text-[8.5px] font-semibold ${trendPct >= 0 ? "text-emerald" : "text-rose"}`}>{trendPct >= 0 ? "↑" : "↓"} {Math.abs(trendPct)}%{trendLabel ? ` ${trendLabel}` : ""}</span>}
+    </span>}
   </Link>;
 }
 
-function KpiRow({ metrics }: { metrics: DashboardKeyMetrics }) {
+function KpiRow({ metrics, heatmap }: { metrics: DashboardKeyMetrics; heatmap: DashboardHeatmapDay[] }) {
+  // Sparkline+trend hanya ditampilkan pada kartu yang benar-benar punya data historis
+  // (Total JTM, dari rekap JP per hari sepekan berjalan). Kartu lain (Guru Aktif, Kelas,
+  // dst.) hanya snapshot jumlah saat ini di database — belum ada snapshot historis untuk
+  // dijadikan trend yang jujur, jadi sengaja tidak dibuat-buat.
+  const jtmSparkline = heatmap.map((d) => d.total);
+  const daysWithData = heatmap.filter((d) => d.total > 0);
+  const lastTwo = daysWithData.slice(-2);
+  const jtmTrend = lastTwo.length === 2 && lastTwo[0].total > 0 ? Math.round(((lastTwo[1].total - lastTwo[0].total) / lastTwo[0].total) * 100) : null;
   return <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
     <KpiCard label="Guru Aktif" value={metrics.totalGuruAktif} icon={<Users size={16} />} href="/guru" />
     <KpiCard label="Kelas" value={metrics.totalKelas} icon={<Layers size={16} />} href="/kelas" />
     <KpiCard label="Mata Pelajaran" value={metrics.totalMataPelajaranAktif} icon={<BookOpen size={16} />} href="/mata-pelajaran" />
     <KpiCard label="Ruangan" value={metrics.totalRuangan} icon={<DoorOpen size={16} />} href="/ruangan" />
-    <KpiCard label="Total JTM" value={metrics.totalJtm} suffix="JP/minggu" icon={<Clock3 size={16} />} href="/analitik" />
+    <KpiCard label="Total JTM" value={metrics.totalJtm} suffix="JP/minggu" icon={<Clock3 size={16} />} href="/analitik" sparkline={jtmSparkline} trendPct={jtmTrend} trendLabel="vs hari sebelumnya" />
     <KpiCard label="Jadwal Aktif" value={metrics.totalJadwalCommitted} icon={<CalendarCheck2 size={16} />} href="/jadwal" />
   </div>;
 }
@@ -366,7 +392,7 @@ export default function DashboardExperience({ schoolName, adminName, context, me
       </div>
       <Link href="/analitik" className="hidden items-center gap-1 rounded-full border border-border bg-surface px-3 py-1.5 text-[10px] font-semibold text-ink-600 shadow-sm hover:border-brand-600/25 hover:text-brand-700 sm:flex">Analitik <ArrowRight size={12} /></Link>
     </header>
-    <KpiRow metrics={metrics} />
+    <KpiRow metrics={metrics} heatmap={heatmap} />
     <div className="grid min-h-0 items-start gap-3 lg:grid-cols-[1fr_320px]">
       {/* Kolom kiri utama */}
       <div className="flex min-w-0 flex-col gap-3">
