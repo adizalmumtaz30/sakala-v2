@@ -19,13 +19,27 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { Sparkles, ArrowRight, CheckCircle2, Circle, X, Lightbulb } from "lucide-react";
+import { Sparkles, ArrowRight, CheckCircle2, Circle, X, Lightbulb, HelpCircle, Target, BookOpen, CalendarDays, GraduationCap } from "lucide-react";
 import { runAiCopilotIntentAction, saveAiCandidatesAction, type AiCopilotClassStatus, type AiCopilotIntent } from "@/app/(shell)/ai/actions";
 import type { AiSchedulePlan } from "@/lib/application/aiSchedulePlanner";
 import Button from "@/components/ui/Button";
 import { Card, Badge } from "@/components/ui/primitives";
 
 type FlowStep = "finding" | "solution" | "preview" | "done";
+
+// §26 Cross-Feature Action — arahkan ke fitur yang tepat, jangan menirunya di sini.
+const CROSS_FEATURE_LINKS = [
+  { href: "/akademik/target-jp", label: "Atur Target JP", icon: Target },
+  { href: "/mata-pelajaran", label: "Kelola Mata Pelajaran", icon: BookOpen },
+  { href: "/jadwal", label: "Atur Jadwal", icon: CalendarDays },
+  { href: "/akademik/generate-kurikulum", label: "Buka Generate Kurikulum", icon: GraduationCap },
+] as const;
+
+function CrossFeatureLinks() {
+  return <div className="flex flex-wrap gap-1.5 border-t border-border/60 pt-3">
+    {CROSS_FEATURE_LINKS.map((l) => <Link key={l.href} href={l.href} className="flex items-center gap-1 rounded-full border border-border bg-surface px-2.5 py-1 text-[10.5px] font-medium text-ink-500 hover:border-brand-600/25 hover:text-brand-700"><l.icon size={11} />{l.label}</Link>)}
+  </div>;
+}
 
 const INTENT_LABEL: Record<AiCopilotIntent, string> = {
   complete_remaining_jp: "Lengkapi JP yang kurang",
@@ -51,6 +65,7 @@ export default function RecommendationFlow({
   const [error, setError] = useState<string | null>(null);
   const [savedCount, setSavedCount] = useState<number | null>(null);
   const [skippedCount, setSkippedCount] = useState(0);
+  const [whyOpen, setWhyOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const deficits = classStatus.subjectDeficits;
@@ -62,6 +77,7 @@ export default function RecommendationFlow({
   function lihatSolusi(chosenIntent: AiCopilotIntent) {
     setError(null);
     setIntent(chosenIntent);
+    setWhyOpen(false);
     startTransition(async () => {
       const result = await runAiCopilotIntentAction(chosenIntent, classStatus.id);
       if (!result.ok) { setError(result.error); return; }
@@ -111,6 +127,7 @@ export default function RecommendationFlow({
         <Button variant="secondary" onClick={() => lihatSolusi("fill_empty_slots")} disabled={isPending}>Isi slot kosong</Button>
         <Button variant="secondary" onClick={() => lihatSolusi("schedule_full_week")} disabled={isPending}>Susun semua mapel</Button>
       </div>
+      <CrossFeatureLinks />
     </Card>;
   }
 
@@ -123,8 +140,19 @@ export default function RecommendationFlow({
           <p className="text-[10px] font-bold uppercase tracking-[.1em] text-brand-600">Solusi</p>
           <p className="mt-1 text-[14px] font-semibold text-ink-900">{INTENT_LABEL[intent]}</p>
         </div>
-        <button type="button" onClick={batal} aria-label="Batal" className="rounded-full p-1 text-ink-400 hover:bg-surface-muted hover:text-ink-700"><X size={16} /></button>
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={() => setWhyOpen((v) => !v)} aria-expanded={whyOpen} className={`flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold ${whyOpen ? "border-brand-600/40 bg-brand-50 text-brand-700" : "border-border text-ink-500 hover:border-brand-600/25 hover:text-brand-700"}`}><HelpCircle size={11} />Mengapa?</button>
+          <button type="button" onClick={batal} aria-label="Batal" className="rounded-full p-1 text-ink-400 hover:bg-surface-muted hover:text-ink-700"><X size={16} /></button>
+        </div>
       </div>
+      {/* §30 Trust — dasar rekomendasi, data nyata dari sumber yang sama dengan Top Summary. */}
+      {whyOpen && <div className="grid grid-cols-2 gap-2 rounded-xl bg-surface-muted p-3 text-[11px] sm:grid-cols-4">
+        <div><p className="text-ink-400">Target JP</p><p className="mt-0.5 font-semibold tabular-nums text-ink-800">{classStatus.targetJp}</p></div>
+        <div><p className="text-ink-400">JP saat ini</p><p className="mt-0.5 font-semibold tabular-nums text-ink-800">{classStatus.scheduledJp}</p></div>
+        <div><p className="text-ink-400">Slot ditemukan</p><p className="mt-0.5 font-semibold tabular-nums text-ink-800">{plan.result.candidates.length}</p></div>
+        <div><p className="text-ink-400">Mapel terkait</p><p className="mt-0.5 font-semibold tabular-nums text-ink-800">{targets.length || deficits.length}</p></div>
+        <p className="col-span-2 mt-1 text-ink-400 sm:col-span-4">Data diperiksa: Target JP · Mata Pelajaran · Pembagian Mengajar · Jadwal committed.</p>
+      </div>}
       <p className="text-[12px] leading-5 text-ink-500">{plan.explanation}</p>
 
       {targets.length > 0 && <div className="space-y-1.5 border-t border-border/60 pt-3">
