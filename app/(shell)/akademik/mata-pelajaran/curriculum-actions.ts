@@ -178,7 +178,15 @@ export async function adoptCurriculumItemsAction(input: {
   if (!sources?.length || sources.length !== sourceIds.length) {
     return { ok: false, error: "Source provenance tidak ditemukan. Operasi diblokir." };
   }
-  if (sources.some((source) => source.source_tier > 1 || source.status !== "active")) {
+  // BUG KRITIS (dilaporkan user): kondisi ini sebelumnya membandingkan
+  // source.status dengan "active" — nilai yang TIDAK PERNAH bisa ada, karena
+  // check constraint tabel curriculum_source cuma mengizinkan
+  // 'official' | 'unverified' | 'stale' | 'blocked'. Akibatnya kondisi ini
+  // SELALU true untuk SEMUA sumber, jadi setiap Commit selalu diblokir tanpa
+  // terkecuali — persis walau UI sudah menampilkan semua ceklis hijau/valid,
+  // karena validasi client sama sekali tidak mengecek source_tier/status ini.
+  // Nilai yang benar untuk sumber authority tier-1 resmi adalah "official".
+  if (sources.some((source) => source.source_tier > 1 || source.status !== "official")) {
     return { ok: false, error: "Item harus berasal dari sumber authority resmi yang aktif. Cross-check tidak dapat menjadi authority." };
   }
 
