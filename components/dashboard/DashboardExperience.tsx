@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Activity, ArrowRight, Bell, BookOpen, CalendarCheck2, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, DoorOpen, Info, AlertTriangle, Layers, Lightbulb, Plus, Sparkles, ShieldCheck, Upload, MoreHorizontal, Search, Users, X } from "lucide-react";
 import type { ReactNode } from "react";
-import type { DashboardKeyMetrics, DashboardJpInsight, DashboardWorkloadEntry } from "@/lib/application/dashboard.usecases";
+import type { DashboardKeyMetrics, DashboardJpInsight, DashboardWorkloadEntry, DashboardMetricTrends, DashboardMetricSpark } from "@/lib/application/dashboard.usecases";
 import type { DashboardActivityEntry, DashboardAgendaEntry, DashboardHeatmapDay, DashboardHeatmapGridDay, DashboardBebanDistribution, DashboardWorkloadFullEntry, DashboardRoomLite } from "@/lib/application/dashboard.intelligence";
 import type { NotificationEntry } from "@/lib/application/notifications.usecases";
 import type { HariSekolah } from "@/lib/domain/jamPelajaran";
@@ -39,24 +39,40 @@ const BEBAN_STYLE: Record<"ringan" | "normal" | "berat", { label: string; badge:
   berat: { label: "Berat", badge: "border-rose/30 bg-rose-50 text-rose", dot: "bg-rose" },
 };
 
-function KpiCard({ label, value, suffix, icon, href }: { label: string; value: number; suffix?: string; icon: ReactNode; href: string }) {
+function MiniSpark({ values }: { values: number[] }) {
+  if (values.length < 2) return null;
+  const w = 100, h = 24, pad = 2;
+  const max = Math.max(...values), min = Math.min(...values);
+  const range = max - min || 1;
+  const pts = values.map((v, i) => ({ x: pad + (i * (w - pad * 2)) / (values.length - 1), y: h - pad - ((v - min) / range) * (h - pad * 2) }));
+  const path = pts.map((p, i) => `${i ? "L" : "M"}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+  return <svg viewBox={`0 0 ${w} ${h}`} className="h-6 w-full text-brand-500/70" preserveAspectRatio="none" aria-hidden="true">
+    <path d={path} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>;
+}
+
+function KpiCard({ label, value, suffix, icon, href, spark }: { label: string; value: number; suffix?: string; icon: ReactNode; href: string; spark?: DashboardMetricSpark }) {
   return <Link href={href} className="group flex flex-col gap-2.5 rounded-[16px] border border-border/70 bg-surface/95 p-3.5 shadow-[0_1px_2px_rgba(15,23,42,.03)] transition-all hover:-translate-y-0.5 hover:border-brand-600/25 hover:shadow-[0_8px_20px_rgba(15,23,42,.06)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">
     <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">{icon}</span>
     <span className="min-w-0">
       <span className="flex items-baseline gap-1"><strong className="text-[16px] font-bold leading-none tabular-nums text-ink-900 group-hover:text-brand-700">{value}</strong>{suffix && <span className="text-[8.5px] font-medium text-ink-400">{suffix}</span>}</span>
       <span className="mt-1.5 block truncate text-[9px] font-medium text-ink-400">{label}</span>
+      {spark && spark.trend !== null ? (
+        <span className={`mt-0.5 block text-[8px] font-semibold ${spark.trend > 0 ? "text-emerald" : spark.trend < 0 ? "text-rose" : "text-ink-400"}`}>{spark.trend > 0 ? "↑" : spark.trend < 0 ? "↓" : "—"} {spark.trend !== 0 ? Math.abs(spark.trend) : "stabil"}{spark.trend !== 0 ? " dari data sebelumnya" : ""}</span>
+      ) : <span className="mt-0.5 block text-[8px] font-medium text-ink-300">Histori terkumpul mulai hari ini</span>}
     </span>
+    {spark && spark.values.length >= 2 && <MiniSpark values={spark.values} />}
   </Link>;
 }
 
-function KpiRow({ metrics }: { metrics: DashboardKeyMetrics }) {
+function KpiRow({ metrics, metricTrends }: { metrics: DashboardKeyMetrics; metricTrends: DashboardMetricTrends | null }) {
   return <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
-    <KpiCard label="Guru Aktif" value={metrics.totalGuruAktif} icon={<Users size={16} />} href="/guru" />
-    <KpiCard label="Kelas" value={metrics.totalKelas} icon={<Layers size={16} />} href="/kelas" />
-    <KpiCard label="Mata Pelajaran" value={metrics.totalMataPelajaranAktif} icon={<BookOpen size={16} />} href="/mata-pelajaran" />
-    <KpiCard label="Ruangan" value={metrics.totalRuangan} icon={<DoorOpen size={16} />} href="/ruangan" />
-    <KpiCard label="Total JTM" value={metrics.totalJtm} suffix="JP/minggu" icon={<Clock3 size={16} />} href="/analitik" />
-    <KpiCard label="Jadwal Aktif" value={metrics.totalJadwalCommitted} icon={<CalendarCheck2 size={16} />} href="/jadwal" />
+    <KpiCard label="Guru Aktif" value={metrics.totalGuruAktif} icon={<Users size={16} />} href="/guru" spark={metricTrends?.totalGuruAktif} />
+    <KpiCard label="Kelas" value={metrics.totalKelas} icon={<Layers size={16} />} href="/kelas" spark={metricTrends?.totalKelas} />
+    <KpiCard label="Mata Pelajaran" value={metrics.totalMataPelajaranAktif} icon={<BookOpen size={16} />} href="/mata-pelajaran" spark={metricTrends?.totalMataPelajaranAktif} />
+    <KpiCard label="Ruangan" value={metrics.totalRuangan} icon={<DoorOpen size={16} />} href="/ruangan" spark={metricTrends?.totalRuangan} />
+    <KpiCard label="Total JTM" value={metrics.totalJtm} suffix="JP/minggu" icon={<Clock3 size={16} />} href="/analitik" spark={metricTrends?.totalJtm} />
+    <KpiCard label="Jadwal Aktif" value={metrics.totalJadwalCommitted} icon={<CalendarCheck2 size={16} />} href="/jadwal" spark={metricTrends?.totalJadwalCommitted} />
   </div>;
 }
 
@@ -319,7 +335,7 @@ function greetingSalutation(): string {
   return "Selamat malam";
 }
 
-export default function DashboardExperience({ schoolName, adminName, context, metrics, jpInsight, workload, heatmap, heatmapGrid, rooms, heatmapGridByRoom, bebanDistribution, workloadFull, agenda, activity, guruList, notifications }: { schoolName: string; adminName: string | null; context: string | null; metrics: DashboardKeyMetrics; jpInsight: DashboardJpInsight; workload: DashboardWorkloadEntry[]; heatmap: DashboardHeatmapDay[]; heatmapGrid: DashboardHeatmapGridDay[]; rooms: DashboardRoomLite[]; heatmapGridByRoom: Record<string, DashboardHeatmapGridDay[]>; bebanDistribution: DashboardBebanDistribution; workloadFull: DashboardWorkloadFullEntry[]; agenda: DashboardAgendaEntry[]; activity: DashboardActivityEntry[]; guruList: GuruLite[]; notifications: NotificationEntry[] }) {
+export default function DashboardExperience({ schoolName, adminName, context, metrics, metricTrends, jpInsight, workload, heatmap, heatmapGrid, rooms, heatmapGridByRoom, bebanDistribution, workloadFull, agenda, activity, guruList, notifications }: { schoolName: string; adminName: string | null; context: string | null; metrics: DashboardKeyMetrics; metricTrends: DashboardMetricTrends | null; jpInsight: DashboardJpInsight; workload: DashboardWorkloadEntry[]; heatmap: DashboardHeatmapDay[]; heatmapGrid: DashboardHeatmapGridDay[]; rooms: DashboardRoomLite[]; heatmapGridByRoom: Record<string, DashboardHeatmapGridDay[]>; bebanDistribution: DashboardBebanDistribution; workloadFull: DashboardWorkloadFullEntry[]; agenda: DashboardAgendaEntry[]; activity: DashboardActivityEntry[]; guruList: GuruLite[]; notifications: NotificationEntry[] }) {
   const guruByName = new Map(guruList.map((g) => [g.namaGuru, g]));
   const bebanTertinggi = workloadFull.slice(0, 4);
   const salutation = useMemo(() => greetingSalutation(), []);
@@ -332,7 +348,7 @@ export default function DashboardExperience({ schoolName, adminName, context, me
       </div>
       <Link href="/analitik" className="hidden items-center gap-1 rounded-full border border-border bg-surface px-3 py-1.5 text-[10px] font-semibold text-ink-600 shadow-sm hover:border-brand-600/25 hover:text-brand-700 sm:flex">Analitik <ArrowRight size={12} /></Link>
     </header>
-    <KpiRow metrics={metrics} />
+    <KpiRow metrics={metrics} metricTrends={metricTrends} />
     <div className="grid min-h-0 items-start gap-3 lg:grid-cols-[1fr_320px]">
       {/* Kolom kiri utama */}
       <div className="flex min-w-0 flex-col gap-3">

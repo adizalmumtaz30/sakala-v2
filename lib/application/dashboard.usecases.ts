@@ -20,9 +20,19 @@ import { listKelas } from "@/lib/application/kelas.usecases";
 import { listRuangan } from "@/lib/application/ruangan.usecases";
 import { listPembagianMengajar } from "@/lib/application/pembagianMengajar.usecases";
 import { scheduleAssignmentRepository } from "@/lib/data-access/scheduleAssignment.repository";
+import { dashboardMetricSnapshotRepository } from "@/lib/data-access/dashboardMetricSnapshot.repository";
 import { summarizeJp, type JpSummaryStatus } from "@/lib/domain/pembagianMengajar";
 import type { SchoolProfile } from "@/lib/domain/schoolProfile";
 import type { AcademicContext } from "@/lib/domain/academicContext";
+
+export interface DashboardMetricSpark {
+  /** Nilai historis menaik berdasarkan tanggal (termasuk hari ini), maks 8 titik. Kosong kalau belum ada histori tersimpan. */
+  values: number[];
+  /** Selisih vs titik sebelumnya. null kalau belum ada pembanding (baru 1 hari/histori kosong) — JANGAN ditampilkan sebagai 0 atau dikarang. */
+  trend: number | null;
+}
+
+export type DashboardMetricTrends = Record<"totalGuruAktif" | "totalKelas" | "totalMataPelajaranAktif" | "totalRuangan" | "totalJtm" | "totalJadwalCommitted", DashboardMetricSpark>;
 
 export interface DashboardKeyMetrics {
   totalGuruAktif: number;
@@ -55,6 +65,8 @@ export interface DashboardSummary {
   jpInsight: DashboardJpInsight;
   /** Top 5 guru berdasarkan total jam mengajar committed — kosong kalau belum ada jadwal committed. */
   workloadTop: DashboardWorkloadEntry[];
+  /** Sparkline+trend per KPI card, dari histori snapshot harian nyata (bukan fabrikasi) — null kalau belum ada konteks aktif. */
+  metricTrends: DashboardMetricTrends | null;
 }
 
 const EMPTY_JP_COUNT: Record<JpSummaryStatus, number> = { kosong: 0, sebagian: 0, penuh: 0, lebih: 0 };
@@ -94,6 +106,7 @@ export async function getDashboardSummary(supabase: SupabaseClient): Promise<Das
       metrics: baseMetrics,
       jpInsight: { totalKombinasi: 0, countByStatus: EMPTY_JP_COUNT, completionPercent: 0 },
       workloadTop: [],
+      metricTrends: null,
     };
   }
 
@@ -126,16 +139,50 @@ export async function getDashboardSummary(supabase: SupabaseClient): Promise<Das
     .sort((a, b) => b.totalJamMengajar - a.totalJamMengajar)
     .slice(0, 5);
 
+  const finalMetrics: DashboardKeyMetrics = {
+    ...baseMetrics,
+    totalPembagianMengajarAktif: pembagianAktif.length,
+    totalJadwalCommitted: committed.length,
+    totalJtm,
+  };
+
+  // Sparkline+trend KPI card: upsert snapshot hari ini (idempotent, nilai selalu paling baru
+  // sepanjang hari), lalu ambil histori nyata. Kalau gagal (mis. migration belum sampai di
+  // lingkungan tertentu), dashboard tetap tampil — cuma tanpa sparkline/trend, bukan error.
+  let metricTrends: DashboardMetricTrends | null = null;
+  try {
+    await dashboardMetricSnapshotRepository.upsertToday(supabase, activeContext.id, {
+      guruAktif: finalMetrics.totalGuruAktif,
+      kelas: finalMetrics.totalKelas,
+      mapelAktif: finalMetrics.totalMataPelajaranAktif,
+      ruangan: finalMetrics.totalRuangan,
+      totalJtm: finalMetrics.totalJtm,
+      jadwalCommitted: finalMetrics.totalJadwalCommitted,
+    });
+    const history = await dashboardMetricSnapshotRepository.listRecent(supabase, activeContext.id, 8);
+    const spark = (pick: (r: (typeof history)[number]) => number): DashboardMetricSpark => {
+      const values = history.map(pick);
+      const trend = values.length >= 2 ? values[values.length - 1] - values[values.length - 2] : null;
+      return { values, trend };
+    };
+    metricTrends = {
+      totalGuruAktif: spark((r) => r.guruAktif),
+      totalKelas: spark((r) => r.kelas),
+      totalMataPelajaranAktif: spark((r) => r.mapelAktif),
+      totalRuangan: spark((r) => r.ruangan),
+      totalJtm: spark((r) => r.totalJtm),
+      totalJadwalCommitted: spark((r) => r.jadwalCommitted),
+    };
+  } catch {
+    metricTrends = null;
+  }
+
   return {
     schoolProfile,
     activeContext,
-    metrics: {
-      ...baseMetrics,
-      totalPembagianMengajarAktif: pembagianAktif.length,
-      totalJadwalCommitted: committed.length,
-      totalJtm,
-    },
+    metrics: finalMetrics,
     jpInsight: { totalKombinasi: pembagianAktif.length, countByStatus, completionPercent },
     workloadTop,
+    metricTrends,
   };
 }
