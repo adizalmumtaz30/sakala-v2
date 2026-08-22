@@ -3,39 +3,61 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, GraduationCap, Sparkles, CalendarDays, BarChart3, History, Bell, Bot, Compass, BrainCircuit, ChevronLeft, ChevronRight, LifeBuoy, ArrowUpRight } from "lucide-react";
+import { LayoutDashboard, Users, GraduationCap, BrainCircuit, Target, BookOpen, School2, DoorOpen, Split, Sparkles, CalendarDays, BarChart3, History, Bell, Bot, Compass, ChevronLeft, ChevronRight, LifeBuoy, ArrowUpRight } from "lucide-react";
 
-const coreNav = [
-  { key: "dashboard", label: "Dashboard", href: "/", icon: LayoutDashboard },
-  { key: "data", label: "Data", href: "/guru", icon: Users },
-  { key: "akademik", label: "Akademik", href: "/akademik", icon: GraduationCap },
-  { key: "jadwal-cerdas", label: "Jadwal Cerdas", href: "/jadwal-cerdas", icon: Sparkles },
-  { key: "jadwal", label: "Jadwal", href: "/jadwal", icon: CalendarDays },
-  { key: "analitik", label: "Analitik", href: "/analitik", icon: BarChart3 },
-  { key: "riwayat", label: "Riwayat", href: "/riwayat", icon: History },
-  { key: "notifikasi", label: "Notifikasi", href: "/notifikasi", icon: Bell },
-  { key: "ai", label: "AI", href: "/ai", icon: Bot },
-  { key: "navigasi", label: "Navigasi", href: "/navigasi", icon: Compass },
-];
+type NavItem = { label: string; href: string; icon: typeof LayoutDashboard; match?: (path: string) => boolean };
+type NavSection = { section: string; items: NavItem[] };
 
-const dataSubnav = [
-  { label: "Guru", href: "/guru" },
-  { label: "Mata Pelajaran", href: "/mata-pelajaran" },
-  { label: "Kelas", href: "/kelas" },
-  { label: "Ruangan", href: "/ruangan" },
-  { label: "Pembagian Mengajar", href: "/pembagian-mengajar" },
-];
-
-const academicSubnav = [
-  { label: "Academic Context", href: "/akademik", icon: GraduationCap },
-  { label: "Generate Kurikulum", href: "/akademik/mata-pelajaran", icon: BrainCircuit },
-  { label: "Target JP", href: "/akademik/target-jp", icon: CalendarDays },
+// Urutan & pengelompokan mengikuti alur kerja operator sekolah: siapkan konteks akademik & kurikulum dulu,
+// baru isi data master, lalu susun jadwal, lalu pantau lewat analitik. Generate Kurikulum dipromosikan
+// jadi item inti (bukan subnav tersembunyi) karena ini fitur utama, bukan pelengkap.
+const sections: NavSection[] = [
+  {
+    section: "Utama",
+    items: [{ label: "Dashboard", href: "/", icon: LayoutDashboard, match: (p) => p === "/" }],
+  },
+  {
+    section: "Akademik",
+    items: [
+      { label: "Konteks Akademik", href: "/akademik", icon: GraduationCap, match: (p) => p === "/akademik" },
+      { label: "Generate Kurikulum", href: "/akademik/generate-kurikulum", icon: BrainCircuit, match: (p) => p.startsWith("/akademik/generate-kurikulum") },
+      { label: "Target JP", href: "/akademik/target-jp", icon: Target, match: (p) => p.startsWith("/akademik/target-jp") },
+    ],
+  },
+  {
+    section: "Data Master",
+    items: [
+      { label: "Guru", href: "/guru", icon: Users },
+      { label: "Mata Pelajaran", href: "/mata-pelajaran", icon: BookOpen },
+      { label: "Kelas", href: "/kelas", icon: School2 },
+      { label: "Ruangan", href: "/ruangan", icon: DoorOpen },
+      { label: "Pembagian Mengajar", href: "/pembagian-mengajar", icon: Split },
+    ],
+  },
+  {
+    section: "Jadwal",
+    items: [
+      { label: "Jadwal Cerdas", href: "/jadwal-cerdas", icon: Sparkles },
+      { label: "Jadwal", href: "/jadwal", icon: CalendarDays },
+    ],
+  },
+  {
+    section: "Analitik",
+    items: [{ label: "Analitik", href: "/analitik", icon: BarChart3 }],
+  },
+  {
+    section: "Sistem",
+    items: [
+      { label: "Riwayat", href: "/riwayat", icon: History },
+      { label: "Notifikasi", href: "/notifikasi", icon: Bell },
+      { label: "AI", href: "/ai", icon: Bot },
+      { label: "Navigasi", href: "/navigasi", icon: Compass },
+    ],
+  },
 ];
 
 export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   const pathname = usePathname();
-  const inDataCore = dataSubnav.some((s) => pathname.startsWith(s.href));
-  const inAcademic = academicSubnav.some((s) => pathname.startsWith(s.href));
 
   return (
     <aside className="fixed inset-y-0 left-0 z-30 flex flex-col overflow-visible border-r border-border bg-surface transition-[width] duration-200 ease-out" style={{ width: collapsed ? 68 : 240 }}>
@@ -47,36 +69,27 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
         {!collapsed && <div className="min-w-0 leading-tight"><p className="truncate text-sm font-bold tracking-tight text-ink-900">SAKALA</p><p className="truncate text-[10px] font-semibold tracking-widest text-ink-400">V2 ENTERPRISE</p></div>}
       </div>
       <nav className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-4">
-        <div className="flex flex-col gap-1">
-          {coreNav.map((item) => {
-            const active = item.key === "data" ? inDataCore : item.key === "akademik" ? inAcademic : pathname === item.href;
-            const Icon = item.icon;
-            return (
-              <div key={item.key}>
-                <Link href={item.href} title={collapsed ? item.label : undefined} className={`group relative flex items-center gap-3 rounded-[10px] py-2 text-[13px] font-medium transition-all duration-150 ${collapsed ? "justify-center px-0" : "px-3"} ${active ? "bg-brand-50 text-brand-700" : "text-ink-700 hover:bg-surface-muted"}`}>
-                  {active && <span className={`absolute top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-brand-600 ${collapsed ? "left-0.5" : "left-0"}`} />}
-                  <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] ${active ? "bg-brand-100 text-brand-600" : "text-ink-400 group-hover:text-ink-700"}`}>
-                    <Icon size={18} strokeWidth={1.8} />
-                  </span>
-                  {!collapsed && item.label}
-                </Link>
-                {!collapsed && item.key === "data" && inDataCore && (
-                  <div className="ml-[26px] mt-1 flex flex-col gap-0.5 border-l border-border pl-3">
-                    {dataSubnav.map((sub) => <Link key={sub.href} href={sub.href} className={`rounded-md px-2.5 py-1.5 text-[12px] font-medium ${pathname.startsWith(sub.href) ? "text-brand-700" : "text-ink-500 hover:text-ink-900"}`}>{sub.label}</Link>)}
-                  </div>
-                )}
-                {!collapsed && item.key === "akademik" && inAcademic && (
-                  <div className="ml-[26px] mt-1 flex flex-col gap-0.5 border-l border-border pl-3">
-                    {academicSubnav.map((sub) => {
-                      const SubIcon = sub.icon;
-                      const activeSub = pathname.startsWith(sub.href);
-                      return <Link key={sub.href} href={sub.href} className={`flex items-center gap-2 rounded-md px-2.5 py-1.5 text-[12px] font-medium ${activeSub ? "bg-brand-50 text-brand-700" : "text-ink-500 hover:bg-surface-muted hover:text-ink-900"}`}><SubIcon size={14} strokeWidth={1.8} />{sub.label}</Link>;
-                    })}
-                  </div>
-                )}
+        <div className="flex flex-col gap-4">
+          {sections.map((group) => (
+            <div key={group.section}>
+              {!collapsed && <p className="mb-1.5 px-3 text-[9.5px] font-bold uppercase tracking-[0.1em] text-ink-300">{group.section}</p>}
+              <div className="flex flex-col gap-1">
+                {group.items.map((item) => {
+                  const active = item.match ? item.match(pathname) : pathname === item.href || pathname.startsWith(`${item.href}/`);
+                  const Icon = item.icon;
+                  return (
+                    <Link key={item.href} href={item.href} title={collapsed ? item.label : undefined} className={`group relative flex items-center gap-3 rounded-[10px] py-2 text-[13px] font-medium transition-all duration-150 ${collapsed ? "justify-center px-0" : "px-3"} ${active ? "bg-brand-50 text-brand-700" : "text-ink-700 hover:bg-surface-muted"}`}>
+                      {active && <span className={`absolute top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-brand-600 ${collapsed ? "left-0.5" : "left-0"}`} />}
+                      <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] ${active ? "bg-brand-100 text-brand-600" : "text-ink-400 group-hover:text-ink-700"}`}>
+                        <Icon size={18} strokeWidth={1.8} />
+                      </span>
+                      {!collapsed && item.label}
+                    </Link>
+                  );
+                })}
               </div>
-            );
-          })}
+            </div>
+          ))}
         </div>
       </nav>
       {!collapsed && (
