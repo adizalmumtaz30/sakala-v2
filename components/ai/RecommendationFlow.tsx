@@ -61,12 +61,16 @@ export default function RecommendationFlow({
 }) {
   const [step, setStep] = useState<FlowStep>("finding");
   const [intent, setIntent] = useState<AiCopilotIntent>("complete_remaining_jp");
-  const [plan, setPlan] = useState<AiSchedulePlan | null>(null);
+  const [primaryPlan, setPrimaryPlan] = useState<AiSchedulePlan | null>(null);
+  const [altPlan, setAltPlan] = useState<AiSchedulePlan | null>(null);
+  const [variant, setVariant] = useState<"primary" | "alt">("primary");
   const [error, setError] = useState<string | null>(null);
   const [savedCount, setSavedCount] = useState<number | null>(null);
   const [skippedCount, setSkippedCount] = useState(0);
   const [whyOpen, setWhyOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+
+  const plan = variant === "alt" && altPlan ? altPlan : primaryPlan;
 
   const deficits = classStatus.subjectDeficits;
   if (deficits.length === 0) return null; // tidak ada temuan untuk kelas ini — komponen tidak render apa pun.
@@ -78,10 +82,19 @@ export default function RecommendationFlow({
     setError(null);
     setIntent(chosenIntent);
     setWhyOpen(false);
+    setVariant("primary");
+    setAltPlan(null);
     startTransition(async () => {
-      const result = await runAiCopilotIntentAction(chosenIntent, classStatus.id);
-      if (!result.ok) { setError(result.error); return; }
-      setPlan(result.data);
+      // §23 Alternative Solutions — untuk temuan JP kurang, tawarkan juga cara lain
+      // (memanfaatkan slot kosong) sebagai pembanding, bukan cuma satu jalan.
+      const wantsAlternative = chosenIntent === "complete_remaining_jp";
+      const [primaryResult, altResult] = await Promise.all([
+        runAiCopilotIntentAction(chosenIntent, classStatus.id),
+        wantsAlternative ? runAiCopilotIntentAction("fill_empty_slots", classStatus.id) : Promise.resolve(null),
+      ]);
+      if (!primaryResult.ok) { setError(primaryResult.error); return; }
+      setPrimaryPlan(primaryResult.data);
+      if (altResult?.ok && altResult.data.result.candidates.length > 0) setAltPlan(altResult.data);
       setStep("solution");
     });
   }
@@ -101,7 +114,9 @@ export default function RecommendationFlow({
 
   function batal() {
     setStep("finding");
-    setPlan(null);
+    setPrimaryPlan(null);
+    setAltPlan(null);
+    setVariant("primary");
     setError(null);
   }
 
@@ -152,6 +167,20 @@ export default function RecommendationFlow({
         <div><p className="text-ink-400">Slot ditemukan</p><p className="mt-0.5 font-semibold tabular-nums text-ink-800">{plan.result.candidates.length}</p></div>
         <div><p className="text-ink-400">Mapel terkait</p><p className="mt-0.5 font-semibold tabular-nums text-ink-800">{targets.length || deficits.length}</p></div>
         <p className="col-span-2 mt-1 text-ink-400 sm:col-span-4">Data diperiksa: Target JP · Mata Pelajaran · Pembagian Mengajar · Jadwal committed.</p>
+      </div>}
+
+      {/* §23 Alternative Solutions — tawarkan cara lain, bukan cuma satu jalan. */}
+      {altPlan && <div className="grid gap-2 sm:grid-cols-2">
+        <button type="button" onClick={() => setVariant("primary")} className={`rounded-xl border p-3 text-left transition-colors ${variant === "primary" ? "border-brand-600/40 bg-brand-50" : "border-border bg-surface hover:border-brand-600/20"}`}>
+          <p className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-brand-600">★ Disarankan</p>
+          <p className="mt-1 text-[12px] font-semibold text-ink-900">{INTENT_LABEL.complete_remaining_jp}</p>
+          <p className="mt-0.5 text-[11px] text-ink-500">{primaryPlan?.result.candidates.length ?? 0} slot · mengisi tepat mapel yang kurang</p>
+        </button>
+        <button type="button" onClick={() => setVariant("alt")} className={`rounded-xl border p-3 text-left transition-colors ${variant === "alt" ? "border-brand-600/40 bg-brand-50" : "border-border bg-surface hover:border-brand-600/20"}`}>
+          <p className="text-[10px] font-bold uppercase tracking-wide text-ink-400">Alternatif</p>
+          <p className="mt-1 text-[12px] font-semibold text-ink-900">{INTENT_LABEL.fill_empty_slots}</p>
+          <p className="mt-0.5 text-[11px] text-ink-500">{altPlan.result.candidates.length} slot · memanfaatkan slot kosong yang tersedia</p>
+        </button>
       </div>}
       <p className="text-[12px] leading-5 text-ink-500">{plan.explanation}</p>
 
@@ -234,7 +263,7 @@ export default function RecommendationFlow({
         <div className="min-w-0">
           <p className="text-[11px] font-semibold text-ink-900">Saya menemukan {sisaDeficit.length} hal lagi</p>
           <p className="mt-0.5 text-[11.5px] leading-5 text-ink-500">{sisaDeficit[0].subjectName} masih kekurangan {sisaDeficit[0].remainingJp} JP.</p>
-          <Button size="sm" className="mt-2" onClick={() => { setStep("finding"); setPlan(null); setSavedCount(null); }}>Lihat solusi</Button>
+          <Button size="sm" className="mt-2" onClick={() => { setStep("finding"); setPrimaryPlan(null); setAltPlan(null); setVariant("primary"); setSavedCount(null); }}>Lihat solusi</Button>
         </div>
       </div> : <p className="border-t border-border/60 pt-3 text-[12px] text-ink-500">Tidak ada masalah JP lain yang saya temukan untuk kelas ini saat ini.</p>}
     </Card>;
