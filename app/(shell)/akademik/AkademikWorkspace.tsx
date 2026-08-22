@@ -26,7 +26,9 @@ import type { JenisSlot, SlotTemplate, SlotTemplateDraft } from "@/lib/domain/sl
 import { formatJenisSlot } from "@/lib/domain/slotTemplate";
 import {
   createAcademicContextAction,
+  updateAcademicContextAction,
   setActiveAcademicContextAction,
+  deactivateAcademicContextAction,
   deleteAcademicContextAction,
   saveSchoolProfileAction,
   createPeriodeAkademikAction,
@@ -77,6 +79,7 @@ export default function AkademikWorkspace({
 
   const [contextModalOpen, setContextModalOpen] = useState(false);
   const [contextError, setContextError] = useState<string | null>(null);
+  const [editingContext, setEditingContext] = useState<AcademicContext | null>(null);
 
   const [periodeModalOpen, setPeriodeModalOpen] = useState(false);
   const [periodeEditing, setPeriodeEditing] = useState<PeriodeAkademik | null>(null);
@@ -144,17 +147,28 @@ export default function AkademikWorkspace({
     const institution = (formData.get("institution") as Institution) ?? "Kemenag";
 
     startTransition(async () => {
-      const result = await createAcademicContextAction(tahunPelajaran, semester, jenjang, institution);
+      const result = editingContext
+        ? await updateAcademicContextAction(editingContext.id, tahunPelajaran, semester, jenjang, institution)
+        : await createAcademicContextAction(tahunPelajaran, semester, jenjang, institution);
       if (!result.ok) {
         setContextError(result.error);
         return;
       }
-      setContexts((prev) =>
-        result.data.isActive ? [...prev.map((c) => ({ ...c, isActive: false })), result.data] : [...prev, result.data]
-      );
+      setContexts((prev) => {
+        const withoutTarget = prev.filter((c) => c.id !== result.data.id);
+        const next = result.data.isActive ? withoutTarget.map((c) => ({ ...c, isActive: false })) : withoutTarget;
+        return [...next, result.data];
+      });
       setContextModalOpen(false);
       setContextError(null);
+      setEditingContext(null);
     });
+  }
+
+  function openEditContext(context: AcademicContext) {
+    setEditingContext(context);
+    setContextError(null);
+    setContextModalOpen(true);
   }
 
   function handleSetActive(context: AcademicContext) {
@@ -165,6 +179,17 @@ export default function AkademikWorkspace({
       setContexts((prev) => prev.map((c) => ({ ...c, isActive: c.id === result.data.id })));
       // Konteks aktif berganti — Periode Akademik & Jam Pelajaran yang tampil
       // harus ikut berganti. Reload halaman supaya server component fetch ulang.
+      window.location.reload();
+    });
+  }
+
+  function handleDeactivate(context: AcademicContext) {
+    if (!context.isActive) return;
+    if (!confirm(`Nonaktifkan konteks ${formatContextLabel(context)}? Halaman yang bergantung pada konteks aktif (Dashboard, Jadwal, dst) akan menampilkan status "belum siap" sampai konteks lain diaktifkan.`)) return;
+    startTransition(async () => {
+      const result = await deactivateAcademicContextAction(context.id);
+      if (!result.ok) return;
+      setContexts((prev) => prev.map((c) => (c.id === context.id ? { ...c, isActive: false } : c)));
       window.location.reload();
     });
   }
@@ -496,7 +521,7 @@ export default function AkademikWorkspace({
                   <p className="text-[12.5px] text-ink-500">Satu konteks aktif menjadi dasar semua query & mutation akademik.</p>
                 </div>
               </div>
-              <Button size="sm" onClick={() => { setContextError(null); setContextModalOpen(true); }}>
+              <Button size="sm" onClick={() => { setEditingContext(null); setContextError(null); setContextModalOpen(true); }}>
                 <Plus size={14} /> Tambah Konteks
               </Button>
             </div>
@@ -512,6 +537,8 @@ export default function AkademikWorkspace({
                   <tr className="border-b border-border text-[11.5px] uppercase tracking-wide text-ink-400">
                     <th className="px-5 py-3 font-medium">Tahun Pelajaran</th>
                     <th className="px-5 py-3 font-medium">Semester</th>
+                    <th className="px-5 py-3 font-medium">Jenjang</th>
+                    <th className="px-5 py-3 font-medium">Kementerian/Badan</th>
                     <th className="px-5 py-3 font-medium">Status</th>
                     <th className="px-5 py-3 font-medium text-right">Aksi</th>
                   </tr>
@@ -521,6 +548,8 @@ export default function AkademikWorkspace({
                     <tr key={context.id} className="border-b border-border last:border-0 hover:bg-surface-muted/60">
                       <td className="px-5 py-3.5 font-medium text-ink-900">{context.tahunPelajaran}</td>
                       <td className="px-5 py-3.5 capitalize text-ink-700">{context.semester}</td>
+                      <td className="px-5 py-3.5 text-ink-700">{context.jenjang}</td>
+                      <td className="px-5 py-3.5 text-ink-700">{context.institution}</td>
                       <td className="px-5 py-3.5">
                         <Badge tone={context.isActive ? "success" : "neutral"}>{context.isActive ? "Aktif" : "Nonaktif"}</Badge>
                       </td>
@@ -535,11 +564,30 @@ export default function AkademikWorkspace({
                               <CheckCircle2 size={14} /> Aktifkan
                             </button>
                           )}
+                          {context.isActive && (
+                            <button
+                              onClick={() => handleDeactivate(context)}
+                              disabled={isPending}
+                              className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-[12px] font-medium text-ink-500 hover:bg-surface-muted disabled:opacity-50"
+                            >
+                              Nonaktifkan
+                            </button>
+                          )}
+                          <button
+                            onClick={() => openEditContext(context)}
+                            disabled={isPending}
+                            className="rounded-lg p-1.5 text-ink-400 hover:bg-brand-50 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-30"
+                            aria-label="Edit"
+                            title="Ubah tahun/semester/jenjang/kementerian — aman dilakukan walau konteks sedang aktif."
+                          >
+                            <Pencil size={15} />
+                          </button>
                           <button
                             onClick={() => handleDeleteContext(context)}
                             disabled={context.isActive || isPending}
                             className="rounded-lg p-1.5 text-ink-400 hover:bg-rose-50 hover:text-rose disabled:cursor-not-allowed disabled:opacity-30"
                             aria-label="Hapus"
+                            title={context.isActive ? "Tidak bisa menghapus konteks yang sedang aktif. Aktifkan konteks lain dulu, atau pakai Edit untuk mengubah nilainya." : "Hapus konteks ini"}
                           >
                             <Trash2 size={15} />
                           </button>
@@ -785,26 +833,26 @@ export default function AkademikWorkspace({
       </Modal>
 
       {/* ================= Modal: Konteks Akademik ================= */}
-      <Modal open={contextModalOpen} onClose={() => setContextModalOpen(false)} title="Tambah Konteks Akademik">
+      <Modal open={contextModalOpen} onClose={() => setContextModalOpen(false)} title={editingContext ? "Ubah Konteks Akademik" : "Tambah Konteks Akademik"}>
         <form action={handleCreateContext} className="flex flex-col gap-4">
-          <Input name="tahunPelajaran" label="Tahun Pelajaran" placeholder="2025/2026" required />
-          <SelectField name="semester" label="Semester" defaultValue="ganjil">
+          <Input name="tahunPelajaran" label="Tahun Pelajaran" placeholder="2025/2026" defaultValue={editingContext?.tahunPelajaran} required />
+          <SelectField name="semester" label="Semester" defaultValue={editingContext?.semester ?? "ganjil"}>
             <option value="ganjil">Ganjil</option>
             <option value="genap">Genap</option>
           </SelectField>
-          <SelectField name="jenjang" label="Jenjang" defaultValue="MTs">
+          <SelectField name="jenjang" label="Jenjang" defaultValue={editingContext?.jenjang ?? "MTs"}>
             {JENJANG_OPTIONS.map((j) => <option key={j} value={j}>{j}</option>)}
           </SelectField>
-          <SelectField name="institution" label="Kementerian/Badan" defaultValue="Kemenag">
+          <SelectField name="institution" label="Kementerian/Badan" defaultValue={editingContext?.institution ?? "Kemenag"}>
             {INSTITUTION_OPTIONS.map((i) => <option key={i} value={i}>{i}</option>)}
           </SelectField>
           {contextError && <p className="text-[11.5px] text-rose">{contextError}</p>}
           <div className="mt-2 flex justify-end gap-2">
-            <Button type="button" variant="secondary" onClick={() => setContextModalOpen(false)}>
+            <Button type="button" variant="secondary" onClick={() => { setContextModalOpen(false); setEditingContext(null); }}>
               Batal
             </Button>
             <Button type="submit" loading={isPending}>
-              Tambah Konteks
+              {editingContext ? "Simpan Perubahan" : "Tambah Konteks"}
             </Button>
           </div>
         </form>

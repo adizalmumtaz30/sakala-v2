@@ -53,6 +53,10 @@ export async function setActiveAcademicContext(supabase: SupabaseClient, id: str
   return academicContextRepository.setActive(supabase, id);
 }
 
+export async function deactivateAcademicContext(supabase: SupabaseClient, id: string): Promise<AcademicContext> {
+  return academicContextRepository.deactivate(supabase, id);
+}
+
 export async function deleteAcademicContext(supabase: SupabaseClient, context: AcademicContext): Promise<void> {
   if (context.isActive) {
     throw new AcademicContextValidationError(
@@ -61,4 +65,25 @@ export async function deleteAcademicContext(supabase: SupabaseClient, context: A
     );
   }
   return academicContextRepository.remove(supabase, context.id);
+}
+
+// Jenjang & Kementerian/Badan (dan tahun/semester) bisa diperbaiki tanpa harus
+// hapus-lalu-buat-ulang — termasuk untuk context yang sedang aktif, karena
+// mengedit field-nya tidak mengubah relasi data lain yang menunjuk ke id ini.
+export async function updateAcademicContext(
+  supabase: SupabaseClient,
+  id: string,
+  draft: AcademicContextDraft
+): Promise<AcademicContext> {
+  validateAcademicContextDraft(draft);
+
+  const existing = await academicContextRepository.findByPair(supabase, draft.tahunPelajaran.trim(), draft.semester);
+  if (existing && existing.id !== id) {
+    throw new AcademicContextValidationError(
+      "tahunPelajaran",
+      "Konteks dengan tahun pelajaran dan semester ini sudah ada."
+    );
+  }
+
+  return academicContextRepository.update(supabase, id, draft);
 }

@@ -50,6 +50,18 @@ export async function setActiveAcademicContextAction(id: string): Promise<Action
   }
 }
 
+export async function deactivateAcademicContextAction(id: string): Promise<ActionResult<AcademicContext>> {
+  try {
+    const supabase = await createClient();
+    const context = await academicContextUseCases.deactivateAcademicContext(supabase, id);
+    revalidatePath("/akademik");
+    revalidatePath("/");
+    return { ok: true, data: context };
+  } catch (err) {
+    return { ok: false, error: toContextMessage(err) };
+  }
+}
+
 export async function deleteAcademicContextAction(context: AcademicContext): Promise<ActionResult<null>> {
   try {
     const supabase = await createClient();
@@ -57,6 +69,25 @@ export async function deleteAcademicContextAction(context: AcademicContext): Pro
     revalidatePath("/akademik");
     revalidatePath("/");
     return { ok: true, data: null };
+  } catch (err) {
+    return { ok: false, error: toContextMessage(err) };
+  }
+}
+
+export async function updateAcademicContextAction(
+  id: string,
+  tahunPelajaran: string,
+  semester: Semester,
+  jenjang: Jenjang,
+  institution: Institution
+): Promise<ActionResult<AcademicContext>> {
+  try {
+    const supabase = await createClient();
+    const context = await academicContextUseCases.updateAcademicContext(supabase, id, { tahunPelajaran, semester, jenjang, institution });
+    revalidatePath("/akademik");
+    revalidatePath("/");
+    revalidatePath("/akademik/generate-kurikulum");
+    return { ok: true, data: context };
   } catch (err) {
     return { ok: false, error: toContextMessage(err) };
   }
