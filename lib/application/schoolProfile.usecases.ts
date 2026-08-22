@@ -41,7 +41,12 @@ export async function saveSchoolProfile(
     const isFirstEver = all.length === 0;
     await academicContextRepository.create(
       supabase,
-      { tahunPelajaran: draft.tahunPelajaranDefault, semester: draft.semesterDefault },
+      // Bootstrap otomatis saat School Profile pertama kali diisi — belum ada
+      // form untuk pilih jenjang/institution di titik ini, jadi pakai default
+      // yang sama dengan backfill data lama (MTs/Kemenag). Operator tetap bisa
+      // menambah context lain dengan jenjang/institution yang benar lewat
+      // "Tambah Konteks Akademik" di halaman Akademik.
+      { tahunPelajaran: draft.tahunPelajaranDefault, semester: draft.semesterDefault, jenjang: "MTs", institution: "Kemenag" },
       isFirstEver
     );
   }

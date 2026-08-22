@@ -24,7 +24,7 @@ export async function GET(request: Request) {
       // the context handoff to the client.
       const activeContext = await getActiveAcademicContext(supabase);
       const contexts = activeContext
-        ? [{ id: activeContext.id, tahun_pelajaran: activeContext.tahunPelajaran, semester: activeContext.semester, is_active: activeContext.isActive }]
+        ? [{ id: activeContext.id, tahun_pelajaran: activeContext.tahunPelajaran, semester: activeContext.semester, jenjang: activeContext.jenjang, institution: activeContext.institution, is_active: activeContext.isActive }]
         : [];
 
       let classes: Array<{ id: string; nama_rombel: string; tingkat: string; tahun_ajaran: string; semester: string }> = [];

@@ -3,25 +3,36 @@
 // di sini, tidak pernah memanggil Supabase langsung.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { AcademicContext, AcademicContextDraft } from "@/lib/domain/academicContext";
+import type { AcademicContext, AcademicContextDraft, Jenjang, Institution } from "@/lib/domain/academicContext";
+
+const SELECT_COLUMNS = "id, tahun_pelajaran, semester, jenjang, institution, is_active, created_at";
 
 type Row = {
   id: string;
   tahun_pelajaran: string;
   semester: "ganjil" | "genap";
+  jenjang: Jenjang;
+  institution: Institution;
   is_active: boolean;
   created_at: string;
 };
 
 function rowToEntity(row: Row): AcademicContext {
-  return { id: row.id, tahunPelajaran: row.tahun_pelajaran, semester: row.semester, isActive: row.is_active };
+  return {
+    id: row.id,
+    tahunPelajaran: row.tahun_pelajaran,
+    semester: row.semester,
+    jenjang: row.jenjang,
+    institution: row.institution,
+    isActive: row.is_active,
+  };
 }
 
 export const academicContextRepository = {
   async findAll(supabase: SupabaseClient): Promise<AcademicContext[]> {
     const { data, error } = await supabase
       .from("academic_context")
-      .select("id, tahun_pelajaran, semester, is_active, created_at")
+      .select(SELECT_COLUMNS)
       .order("tahun_pelajaran", { ascending: false })
       .order("semester", { ascending: true });
 
@@ -32,7 +43,7 @@ export const academicContextRepository = {
   async findActive(supabase: SupabaseClient): Promise<AcademicContext | null> {
     const { data, error } = await supabase
       .from("academic_context")
-      .select("id, tahun_pelajaran, semester, is_active, created_at")
+      .select(SELECT_COLUMNS)
       .eq("is_active", true)
       .maybeSingle();
 
@@ -47,7 +58,7 @@ export const academicContextRepository = {
   ): Promise<AcademicContext | null> {
     const { data, error } = await supabase
       .from("academic_context")
-      .select("id, tahun_pelajaran, semester, is_active, created_at")
+      .select(SELECT_COLUMNS)
       .eq("tahun_pelajaran", tahunPelajaran)
       .eq("semester", semester)
       .maybeSingle();
@@ -63,8 +74,14 @@ export const academicContextRepository = {
   ): Promise<AcademicContext> {
     const { data, error } = await supabase
       .from("academic_context")
-      .insert({ tahun_pelajaran: draft.tahunPelajaran.trim(), semester: draft.semester, is_active: isActive })
-      .select("id, tahun_pelajaran, semester, is_active, created_at")
+      .insert({
+        tahun_pelajaran: draft.tahunPelajaran.trim(),
+        semester: draft.semester,
+        jenjang: draft.jenjang,
+        institution: draft.institution,
+        is_active: isActive,
+      })
+      .select(SELECT_COLUMNS)
       .single();
 
     if (error) throw error;
@@ -89,7 +106,7 @@ export const academicContextRepository = {
       .from("academic_context")
       .update({ is_active: true })
       .eq("id", id)
-      .select("id, tahun_pelajaran, semester, is_active, created_at")
+      .select(SELECT_COLUMNS)
       .single();
 
     if (error) throw error;

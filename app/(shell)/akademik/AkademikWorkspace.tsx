@@ -14,8 +14,8 @@ import {
   CalendarClock,
   ListChecks,
 } from "lucide-react";
-import type { AcademicContext, Semester } from "@/lib/domain/academicContext";
-import { formatContextLabel } from "@/lib/domain/academicContext";
+import type { AcademicContext, Semester, Jenjang, Institution } from "@/lib/domain/academicContext";
+import { formatContextLabel, JENJANG_OPTIONS, INSTITUTION_OPTIONS } from "@/lib/domain/academicContext";
 import type { SchoolProfile } from "@/lib/domain/schoolProfile";
 import type { PeriodeAkademik, PeriodeAkademikDraft, StatusAktif as PeriodeStatus } from "@/lib/domain/periodeAkademik";
 import type { HariSekolah, JamPelajaran, JamPelajaranDraft, JenisJamPelajaran } from "@/lib/domain/jamPelajaran";
@@ -140,9 +140,11 @@ export default function AkademikWorkspace({
   function handleCreateContext(formData: FormData) {
     const tahunPelajaran = String(formData.get("tahunPelajaran") ?? "");
     const semester = (formData.get("semester") as Semester) ?? "ganjil";
+    const jenjang = (formData.get("jenjang") as Jenjang) ?? "SMP";
+    const institution = (formData.get("institution") as Institution) ?? "Kemenag";
 
     startTransition(async () => {
-      const result = await createAcademicContextAction(tahunPelajaran, semester);
+      const result = await createAcademicContextAction(tahunPelajaran, semester, jenjang, institution);
       if (!result.ok) {
         setContextError(result.error);
         return;
@@ -789,6 +791,12 @@ export default function AkademikWorkspace({
           <SelectField name="semester" label="Semester" defaultValue="ganjil">
             <option value="ganjil">Ganjil</option>
             <option value="genap">Genap</option>
+          </SelectField>
+          <SelectField name="jenjang" label="Jenjang" defaultValue="MTs">
+            {JENJANG_OPTIONS.map((j) => <option key={j} value={j}>{j}</option>)}
+          </SelectField>
+          <SelectField name="institution" label="Kementerian/Badan" defaultValue="Kemenag">
+            {INSTITUTION_OPTIONS.map((i) => <option key={i} value={i}>{i}</option>)}
           </SelectField>
           {contextError && <p className="text-[11.5px] text-rose">{contextError}</p>}
           <div className="mt-2 flex justify-end gap-2">
