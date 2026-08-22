@@ -119,8 +119,8 @@ function RekapJtm({ heatmap }: { heatmap: DashboardHeatmapDay[] }) {
     <div className="mb-3 flex gap-1 rounded-lg bg-surface-muted/60 p-0.5 text-[9.5px] font-semibold">
       {JTM_MODES.map((m) => <button key={m.key} type="button" onClick={() => setMode(m.key)} className={`flex-1 rounded-md px-2 py-1 transition-colors ${mode === m.key ? "bg-surface text-brand-700 shadow-sm" : "text-ink-400 hover:text-ink-700"}`}>{m.label}</button>)}
     </div>
-    {mode === "hari" && <LineChart days={heatmap} />}
-    {mode === "minggu" && <div className="flex h-[164px] flex-col items-center justify-center rounded-xl bg-surface-muted/45"><strong className="text-[30px] font-bold leading-none tabular-nums text-ink-900">{totalMinggu}</strong><span className="mt-1.5 text-[10px] text-ink-400">Total JP committed minggu ini</span></div>}
+    {mode === "minggu" && <LineChart days={heatmap} />}
+    {mode === "hari" && <div className="flex h-[164px] flex-col items-center justify-center rounded-xl bg-surface-muted/45 px-6 text-center"><span className="text-[10.5px] font-medium text-ink-500">Rincian per jam untuk hari ini belum tersedia.</span><span className="mt-1 text-[9px] text-ink-400">Gunakan tab Minggu untuk melihat distribusi JP per hari, atau buka Analitik untuk detail lebih lanjut.</span></div>}
     {(mode === "bulan" || mode === "semester") && <div className="flex h-[164px] flex-col items-center justify-center rounded-xl bg-surface-muted/45 px-6 text-center"><span className="text-[10.5px] font-medium text-ink-500">Data historis {mode === "bulan" ? "bulanan" : "semesteran"} belum tersedia.</span><span className="mt-1 text-[9px] text-ink-400">Akan terisi otomatis seiring histori jadwal committed bertambah dari minggu ke minggu.</span></div>}
   </div>;
 }
