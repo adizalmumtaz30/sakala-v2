@@ -1,158 +1,140 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
-import { Sparkles, CheckCircle2, AlertTriangle, RotateCcw, Target, CalendarDays, WandSparkles, SlidersHorizontal } from "lucide-react";
-import { getAiCopilotContextAction, planScheduleAction, runAiCopilotIntentAction, saveAiCandidatesAction, type AiCopilotContext, type AiCopilotIntent } from "./actions";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { AlertTriangle, ArrowRight, CheckCircle2, ChevronRight, CircleHelp, Database, RefreshCw, Search, Sparkles, Target, X } from "lucide-react";
+import { getAiCurriculumContextAction, setAiTargetJpAction, type AiCurriculumContext, type AiRecommendation } from "./actions";
+import { Badge, Card } from "@/components/ui/primitives";
 import Button from "@/components/ui/Button";
-import { Card, Badge } from "@/components/ui/primitives";
-
-type AiPlan = Extract<Awaited<ReturnType<typeof planScheduleAction>>, { ok: true }>["data"];
-
-const quickActions: Array<{ intent: AiCopilotIntent; title: string; description: string; icon: typeof Target }> = [
-  { intent: "complete_remaining_jp", title: "Selesaikan JP Kurang", description: "Cari kandidat untuk seluruh JP yang belum terpenuhi.", icon: Target },
-  { intent: "schedule_full_week", title: "Susun Semua Mapel", description: "Buat Candidate Weekly Schedule dari target aktif.", icon: CalendarDays },
-  { intent: "fill_empty_slots", title: "Isi Slot Kosong", description: "Manfaatkan slot valid yang masih tersedia.", icon: WandSparkles },
-];
 
 export default function AiPage() {
-  const [context, setContext] = useState<AiCopilotContext | null>(null);
-  const [contextLoading, setContextLoading] = useState(true);
+  const [data, setData] = useState<AiCurriculumContext | null>(null);
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
-  const [command, setCommand] = useState("");
-  const [plan, setPlan] = useState<AiPlan | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState<string | null>(null);
+  const [drawer, setDrawer] = useState<AiRecommendation | null>(null);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
   const [isPending, startTransition] = useTransition();
 
-  useEffect(() => {
+  const load = useCallback((classId?: string | null) => {
+    setLoading(true); setError(null);
     startTransition(async () => {
-      const result = await getAiCopilotContextAction();
-      if (!result.ok) {
-        setError(result.error);
-        setContextLoading(false);
-        return;
-      }
-      setContext(result.data);
-      setSelectedClassId(result.data.activeClassId ?? result.data.classes[0]?.id ?? null);
-      setContextLoading(false);
+      const result = await getAiCurriculumContextAction(classId);
+      if (!result.ok) { setError(result.error); setData(null); setLoading(false); return; }
+      setData(result.data);
+      setSelectedClassId(result.data.selectedClass?.id ?? result.data.classes[0]?.id ?? null);
+      setLoading(false);
     });
   }, []);
 
-  const selectedClass = context?.classes.find((c) => c.id === selectedClassId) ?? null;
-  const hasClasses = Boolean(context?.classes.length);
-  const canAct = !contextLoading && hasClasses && Boolean(selectedClassId) && !isPending;
+  useEffect(() => { load(null); }, [load]);
 
-  function runIntent(intent: AiCopilotIntent) {
-    if (!selectedClassId) return;
-    setError(null); setSaved(null); setPlan(null);
-    startTransition(async () => {
-      const result = await runAiCopilotIntentAction(intent, selectedClassId);
-      if (!result.ok) { setError(result.error); return; }
-      setPlan(result.data);
-    });
+  const selected = data?.selectedClass ?? null;
+  const filteredClasses = useMemo(() => data?.classes.filter((c) => c.label.toLowerCase().includes(query.toLowerCase())) ?? [], [data?.classes, query]);
+  const primaryIssue = data?.issues[0] ?? null;
+
+  function chooseClass(id: string) {
+    setSelectedClassId(id);
+    setDrawer(null);
+    load(id);
   }
 
-  function runPlan() {
-    setError(null); setSaved(null);
-    startTransition(async () => {
-      const result = await planScheduleAction(command);
-      if (!result.ok) { setPlan(null); setError(result.error); return; }
-      setPlan(result.data);
-    });
+  async function applyRecommendation(item: AiRecommendation) {
+    if (!item.subjectId || !item.suggestedJp || !selectedClassId) { setDrawer(item); return; }
+    setBusyAction(item.id); setToast(null);
+    const result = await setAiTargetJpAction({ classId: selectedClassId, subjectId: item.subjectId, targetJp: item.suggestedJp });
+    if (!result.ok) { setToast(result.error); setBusyAction(null); return; }
+    setToast(`${item.subjectName ?? "Target JP"} disiapkan pada ${result.data.targetJp} JP.`);
+    setDrawer(null); setBusyAction(null); load(selectedClassId);
   }
-
-  function saveCandidate() {
-    if (!plan) return;
-    startTransition(async () => {
-      const result = await saveAiCandidatesAction(plan.result.candidates.map((c) => c.draft));
-      if (!result.ok) { setError(result.error); return; }
-      setSaved(`${result.data.savedCount} candidate disimpan.${result.data.skippedCount ? ` ${result.data.skippedCount} dilewati karena conflict.` : ""}`);
-    });
-  }
-
-  function reset() { setCommand(""); setPlan(null); setError(null); setSaved(null); }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-7 pb-10">
-      <div>
-        <div className="flex flex-wrap items-center gap-3"><Sparkles className="h-6 w-6 text-brand" /><h1 className="text-2xl font-semibold tracking-tight">SAKALA AI</h1><Badge>Schedule Copilot</Badge><Badge>Candidate-only</Badge></div>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-ink-500">AI membaca kondisi jadwal aktif, menyarankan tindakan, lalu menyerahkan pemilihan slot kepada constraint engine. Jadwal committed tidak pernah diubah oleh AI.</p>
-      </div>
-
-      <Card className="space-y-6 p-6">
-        <div className="flex flex-wrap items-end justify-between gap-4">
+    <div className="mx-auto max-w-7xl space-y-6 pb-16">
+      <header className="relative overflow-hidden rounded-[28px] border border-border bg-surface p-6 shadow-soft md:p-8">
+        <div className="absolute right-0 top-0 h-40 w-40 rounded-full bg-brand-50 blur-3xl" aria-hidden="true" />
+        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-400">Konteks aktif</div>
-            <div className="mt-1.5 text-lg font-semibold text-ink-900">
-              {contextLoading ? "Menyiapkan konteks…" : selectedClass?.label ?? "Belum ada kelas aktif"}
-            </div>
-            <div className="mt-1 text-xs text-ink-500">
-              {contextLoading ? "Memeriksa konteks akademik dan kelas yang tersedia." : hasClasses ? "Pilih kelas yang ingin dibantu SAKALA." : "Tambahkan kelas terlebih dahulu agar copilot dapat bekerja."}
-            </div>
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-brand-700"><Sparkles className="h-4 w-4" /> SAKALA AI <Badge>Proaktif</Badge></div>
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight text-ink-900">Pahami data. Temukan solusi.</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-500">Saya membaca integrasi kurikulum yang tersedia, menemukan hal yang perlu diperhatikan, lalu menyarankan langkah konkret. Saya tidak membuat kurikulum baru.</p>
           </div>
-          <label className="flex items-center gap-2 text-sm">
-            <SlidersHorizontal className="h-4 w-4 text-ink-400" />
-            <span className="sr-only">Pilih kelas</span>
-            <select
-              value={selectedClassId ?? ""}
-              disabled={contextLoading || !hasClasses || isPending}
-              onChange={(e) => { setSelectedClassId(e.target.value); setPlan(null); setError(null); }}
-              className="h-10 min-w-44 rounded-xl border border-border bg-surface px-3 text-sm text-ink-700 outline-none transition focus:border-brand/50 focus:ring-2 focus:ring-brand/10 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <option value="">Pilih kelas…</option>
-              {context?.classes.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
-            </select>
-          </label>
+          <div className="min-w-[260px] rounded-2xl border border-border bg-surface-muted/70 p-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-400">Konteks aktif</div>
+            <div className="mt-1 font-semibold text-ink-900">{data?.academicContext.tahunPelajaran ?? "—"} · {data?.academicContext.semester ?? "—"}</div>
+            <div className="mt-1 text-xs text-ink-500">{data?.curriculum?.name ?? "Kurikulum belum terbaca"}</div>
+          </div>
         </div>
+      </header>
 
-        {contextLoading ? (
-          <div className="grid gap-3 sm:grid-cols-3" aria-live="polite" aria-label="Menyiapkan konteks AI">
-            {["JP terpenuhi", "JP belum terpenuhi", "Mapel masih kurang"].map((label) => (
-              <div key={label} className="rounded-xl bg-surface-muted p-4">
-                <div className="text-xs text-ink-400">{label}</div>
-                <div className="mt-3 h-7 w-16 animate-pulse rounded-md bg-border" />
-              </div>
-            ))}
-          </div>
-        ) : selectedClass ? (
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-xl bg-surface-muted p-4"><div className="text-xs text-ink-500">JP terpenuhi</div><div className="mt-1 text-2xl font-semibold">{selectedClass.scheduledJp}/{selectedClass.targetJp}</div></div>
-            <div className="rounded-xl bg-surface-muted p-4"><div className="text-xs text-ink-500">JP belum terpenuhi</div><div className="mt-1 text-2xl font-semibold">{selectedClass.remainingJp}</div></div>
-            <div className="rounded-xl bg-surface-muted p-4"><div className="text-xs text-ink-500">Mapel yang masih kurang</div><div className="mt-1 text-2xl font-semibold">{selectedClass.subjectDeficits.length}</div></div>
-          </div>
-        ) : null}
+      {error && <Card className="border-rose-200 bg-rose-50 p-5 text-sm text-rose-800"><AlertTriangle className="mr-2 inline h-4 w-4" />{error}<button className="ml-3 font-semibold underline" onClick={() => load(selectedClassId)}>Coba lagi</button></Card>}
 
-        <div>
-          <div className="mb-3 text-sm font-semibold text-ink-900">✨ Apa yang bisa saya lakukan sekarang?</div>
-          <div className="grid gap-3 md:grid-cols-3">
-            {quickActions.map(({ intent, title, description, icon: Icon }) => (
-              <button key={intent} type="button" onClick={() => runIntent(intent)} disabled={!canAct} className="group rounded-xl bg-surface-muted p-4 text-left transition-all hover:-translate-y-0.5 hover:bg-brand-50 hover:shadow-soft disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0 disabled:hover:bg-surface-muted">
-                <Icon className="h-5 w-5 text-brand transition-transform group-hover:scale-105" />
-                <div className="mt-3 font-semibold text-ink-900">{title}</div>
-                <div className="mt-1 text-xs leading-5 text-ink-500">{description}</div>
+      <section className="grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
+        <Card className="h-fit p-4 lg:sticky lg:top-5">
+          <div className="flex items-center justify-between"><div><div className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-400">Mulai dari sini</div><h2 className="mt-1 text-lg font-semibold">Pilih kelas</h2></div><button onClick={() => load(selectedClassId)} className="rounded-lg p-2 text-ink-400 hover:bg-surface-muted hover:text-ink-700" title="Periksa ulang"><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /></button></div>
+          <div className="relative mt-4"><Search className="absolute left-3 top-3 h-4 w-4 text-ink-400" /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Cari kelas..." className="h-10 w-full rounded-xl border border-border bg-surface-muted pl-9 pr-3 text-sm outline-none focus:border-brand/50 focus:ring-2 focus:ring-brand/10" /></div>
+          <div className="mt-3 max-h-[430px] space-y-1 overflow-y-auto pr-1">
+            {loading && !data ? <div className="space-y-2">{[1,2,3,4].map((x) => <div key={x} className="h-14 animate-pulse rounded-xl bg-surface-muted" />)}</div> : filteredClasses.map((kelas) => (
+              <button key={kelas.id} onClick={() => chooseClass(kelas.id)} className={`w-full rounded-xl p-3 text-left transition ${selectedClassId === kelas.id ? "bg-brand-50 ring-1 ring-brand-200" : "hover:bg-surface-muted"}`}>
+                <div className="flex items-center justify-between gap-2"><span className="font-semibold text-ink-900">{kelas.label}</span><ChevronRight className="h-4 w-4 text-ink-300" /></div>
+                <div className="mt-1 flex items-center justify-between text-[11px] text-ink-500"><span>{kelas.targetFilledJp}/{kelas.officialJp || kelas.targetJp} JP</span><span className={kelas.status === "ready" ? "text-emerald-700" : kelas.status === "blocked" ? "text-rose-700" : "text-amber-700"}>{kelas.status === "ready" ? "Siap" : kelas.status === "blocked" ? "Belum siap" : "Perlu perhatian"}</span></div>
               </button>
             ))}
+            {!loading && !filteredClasses.length && <div className="p-4 text-center text-sm text-ink-500">Kelas tidak ditemukan.</div>}
           </div>
-        </div>
+        </Card>
 
-        {selectedClass?.subjectDeficits.length ? <div className="rounded-xl bg-surface-muted p-4"><div className="mb-3 text-sm font-semibold">🎯 JP yang masih kurang</div><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{selectedClass.subjectDeficits.slice(0, 9).map((item) => <div key={item.subjectId} className="rounded-lg bg-surface p-3"><div className="text-sm font-medium">{item.subjectName}</div><div className="mt-1 text-xs text-ink-500">Target {item.targetJp} JP · Terjadwal {item.scheduledJp} JP · <strong>Kurang {item.remainingJp} JP</strong></div></div>)}</div></div> : null}
-      </Card>
+        <main className="space-y-5" aria-live="polite">
+          {loading && !data ? <Card className="space-y-5 p-6"><div className="h-8 w-56 animate-pulse rounded-lg bg-surface-muted" /><div className="grid gap-3 sm:grid-cols-4">{[1,2,3,4].map((x) => <div key={x} className="h-24 animate-pulse rounded-2xl bg-surface-muted" />)}</div></Card> : selected ? <>
+            <section className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div><div className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-700">Kondisi kelas</div><h2 className="mt-1 text-2xl font-semibold text-ink-900">{selected.label}</h2><p className="mt-1 text-sm text-ink-500">Saya sudah memeriksa data integrasi kurikulum untuk kelas ini.</p></div>
+              <Badge>{selected.status === "ready" ? "✓ Siap" : selected.status === "blocked" ? "⚠ Belum siap" : "⚠ Perlu perhatian"}</Badge>
+            </section>
 
-      <Card className="space-y-4 p-6">
-        <div><div className="text-sm font-semibold text-ink-900">💬 Atau katakan kebutuhanmu</div><div className="mt-1 text-xs leading-5 text-ink-500">Natural language tetap tersedia. Anda tidak perlu mengetahui struktur intent atau constraint engine.</div></div>
-        <textarea value={command} onChange={(e) => setCommand(e.target.value)} placeholder={'Contoh: “Isi jadwal kelas 7 yang masih kosong.”\nAtau: “Susun semua mapel kelas 7 untuk satu minggu.”'} rows={4} className="w-full rounded-xl border border-border bg-surface-muted p-4 text-sm text-ink-900 outline-none transition focus:border-brand/50 focus:ring-2 focus:ring-brand/10" />
-        <div className="flex flex-wrap gap-2"><Button onClick={runPlan} disabled={isPending || !command.trim()}>{isPending ? "Menganalisis…" : "Susun Candidate"}</Button><Button variant="secondary" onClick={reset} disabled={isPending}><RotateCcw className="mr-2 h-4 w-4" />Reset</Button></div>
-        {error && <div className="rounded-xl bg-rose-50 p-4 text-sm text-rose"><AlertTriangle className="mr-2 inline h-4 w-4" />{error}</div>}
-      </Card>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <Metric icon={<Target className="h-4 w-4" />} value={`${selected.targetFilledJp}/${selected.officialJp || selected.targetJp}`} label="JP terisi dari integrasi" />
+              <Metric icon={<AlertTriangle className="h-4 w-4" />} value={String(selected.missingTargetCount)} label="Mapel tanpa Target JP" />
+              <Metric icon={<Database className="h-4 w-4" />} value={String(selected.newSubjectCount)} label="Mapel belum terhubung" />
+              <Metric icon={<CircleHelp className="h-4 w-4" />} value={String(selected.reviewCount)} label="Perlu ditinjau" />
+            </div>
 
-      {plan && <Card className="space-y-5 p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4"><div><div className="flex items-center gap-2"><h2 className="text-lg font-semibold">Rancangan Candidate</h2><Badge>{plan.intent === "schedule_full_week" ? "Weekly Planner" : "Target JP"}</Badge></div><p className="mt-1 max-w-4xl text-sm leading-6 text-ink-500">{plan.explanation}</p></div><Badge>{plan.result.candidates.length}/{plan.targetJp} JP</Badge></div>
-        {plan.interpretedTargets?.length ? <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{plan.interpretedTargets.map((item) => <div key={item.subjectId} className="rounded-lg bg-surface-muted p-3 text-sm"><strong>{item.subjectName}</strong><div className="mt-1 text-xs text-ink-500">Target {item.targetJp} · Terwakili {item.existingJp} · Sisa {item.remainingJp}</div></div>)}</div> : null}
-        <div className="overflow-x-auto rounded-xl border border-border"><table className="w-full text-sm"><thead><tr className="border-b border-border text-left"><th className="p-3">Hari</th><th className="p-3">Jam</th><th className="p-3">Kelas</th><th className="p-3">Mapel</th><th className="p-3">Guru</th><th className="p-3">Status</th></tr></thead><tbody>{plan.result.candidates.map((c, i) => <tr key={`${c.requirementId}-${i}`} className="border-b border-border last:border-0"><td className="p-3">{c.draft.day}</td><td className="p-3">JP {c.draft.periodStart}{c.draft.periodEnd !== c.draft.periodStart ? `–${c.draft.periodEnd}` : ""}</td><td className="p-3">{c.draft.classId}</td><td className="p-3">{c.draft.subjectId}</td><td className="p-3">{c.draft.teacherId}</td><td className="p-3"><Badge>candidate</Badge></td></tr>)}</tbody></table></div>
-        {plan.needsClarification && <div className="rounded-xl border border-amber/30 bg-amber-50 p-4 text-sm text-amber"><AlertTriangle className="mr-2 inline h-4 w-4" />{plan.clarification}</div>}
-        <div className="flex flex-col gap-3 rounded-xl bg-surface-muted p-4 sm:flex-row sm:items-center sm:justify-between"><div className="text-sm"><strong>Problem → Solution → Review</strong><br />Candidate belum mengubah jadwal committed. Tinjau dahulu di Jadwal Cerdas sebelum commit.</div><Button onClick={saveCandidate} disabled={isPending || plan.result.candidates.length === 0}><CheckCircle2 className="mr-2 h-4 w-4" />Simpan sebagai Candidate</Button></div>
-        {saved && <div className="text-sm text-emerald">{saved} Lanjutkan ke <strong>Jadwal Cerdas</strong> untuk review dan commit eksplisit.</div>}
-      </Card>}
+            <Card className="p-6">
+              <div className="flex items-start justify-between gap-4"><div><div className="flex items-center gap-2 text-sm font-semibold text-ink-900"><Sparkles className="h-4 w-4 text-brand" /> Yang saya temukan</div><p className="mt-1 text-xs text-ink-500">Saya tidak menunggu pertanyaan. Ini prioritas yang saya temukan dari data yang terhubung.</p></div><span className="rounded-full bg-surface-muted px-2.5 py-1 text-[11px] font-medium text-ink-500">{data?.issues.length ?? 0} temuan</span></div>
+              <div className="mt-5 space-y-2">
+                {data?.issues.length ? data.issues.map((issue, index) => <button key={issue.id} onClick={() => { const rec = data.recommendations.find((r) => r.id.replace("adopt-", "new-") === issue.id || r.id === issue.id); if (rec) setDrawer(rec); }} className="group flex w-full items-start gap-3 rounded-2xl bg-surface-muted p-4 text-left transition hover:bg-brand-50">
+                  <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${issue.severity === "high" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"}`}>{String(index + 1).padStart(2, "0")}</span>
+                  <span className="min-w-0 flex-1"><span className="block font-semibold text-ink-900">{issue.title}</span><span className="mt-1 block text-sm leading-5 text-ink-500">{issue.description}</span></span><ArrowRight className="mt-1 h-4 w-4 shrink-0 text-ink-300 transition group-hover:translate-x-0.5 group-hover:text-brand" />
+                </button>) : <div className="rounded-2xl bg-emerald-50 p-5"><div className="flex items-center gap-2 font-semibold text-emerald-800"><CheckCircle2 className="h-5 w-5" /> Tidak ada masalah penting.</div><p className="mt-1 text-sm text-emerald-700">Data integrasi kurikulum kelas ini terlihat konsisten dari sumber yang tersedia.</p></div>}
+              </div>
+            </Card>
+
+            <Card className="p-6">
+              <div className="flex items-start justify-between gap-4"><div><div className="text-sm font-semibold text-ink-900">✦ Langkah berikutnya</div><p className="mt-1 text-xs text-ink-500">Saya prioritaskan tindakan yang paling berguna terlebih dahulu.</p></div><Badge>{primaryIssue ? "Prioritas" : "Selesai"}</Badge></div>
+              {primaryIssue ? <div className="mt-4 rounded-2xl border border-brand-200 bg-brand-50 p-5"><div className="text-lg font-semibold text-brand-950">{primaryIssue.title}</div><p className="mt-1 max-w-2xl text-sm leading-6 text-brand-900/70">{primaryIssue.description}</p><button onClick={() => { const rec = data?.recommendations.find((r) => r.id === primaryIssue.id || r.id.replace("adopt-", "new-") === primaryIssue.id); if (rec) setDrawer(rec); }} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-95">{primaryIssue.action}<ArrowRight className="h-4 w-4" /></button></div> : <div className="mt-4 rounded-2xl bg-surface-muted p-5"><div className="font-semibold text-ink-900">Kelas ini sudah siap.</div><p className="mt-1 text-sm text-ink-500">SAKALA AI tidak menemukan tindakan penting lain dari data integrasi kurikulum saat ini.</p></div>}
+            </Card>
+
+            <Card className="p-6"><div className="flex items-center justify-between gap-3"><div><div className="text-sm font-semibold text-ink-900">Data yang saya gunakan</div><div className="mt-1 text-xs text-ink-500">SAKALA AI hanya membaca data integrasi yang relevan dengan kurikulum.</div></div><Database className="h-5 w-5 text-ink-300" /></div><div className="mt-4 flex flex-wrap gap-2">{data?.connectedData.map((item) => <span key={item} className="rounded-full border border-border bg-surface-muted px-3 py-1.5 text-xs text-ink-600">✓ {item}</span>)}</div><div className="mt-4 text-xs text-ink-400">Sumber: {data?.source ? `${data.source.name} · ${data.source.institution}` : "belum terbaca"} · Kurikulum: {data?.curriculum?.name ?? "—"}</div></Card>
+
+            <div className="rounded-2xl border border-border bg-surface-muted/70 p-4"><div className="flex items-center gap-2 text-sm font-medium text-ink-700"><Search className="h-4 w-4" />Ingin mencari sesuatu secara khusus?</div><div className="mt-1 text-xs text-ink-500">Chat tetap tersedia sebagai lapisan tambahan, bukan pintu masuk utama.</div></div>
+          </> : <Card className="p-10 text-center"><div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-50 text-brand-700"><Sparkles className="h-6 w-6" /></div><h2 className="mt-4 text-lg font-semibold">Belum ada kelas untuk diperiksa</h2><p className="mt-1 text-sm text-ink-500">Pastikan kelas tersedia pada Active Academic Context.</p></Card>}
+        </main>
+      </section>
+
+      {toast && <div className="fixed bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-2xl border border-border bg-surface px-4 py-3 text-sm font-medium text-ink-800 shadow-soft"><CheckCircle2 className="h-4 w-4 text-emerald-600" />{toast}<button onClick={() => setToast(null)}><X className="h-4 w-4 text-ink-400" /></button></div>}
+
+      {drawer && <div className="fixed inset-0 z-40 bg-black/20" onClick={() => setDrawer(null)}><aside className="absolute right-0 top-0 h-full w-full max-w-md overflow-y-auto border-l border-border bg-surface p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-4"><div><div className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-700">Rekomendasi SAKALA AI</div><h2 className="mt-2 text-2xl font-semibold text-ink-900">{drawer.title}</h2></div><button onClick={() => setDrawer(null)} className="rounded-lg p-2 hover:bg-surface-muted"><X className="h-5 w-5" /></button></div>
+        <div className="mt-6 space-y-4"><InfoBlock label="Mengapa saya menyarankan ini" value={drawer.reason} /><InfoBlock label="Dampaknya" value={drawer.impact} />{drawer.suggestedJp != null && <div className="rounded-2xl bg-surface-muted p-4"><div className="text-xs text-ink-400">Target yang disarankan</div><div className="mt-1 text-2xl font-semibold">{drawer.suggestedJp} JP</div></div>}</div>
+        <div className="mt-7 flex gap-2"><Button onClick={() => void applyRecommendation(drawer)} disabled={busyAction === drawer.id || drawer.type === "review" || drawer.type === "info"}>{busyAction === drawer.id ? "Menyiapkan…" : drawer.type === "target" ? "Terapkan Target JP" : drawer.type === "adoption" ? "Buka data mapel" : "Tinjau"}</Button><Button variant="secondary" onClick={() => setDrawer(null)}>Batal</Button></div>
+        {drawer.type === "review" && <p className="mt-3 text-xs leading-5 text-amber-700">Perbedaan tidak saya ubah otomatis. Tinjau dulu agar operator tetap memegang keputusan.</p>}
+      </aside></div>}
     </div>
   );
+}
+
+function Metric({ icon, value, label }: { icon: React.ReactNode; value: string; label: string }) {
+  return <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm"><div className="flex items-center gap-2 text-xs text-ink-500">{icon}{label}</div><div className="mt-2 text-2xl font-semibold tracking-tight text-ink-900">{value}</div></div>;
+}
+function InfoBlock({ label, value }: { label: string; value: string }) {
+  return <div><div className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-400">{label}</div><p className="mt-1 text-sm leading-6 text-ink-700">{value}</p></div>;
 }
