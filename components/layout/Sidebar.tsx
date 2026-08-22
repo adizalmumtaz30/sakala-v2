@@ -5,18 +5,36 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, Users, GraduationCap, Sparkles, CalendarDays, BarChart3, History, Bell, Bot, Compass, BrainCircuit, ChevronLeft, ChevronRight, LifeBuoy, ArrowUpRight } from "lucide-react";
 
-const coreNav = [
-  { key: "dashboard", label: "Dashboard", href: "/", icon: LayoutDashboard },
-  { key: "data", label: "Data", href: "/guru", icon: Users },
-  { key: "akademik", label: "Akademik", href: "/akademik", icon: GraduationCap },
-  { key: "jadwal-cerdas", label: "Jadwal Cerdas", href: "/jadwal-cerdas", icon: Sparkles },
-  { key: "jadwal", label: "Jadwal", href: "/jadwal", icon: CalendarDays },
-  { key: "analitik", label: "Analitik", href: "/analitik", icon: BarChart3 },
-  { key: "riwayat", label: "Riwayat", href: "/riwayat", icon: History },
-  { key: "notifikasi", label: "Notifikasi", href: "/notifikasi", icon: Bell },
-  { key: "ai", label: "AI", href: "/ai", icon: Bot },
-  { key: "navigasi", label: "Navigasi", href: "/navigasi", icon: Compass },
+type NavItem = { key: string; label: string; href: string; icon: typeof LayoutDashboard };
+
+// Hasil audit tata letak sidebar (2026-08): 10 item sebelumnya tampil flat tanpa
+// pengelompokan, sehingga sulit dipindai sekilas dan dua fitur berbasis AI
+// (Jadwal Cerdas & AI assistant) terpisah jauh tanpa konteks yang menyatukan.
+// Dikelompokkan per alur kerja: ringkasan → sumber data → perencanaan jadwal →
+// pemantauan → alat bantu. Rute/href tidak berubah — hanya urutan & pengelompokan.
+const navGroups: { label: string; items: NavItem[] }[] = [
+  { label: "Utama", items: [
+    { key: "dashboard", label: "Dashboard", href: "/", icon: LayoutDashboard },
+  ] },
+  { label: "Data & Akademik", items: [
+    { key: "data", label: "Data", href: "/guru", icon: Users },
+    { key: "akademik", label: "Akademik", href: "/akademik", icon: GraduationCap },
+  ] },
+  { label: "Perencanaan Jadwal", items: [
+    { key: "jadwal-cerdas", label: "Jadwal Cerdas", href: "/jadwal-cerdas", icon: Sparkles },
+    { key: "jadwal", label: "Jadwal", href: "/jadwal", icon: CalendarDays },
+  ] },
+  { label: "Pemantauan", items: [
+    { key: "analitik", label: "Analitik", href: "/analitik", icon: BarChart3 },
+    { key: "riwayat", label: "Riwayat", href: "/riwayat", icon: History },
+    { key: "notifikasi", label: "Notifikasi", href: "/notifikasi", icon: Bell },
+  ] },
+  { label: "Alat Bantu", items: [
+    { key: "ai", label: "AI", href: "/ai", icon: Bot },
+    { key: "navigasi", label: "Navigasi", href: "/navigasi", icon: Compass },
+  ] },
 ];
+const coreNav: NavItem[] = navGroups.flatMap((g) => g.items);
 
 const dataSubnav = [
   { label: "Guru", href: "/guru" },
@@ -47,8 +65,11 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
         {!collapsed && <div className="min-w-0 leading-tight"><p className="truncate text-sm font-bold tracking-tight text-ink-900">SAKALA</p><p className="truncate text-[10px] font-semibold tracking-widest text-ink-400">V2 ENTERPRISE</p></div>}
       </div>
       <nav className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-4">
-        <div className="flex flex-col gap-1">
-          {coreNav.map((item) => {
+        <div className="flex flex-col gap-4">
+          {navGroups.map((group) => (
+          <div key={group.label} className="flex flex-col gap-1">
+            {!collapsed && <p className="px-3 pb-1 text-[9.5px] font-bold uppercase tracking-[.1em] text-ink-300">{group.label}</p>}
+            {group.items.map((item) => {
             const active = item.key === "data" ? inDataCore : item.key === "akademik" ? inAcademic : pathname === item.href;
             const Icon = item.icon;
             return (
@@ -76,7 +97,9 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                 )}
               </div>
             );
-          })}
+            })}
+          </div>
+          ))}
         </div>
       </nav>
       {!collapsed && (
