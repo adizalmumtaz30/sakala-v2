@@ -11,7 +11,7 @@
 // kontrak dibangun di atasnya.
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { Sparkles, CheckCircle2, AlertTriangle, RotateCcw, ChevronDown, Check } from "lucide-react";
+import { Sparkles, CheckCircle2, AlertTriangle, RotateCcw, ChevronDown, Check, Search, X } from "lucide-react";
 import { getAiCopilotContextAction, planScheduleAction, saveAiCandidatesAction, type AiCopilotContext, type AiCopilotClassStatus } from "./actions";
 import Button from "@/components/ui/Button";
 import { Card, Badge, EmptyState, ErrorState } from "@/components/ui/primitives";
@@ -23,12 +23,26 @@ function classStatusTone(remainingJp: number): "success" | "warning" {
   return remainingJp === 0 ? "success" : "warning";
 }
 
+// §28 Search — bahasa natural sederhana atas data kelas yang sudah ada di context
+// (tidak perlu panggilan backend baru; hasil selalu berupa data + tindakan, bukan
+// sekadar daftar pencarian).
+function searchClasses(query: string, classes: AiCopilotClassStatus[]): AiCopilotClassStatus[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  const wantsKurang = q.includes("kurang");
+  const wantsSesuai = !wantsKurang && /sesuai|cukup|lengkap|terpenuhi/.test(q);
+  if (wantsKurang) return classes.filter((c) => c.remainingJp > 0).sort((a, b) => b.remainingJp - a.remainingJp);
+  if (wantsSesuai) return classes.filter((c) => c.remainingJp === 0);
+  return classes.filter((c) => c.label.toLowerCase().includes(q) || c.subjectDeficits.some((d) => d.subjectName.toLowerCase().includes(q)));
+}
+
 export default function AiPage() {
   const [context, setContext] = useState<AiCopilotContext | null>(null);
   const [contextLoading, setContextLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [classPickerOpen, setClassPickerOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [command, setCommand] = useState("");
   const [plan, setPlan] = useState<AiPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -52,6 +66,7 @@ export default function AiPage() {
 
   const selectedClass = context?.classes.find((c) => c.id === selectedClassId) ?? null;
   const hasClasses = Boolean(context?.classes.length);
+  const searchResults = useMemo(() => searchClasses(searchQuery, context?.classes ?? []), [searchQuery, context]);
 
   const kondisiKelas = useMemo(() => {
     if (!selectedClass) return null;
@@ -116,10 +131,26 @@ export default function AiPage() {
           </div>
           <div>
             <p className="mb-2.5 text-[12.5px] font-semibold text-ink-700">Pilih kelas</p>
-            {/* §04 Class Selection — kartu berisi status JP, bukan sekadar nama kelas. */}
-            <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-              {context?.classes.map((c) => <ClassCard key={c.id} status={c} onSelect={() => selectClass(c.id)} />)}
+            {/* §28 Search — bahasa natural, hasil = data + tindakan langsung. */}
+            <div className="relative mb-3">
+              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-300" />
+              <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder='Cari kelas… mis. "kelas yang kurang JP"' className="w-full rounded-xl border border-border bg-surface py-2 pl-9 pr-8 text-[12.5px] text-ink-900 outline-none transition focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/10" />
+              {searchQuery && <button type="button" onClick={() => setSearchQuery("")} aria-label="Bersihkan pencarian" className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-ink-300 hover:bg-surface-muted hover:text-ink-600"><X size={13} /></button>}
             </div>
+            {searchQuery.trim() ? (
+              <div className="space-y-1.5">
+                <p className="text-[11.5px] text-ink-500">{searchResults.length > 0 ? `Saya menemukan ${searchResults.length} kelas.` : "Saya belum menemukan kelas yang cocok dengan itu."}</p>
+                {searchResults.map((c) => <button key={c.id} type="button" onClick={() => selectClass(c.id)} className="flex w-full items-center justify-between gap-3 rounded-xl border border-border bg-surface px-3 py-2.5 text-left hover:border-brand-600/30 hover:bg-brand-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">
+                  <span className="flex items-center gap-2.5"><span className="text-[13px] font-semibold text-ink-900">{c.label}</span><Badge tone={classStatusTone(c.remainingJp)}>{c.remainingJp === 0 ? "Sesuai" : `${c.remainingJp} JP kurang`}</Badge></span>
+                  <span className="text-[10.5px] font-semibold text-brand-600">Tinjau →</span>
+                </button>)}
+              </div>
+            ) : (
+              // §04 Class Selection — kartu berisi status JP, bukan sekadar nama kelas.
+              <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+                {context?.classes.map((c) => <ClassCard key={c.id} status={c} onSelect={() => selectClass(c.id)} />)}
+              </div>
+            )}
           </div>
         </Card>
       ) : (
