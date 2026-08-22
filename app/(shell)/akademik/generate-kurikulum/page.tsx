@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, CheckCircle2, ChevronRight, FileUp, Link2, RefreshCw, Save, Search, X } from "lucide-react";
 import { adoptCurriculumItemsAction, listCurriculumIntelligenceAction, getCurriculumDraftAction, saveCurriculumDraftAction, clearCurriculumDraftAction, recordCurriculumGenerateEventAction, getPreviouslyAdoptedSubjectsAction } from "../mata-pelajaran/curriculum-actions";
@@ -37,10 +37,16 @@ export default function GenerateKurikulumPage() {
   const [fileName, setFileName] = useState("");
   const [updateReady, setUpdateReady] = useState(false);
   const [message, setMessage] = useState("");
+  // V4 poin 35 — Error State: kartu terpisah dengan tombol "Coba lagi",
+  // bukan paragraf abu-abu generik. Dipakai untuk kegagalan real (load data
+  // gagal, commit gagal) — bukan info/status biasa yang tetap pakai `message`.
+  const [errorMessage, setErrorMessage] = useState("");
+  const [errorRetry, setErrorRetry] = useState<"load" | "commit" | null>(null);
   const [busy, setBusy] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [committing, setCommitting] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [syncStep, setSyncStep] = useState(0);
   const [compareOpen, setCompareOpen] = useState(false);
   const [success, setSuccess] = useState(false);
   // V4 poin 3 — Status Konteks: "↻ Konteks berubah" dideteksi dari sinyal
@@ -129,9 +135,10 @@ export default function GenerateKurikulumPage() {
   const draftHydrated = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
+  const loadAll = useCallback(() => {
     let mounted = true;
     void (async () => {
+      setBusy(true); setErrorMessage(""); setErrorRetry(null);
       const result = await listCurriculumIntelligenceAction("all");
       if (!mounted) return;
       let loadedVersions: Version[] = [];
@@ -140,7 +147,7 @@ export default function GenerateKurikulumPage() {
         loadedVersions = result.data.versions as Version[];
         setVersions(loadedVersions);
         setItems(result.data.items as Item[]);
-      } else setMessage(result.error);
+      } else { setBusy(false); setErrorMessage(result.error); setErrorRetry("load"); return; }
       try {
         const response = await fetch("/api/target-jp/import?mode=data", { cache: "no-store" });
         if (!response.ok) throw new Error("Data context belum dapat dibaca.");
@@ -183,13 +190,15 @@ export default function GenerateKurikulumPage() {
           if (mounted && prevResult.ok) setPreviousSubjects(prevResult.data);
         }
       } catch (error) {
-        if (mounted) setMessage(error instanceof Error ? error.message : "Data context belum dapat dibaca.");
+        if (mounted) { setErrorMessage(error instanceof Error ? error.message : "Data context belum dapat dibaca."); setErrorRetry("load"); }
       } finally {
         if (mounted) { setBusy(false); draftHydrated.current = true; }
       }
     })();
     return () => { mounted = false; };
   }, []);
+
+  useEffect(() => loadAll(), [loadAll]);
 
   // Operator-first handoff: once the canonical context and curriculum are loaded,
   // SAKALA prepares the applicable classes automatically. Manual controls remain
@@ -282,18 +291,32 @@ export default function GenerateKurikulumPage() {
     }, 180);
   }
 
+  function targetNote(item: Candidate): { text: string; tone: "ok" | "warn" } {
+    if (item.manualTarget == null || !Number.isInteger(item.manualTarget) || item.manualTarget < 0) return { text: "⚠ Perlu ditinjau", tone: "warn" };
+    if (item.official_allocation != null && item.manualTarget > item.official_allocation) return { text: "⚠ Melebihi alokasi resmi", tone: "warn" };
+    return { text: "✓ Target diterima", tone: "ok" };
+  }
+
   async function commitCandidate() {
     if (validation.status !== "valid" || !activeContext) return;
     setCompareOpen(false); setCommitting(true); setMessage("Menyinkronkan…");
+    // V4 poin 32 — step progress ringan, bukan cuma spinner. Step 1-2 mewakili
+    // proses lokal sebelum request terkirim; step 3 menyalakan begitu respons
+    // server diterima, jadi tetap jujur (tidak menampilkan "selesai" sebelum
+    // datanya benar-benar tersimpan).
+    setSyncStep(1);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    setSyncStep(2);
     const result = await adoptCurriculumItemsAction({ academicContextId: activeContext.id, classIds, items: candidate.map((item) => ({ id: item.id, weeklyTarget: item.manualTarget })) });
     if (result.ok) {
+      setSyncStep(3);
       setSuccess(true); setMessage(`Kurikulum tersimpan: ${result.data.adopted} kombinasi.`);
       // Draft sudah "terpakai" — hapus supaya sesi berikutnya mulai bersih,
       // bukan merehidrasi candidate yang sudah di-commit.
       void clearCurriculumDraftAction(activeContext.id);
     }
-    else setMessage(result.error);
-    setCommitting(false);
+    else { setMessage(""); setErrorMessage(result.error); setErrorRetry("commit"); }
+    setCommitting(false); setSyncStep(0);
   }
 
   function onFileChange(event: ChangeEvent<HTMLInputElement>) { setFileName(event.target.files?.[0]?.name ?? ""); setUpdateReady(false); }
@@ -306,12 +329,21 @@ export default function GenerateKurikulumPage() {
           <h1 className="mt-3 text-3xl font-bold tracking-tight text-ink-900">Generate Kurikulum</h1>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-ink-600">Siapkan sumber, generate, tinjau perubahan, lalu sinkronkan ke konteks akademik aktif.</p>
         </div>
-        <button type="button" onClick={() => openUpdate("previous")} className="inline-flex items-center gap-2 rounded-xl border border-brand-300 bg-surface px-5 py-3 text-sm font-bold text-brand-700 shadow-soft hover:bg-brand-50" aria-haspopup="dialog"><RefreshCw className="h-4 w-4" /> Update</button>
+        <button type="button" onClick={() => openUpdate("previous")} className="inline-flex items-center gap-2 rounded-xl border border-brand-600 bg-surface px-5 py-3 text-sm font-bold text-brand-700 shadow-soft hover:bg-brand-50" aria-haspopup="dialog"><RefreshCw className="h-4 w-4" /> Update</button>
       </header>
 
-      <section className="relative rounded-2xl border border-brand-200 bg-brand-50 p-4">
+      {/* V4 poin 14 — setelah Generate (Review Mode), Konteks Aktif + Kurikulum
+          menyusut jadi satu baris ringkas, bukan dua section penuh seperti
+          Setup Mode. */}
+      {candidate.length > 0 ? (
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-muted px-4 py-3">
+          <p className="text-sm font-semibold text-ink-700">{activeContext ? `SMP/MTs · Kemenag · ${activeContext.tahun_pelajaran} · ${activeContext.semester}` : "Konteks akademik belum siap"} · {activeVersion?.curriculum_name ?? "Belum dipilih"}</p>
+          <button type="button" onClick={() => { setCandidate([]); setBaseline({}); }} className="text-xs font-semibold text-brand-700 hover:underline">Kembali ke Setup</button>
+        </section>
+      ) : <>
+      <section className="relative rounded-2xl border border-brand-600/30 bg-brand-50 p-4">
         <button type="button" onClick={() => setContextOpen((v) => !v)} className="flex w-full items-center justify-between gap-3 text-left" aria-expanded={contextOpen}>
-          <div><p className="text-[11px] font-bold uppercase tracking-[0.14em] text-brand-700">Konteks Aktif</p><p className="mt-1 font-bold text-brand-950">{activeContext ? `SMP/MTs · Kemenag · ${activeContext.tahun_pelajaran} · ${activeContext.semester}` : "Konteks akademik belum siap"}</p></div>
+          <div><p className="text-[11px] font-bold uppercase tracking-[0.14em] text-brand-700">Konteks Aktif</p><p className="mt-1 font-bold text-brand-700">{activeContext ? `SMP/MTs · Kemenag · ${activeContext.tahun_pelajaran} · ${activeContext.semester}` : "Konteks akademik belum siap"}</p></div>
           <span className={`rounded-full px-3 py-1 text-xs font-bold ${contextChangeNotice ? "bg-violet-50 text-violet" : activeContext ? "bg-emerald-50 text-emerald" : "bg-amber-50 text-amber"}`}>{contextChangeNotice ? "↻ Konteks berubah" : activeContext ? "✓ Konteks siap" : "⚠ Belum lengkap"}</span>
         </button>
         {contextOpen && <><div className="fixed inset-0 z-20" onClick={() => setContextOpen(false)} /><div className="absolute right-4 top-full z-30 mt-2 w-80 max-w-[calc(100%-2rem)] rounded-xl border border-border bg-surface p-4 shadow-lg"><p className="font-bold text-ink-900">Konteks Akademik</p><div className="mt-3 grid gap-2 text-sm"><span>Jenjang — SMP/MTs</span><span>Kementerian — Kemenag</span><span>Tahun — {activeContext?.tahun_pelajaran ?? "—"}</span><span>Semester — {activeContext?.semester ?? "—"}</span></div><Link href="/pengaturan/konteks-akademik" className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-brand-700">Buka Konteks Akademik <ChevronRight className="h-4 w-4" /></Link></div></>}
@@ -322,6 +354,7 @@ export default function GenerateKurikulumPage() {
         <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wider text-ink-500">Kurikulum</p><div className="mt-1 flex flex-wrap items-center gap-2"><h2 className="text-xl font-bold text-ink-900">{activeVersion?.curriculum_name ?? "Belum dipilih"}</h2>{activeVersion && <span className="text-emerald-700">✓</span>}</div><p className="text-sm text-ink-600">{activeVersion ? `Kemenag · ${activeVersion.regulation_year ?? "tahun tidak dicantumkan"}` : "SAKALA akan memilih kurikulum relevan bila hanya ada satu."}</p></div><button type="button" onClick={() => openUpdate("previous")} className="rounded-lg border border-border px-3 py-2 text-sm font-semibold text-ink-700 hover:bg-surface-muted">Update</button></div>
         {verifiedVersions.length > 1 && <select aria-label="Pilih kurikulum" value={versionId} onChange={(e) => chooseVersion(e.target.value)} className="mt-4 w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm"><option value="">Pilih kurikulum</option>{verifiedVersions.map((v) => <option key={v.id} value={v.id}>{v.curriculum_name} · Kemenag · {v.regulation_year ?? "—"}</option>)}</select>}
       </section>
+      </>}
 
       <section className="rounded-2xl border border-border bg-surface p-5 shadow-soft">
         <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-bold text-ink-900">Sumber &amp; Referensi</h2><p className="mt-1 text-sm text-ink-600">Sumber aktif tetap ringkas; detail tersedia tanpa pindah halaman.</p></div><div className="flex gap-2">{activeVersion && <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">✓ Sumber siap</span>}<button type="button" onClick={() => setSourceDrawer(true)} disabled={!activeVersion} className="rounded-lg border border-border px-3 py-2 text-sm font-semibold disabled:opacity-50">Lihat detail</button></div></div>
@@ -338,7 +371,7 @@ export default function GenerateKurikulumPage() {
       {candidate.length > 0 && <section className="space-y-4 rounded-2xl border border-border bg-surface p-5 shadow-soft">
         <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wider text-ink-500">Review Mode</p><h2 className="mt-1 text-xl font-bold text-ink-900">Hasil Generate</h2><p className="mt-1 text-sm text-ink-600">{candidate.length} mata pelajaran · {unchangedCount} tidak berubah · {changedOnlyIds.length} berubah · {newIds.length} baru</p></div><div className="flex flex-wrap rounded-xl bg-surface-muted p-1 text-sm font-semibold"><button onClick={() => setFilter("all")} className={`rounded-lg px-3 py-2 ${filter === "all" ? "bg-surface shadow-sm" : "text-ink-500"}`}>{candidate.length} Total</button><button onClick={() => setFilter("unchanged")} className={`rounded-lg px-3 py-2 ${filter === "unchanged" ? "bg-surface shadow-sm" : "text-ink-500"}`}>{unchangedCount} Tetap</button><button onClick={() => setFilter("changed")} className={`rounded-lg px-3 py-2 ${filter === "changed" ? "bg-surface shadow-sm" : "text-ink-500"}`}>{changedOnlyIds.length} Berubah</button><button onClick={() => setFilter("new")} className={`rounded-lg px-3 py-2 ${filter === "new" ? "bg-surface shadow-sm" : "text-ink-500"}`}>{newIds.length} Baru</button></div></div>
         <div className="flex flex-wrap gap-2"><div className="relative min-w-[220px] flex-1"><Search className="absolute left-3 top-2.5 h-4 w-4 text-ink-400" /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Cari mata pelajaran..." className="w-full rounded-lg border border-border bg-surface py-2.5 pl-9 pr-3 text-sm" /></div><button onClick={() => setFilter("review")} className={`rounded-lg border px-3 py-2 text-sm ${filter === "review" ? "border-amber bg-amber-50" : "border-border"}`}>Perlu ditinjau {reviewIds.length}</button></div>
-        {selectedIds.length > 0 && <div className="sticky top-2 z-20 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-brand-200 bg-brand-50 p-3 text-sm">
+        {selectedIds.length > 0 && <div className="sticky top-2 z-20 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-brand-600/30 bg-brand-50 p-3 text-sm">
           <strong>{selectedIds.length} mata pelajaran dipilih</strong>
           {bulkEditing ? (
             <div className="flex items-center gap-2"><input type="number" min="0" step="1" autoFocus value={bulkValue} onChange={(e) => setBulkValue(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") applyBulkTarget(); if (e.key === "Escape") { setBulkEditing(false); setBulkValue(""); } }} placeholder="Target JP" className="w-28 rounded-lg border border-border bg-surface px-3 py-2 font-semibold" aria-label="Target JP untuk semua yang dipilih" /><button onClick={applyBulkTarget} className="rounded-lg bg-brand-600 px-3 py-2 font-bold text-white">Terapkan</button><button onClick={() => { setBulkEditing(false); setBulkValue(""); }} className="rounded-lg border border-border bg-surface px-3 py-2">Batal</button></div>
@@ -346,23 +379,46 @@ export default function GenerateKurikulumPage() {
             <div className="flex gap-2"><button onClick={() => setBulkEditing(true)} className="rounded-lg bg-brand-600 px-3 py-2 font-bold text-white">Atur Target JP</button><button onClick={() => { setSelectedIds([]); setBulkEditing(false); setBulkValue(""); }} className="rounded-lg border border-border bg-surface px-3 py-2">Batalkan</button></div>
           )}
         </div>}
-        <div className="overflow-x-auto rounded-xl border border-border"><table className="w-full min-w-[820px] text-left text-sm"><thead className="bg-surface-muted"><tr><th className="w-10 px-3 py-3"><input type="checkbox" aria-label="Pilih semua" checked={visibleCandidate.length > 0 && visibleCandidate.every((x) => selectedIds.includes(x.id))} onChange={(e) => setSelectedIds(e.target.checked ? visibleCandidate.map((x) => x.id) : [])} /></th><th className="px-3 py-3">Mata Pelajaran</th><th className="px-3 py-3">JP Resmi</th><th className="px-3 py-3">Target JP</th><th className="px-3 py-3">Status</th><th className="px-3 py-3">Aksi</th></tr></thead><tbody>{visibleCandidate.map((item) => { const changed = changedIds.includes(item.id); const invalid = reviewIds.includes(item.id); const isEditing = editingTargetId === item.id; return <tr key={item.id} className={`group border-t border-border transition ${selectedIds.includes(item.id) ? "bg-brand-50/50" : "hover:bg-surface-muted"}`}><td className="px-3 py-3"><input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggleSelected(item.id)} aria-label={`Pilih ${item.subject_name}`} /></td><td className="px-3 py-3"><p className="font-semibold text-ink-900">{item.subject_name}</p><p className="text-xs text-ink-500">{item.class_level}</p></td><td className="px-3 py-3">{item.official_allocation ?? "—"}</td><td className="px-3 py-3">
+        {/* V4 poin 36 — Desktop/tablet: tabel dengan scroll terkontrol. Mobile: stacked rows. */}
+        <div className="hidden overflow-x-auto rounded-xl border border-border md:block"><table className="w-full min-w-[820px] text-left text-sm"><thead className="bg-surface-muted"><tr><th className="w-10 px-3 py-3"><input type="checkbox" aria-label="Pilih semua" checked={visibleCandidate.length > 0 && visibleCandidate.every((x) => selectedIds.includes(x.id))} onChange={(e) => setSelectedIds(e.target.checked ? visibleCandidate.map((x) => x.id) : [])} /></th><th className="px-3 py-3">Mata Pelajaran</th><th className="px-3 py-3">JP Resmi</th><th className="px-3 py-3">Target JP</th><th className="px-3 py-3">Status</th><th className="px-3 py-3">Aksi</th></tr></thead><tbody>{visibleCandidate.map((item) => { const changed = changedIds.includes(item.id); const invalid = reviewIds.includes(item.id); const isEditing = editingTargetId === item.id; const note = targetNote(item); return <tr key={item.id} className={`group border-t border-border transition ${selectedIds.includes(item.id) ? "bg-brand-50/50" : "hover:bg-surface-muted"}`}><td className="px-3 py-3"><input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggleSelected(item.id)} aria-label={`Pilih ${item.subject_name}`} /></td><td className="px-3 py-3"><p className="font-semibold text-ink-900">{item.subject_name}</p><p className="text-xs text-ink-500">{item.class_level}</p></td><td className="px-3 py-3">{item.official_allocation ?? "—"}</td><td className="px-3 py-3">
           {isEditing ? (
-            <input type="number" min="0" step="1" autoFocus defaultValue={item.manualTarget ?? ""} onBlur={(e) => { updateTarget(item.id, e.target.value); setEditingTargetId(null); }} onKeyDown={(e) => { if (e.key === "Enter") { updateTarget(item.id, (e.target as HTMLInputElement).value); setEditingTargetId(null); } if (e.key === "Escape") setEditingTargetId(null); }} className={`w-24 rounded-lg border px-3 py-2 font-semibold ${invalid ? "border-amber-400 bg-amber-50" : "border-border bg-surface"}`} aria-label={`Target JP ${item.subject_name}`} />
+            <input type="number" min="0" step="1" autoFocus defaultValue={item.manualTarget ?? ""} onBlur={(e) => { updateTarget(item.id, e.target.value); setEditingTargetId(null); }} onKeyDown={(e) => { if (e.key === "Enter") { updateTarget(item.id, (e.target as HTMLInputElement).value); setEditingTargetId(null); } if (e.key === "Escape") setEditingTargetId(null); }} className={`w-24 rounded-lg border px-3 py-2 font-semibold ${invalid ? "border-amber/60 bg-amber-50" : "border-border bg-surface"}`} aria-label={`Target JP ${item.subject_name}`} />
           ) : (
-            <button type="button" onClick={() => setEditingTargetId(item.id)} className={`w-24 rounded-lg border px-3 py-2 text-left font-semibold ${invalid ? "border-amber-400 bg-amber-50" : "border-transparent hover:border-border hover:bg-surface"}`} aria-label={`Edit Target JP ${item.subject_name}, sekarang ${item.manualTarget ?? "kosong"}`}>{item.manualTarget ?? "—"}</button>
+            <button type="button" onClick={() => setEditingTargetId(item.id)} className={`w-24 rounded-lg border px-3 py-2 text-left font-semibold ${invalid ? "border-amber/60 bg-amber-50" : "border-transparent hover:border-border hover:bg-surface"}`} aria-label={`Edit Target JP ${item.subject_name}, sekarang ${item.manualTarget ?? "kosong"}`}>{item.manualTarget ?? "—"}</button>
           )}
-          {changed && <p className="mt-1 text-[11px] text-amber-700">{baseline[item.id] ?? "—"} → {item.manualTarget ?? "—"}</p>}
+          {/* V4 poin 24 — feedback real-time, langsung di row, tidak menunggu Save. */}
+          <p className={`mt-1 text-[11px] font-semibold ${note.tone === "warn" ? "text-amber-700" : "text-emerald-700"}`}>{note.text}</p>
+          {changed && <p className="mt-0.5 text-[11px] text-amber-700">{baseline[item.id] ?? "—"} → {item.manualTarget ?? "—"}</p>}
         </td><td className="px-3 py-3">{invalid ? <span className="text-amber-700">⚠ Perlu ditinjau</span> : newIds.includes(item.id) ? <span className="text-brand-700">Baru</span> : changed ? <span className="text-amber-700">Berubah</span> : <span className="text-emerald-700">✓ Tetap</span>}</td><td className="px-3 py-3"><div className="flex items-center gap-3 opacity-60 transition-opacity group-hover:opacity-100"><button onClick={() => setEditingTargetId(item.id)} className="text-xs font-semibold text-ink-600 hover:text-brand-700">Edit</button><button onClick={() => setDetailItemId(item.id)} className="text-xs font-semibold text-ink-600 hover:text-brand-700">Detail</button><button onClick={() => restoreTarget(item.id)} className="text-xs font-semibold text-ink-600 hover:text-brand-700">Kembalikan</button></div></td></tr>; })}</tbody></table></div>
+
+        <div className="space-y-3 md:hidden">{visibleCandidate.map((item) => { const changed = changedIds.includes(item.id); const invalid = reviewIds.includes(item.id); const isEditing = editingTargetId === item.id; const note = targetNote(item); return <div key={item.id} className={`rounded-xl border p-4 ${selectedIds.includes(item.id) ? "border-brand-600/40 bg-brand-50/50" : "border-border"}`}>
+          <div className="flex items-start justify-between gap-2"><label className="flex items-start gap-2"><input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggleSelected(item.id)} aria-label={`Pilih ${item.subject_name}`} className="mt-1" /><span><span className="block font-semibold text-ink-900">{item.subject_name}</span><span className="block text-xs text-ink-500">{item.class_level}</span></span></label>{invalid ? <span className="text-xs font-semibold text-amber-700">⚠ Ditinjau</span> : newIds.includes(item.id) ? <span className="text-xs font-semibold text-brand-700">Baru</span> : changed ? <span className="text-xs font-semibold text-amber-700">Berubah</span> : <span className="text-xs font-semibold text-emerald-700">✓ Tetap</span>}</div>
+          <div className="mt-3 flex items-center justify-between gap-3"><span className="text-xs text-ink-500">JP Resmi: <b className="text-ink-800">{item.official_allocation ?? "—"}</b></span>
+            {isEditing ? (
+              <input type="number" min="0" step="1" autoFocus defaultValue={item.manualTarget ?? ""} onBlur={(e) => { updateTarget(item.id, e.target.value); setEditingTargetId(null); }} onKeyDown={(e) => { if (e.key === "Enter") { updateTarget(item.id, (e.target as HTMLInputElement).value); setEditingTargetId(null); } if (e.key === "Escape") setEditingTargetId(null); }} className={`w-24 rounded-lg border px-3 py-2 text-right font-semibold ${invalid ? "border-amber/60 bg-amber-50" : "border-border bg-surface"}`} aria-label={`Target JP ${item.subject_name}`} />
+            ) : (
+              <button type="button" onClick={() => setEditingTargetId(item.id)} className={`w-24 rounded-lg border px-3 py-2 text-right font-semibold ${invalid ? "border-amber/60 bg-amber-50" : "border-border"}`} aria-label={`Edit Target JP ${item.subject_name}, sekarang ${item.manualTarget ?? "kosong"}`}>{item.manualTarget ?? "—"}</button>
+            )}
+          </div>
+          <p className={`mt-1 text-right text-[11px] font-semibold ${note.tone === "warn" ? "text-amber-700" : "text-emerald-700"}`}>{note.text}</p>
+          {changed && <p className="mt-0.5 text-right text-[11px] text-amber-700">{baseline[item.id] ?? "—"} → {item.manualTarget ?? "—"}</p>}
+          <div className="mt-3 flex items-center justify-end gap-3 border-t border-border pt-2"><button onClick={() => setEditingTargetId(item.id)} className="text-xs font-semibold text-ink-600">Edit</button><button onClick={() => setDetailItemId(item.id)} className="text-xs font-semibold text-ink-600">Detail</button><button onClick={() => restoreTarget(item.id)} className="text-xs font-semibold text-ink-600">Kembalikan</button></div>
+        </div>; })}</div>
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-surface-muted p-4"><div><p className="font-bold text-ink-900">Total Target JP: {totalTarget}</p><p className="mt-1 text-xs text-ink-500">JP resmi: {officialTotal} · Perubahan: {totalTarget - candidate.reduce((s, x) => s + (baseline[x.id] ?? 0), 0) >= 0 ? "+" : ""}{totalTarget - candidate.reduce((s, x) => s + (baseline[x.id] ?? 0), 0)} JP</p></div><span className={`text-sm font-semibold ${totalTarget > 0 ? "text-emerald-700" : "text-amber-700"}`}>{totalTarget > 0 ? "✓ Target diterima" : "⚠ Total perlu ditinjau"}</span></div>
         {missingSubjects.length > 0 && <div className="rounded-xl border border-amber/30 bg-amber-50 p-4 text-sm"><p className="font-bold text-amber-700">{missingSubjects.length} mata pelajaran sebelumnya tidak ditemukan.</p><ul className="mt-2 space-y-1 text-ink-700">{missingSubjects.map((m) => <li key={`${m.subjectName}::${m.classLevel}`}>{m.subjectName} <span className="text-ink-400">· {m.classLevel}</span></li>)}</ul><p className="mt-2 text-xs text-ink-500">Data sebelumnya tetap dipertahankan — Commit tidak menghapus apapun, hanya menambah/memperbarui data yang ada di hasil Generate ini.</p></div>}
       </section>}
 
-      {candidate.length > 0 && !success && <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface/95 px-4 py-3 shadow-lg backdrop-blur"><div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3"><p className="text-sm font-semibold text-ink-700">{changedIds.length} perubahan belum disimpan</p><button type="button" onClick={() => setCompareOpen(true)} disabled={validation.status !== "valid" || committing} className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-5 py-3 text-sm font-bold text-white disabled:opacity-50"><Save className="h-4 w-4" /> Simpan &amp; Sinkronkan</button></div></div>}
+      {candidate.length > 0 && !success && <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface/95 px-4 py-3 shadow-lg backdrop-blur"><div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3">
+        {committing ? (
+          <div className="flex flex-wrap items-center gap-4 text-xs font-semibold text-ink-500"><span className={syncStep >= 1 ? "text-emerald" : ""}>Menyimpan kurikulum {syncStep >= 1 ? "✓" : "○"}</span><span className={syncStep >= 2 ? "text-emerald" : ""}>Memperbarui mata pelajaran {syncStep >= 2 ? "✓" : "○"}</span><span className={syncStep >= 3 ? "text-emerald" : ""}>Memperbarui Target JP {syncStep >= 3 ? "✓" : "○"}</span></div>
+        ) : <p className="text-sm font-semibold text-ink-700">{changedIds.length} perubahan belum disimpan</p>}
+        <button type="button" onClick={() => setCompareOpen(true)} disabled={validation.status !== "valid" || committing} className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-5 py-3 text-sm font-bold text-white disabled:opacity-50"><Save className="h-4 w-4" /> {committing ? "Menyinkronkan…" : "Simpan & Sinkronkan"}</button>
+      </div></div>}
 
-      {success && <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5"><div className="flex items-start gap-3"><CheckCircle2 className="mt-0.5 h-6 w-6 text-emerald-700" /><div><h2 className="font-bold text-emerald-900">Kurikulum tersimpan</h2><p className="mt-1 text-sm text-emerald-800">{candidate.length} mata pelajaran · {changedIds.length} diperbarui · {newIds.length} ditambahkan · 0 dihapus</p><div className="mt-3 flex gap-2"><Link href="/akademik/mata-pelajaran" className="rounded-lg bg-surface px-3 py-2 text-sm font-semibold">Lihat Mata Pelajaran</Link><Link href="/akademik/target-jp" className="rounded-lg bg-surface px-3 py-2 text-sm font-semibold">Lihat Target JP</Link></div></div></div></section>}
+      {success && <section className="rounded-2xl border border-emerald/30 bg-emerald-50 p-5"><div className="flex items-start gap-3"><CheckCircle2 className="mt-0.5 h-6 w-6 text-emerald-700" /><div><h2 className="font-bold text-emerald">Kurikulum tersimpan</h2><p className="mt-1 text-sm text-emerald-700">{candidate.length} mata pelajaran · {changedIds.length} diperbarui · {newIds.length} ditambahkan · 0 dihapus</p><div className="mt-3 flex gap-2"><Link href="/akademik/mata-pelajaran" className="rounded-lg bg-surface px-3 py-2 text-sm font-semibold">Lihat Mata Pelajaran</Link><Link href="/akademik/target-jp" className="rounded-lg bg-surface px-3 py-2 text-sm font-semibold">Lihat Target JP</Link></div></div></div></section>}
 
       {candidate.length === 0 && !busy && <section className="rounded-2xl border border-dashed border-border p-8 text-center"><p className="font-semibold text-ink-900">Belum ada hasil kurikulum.</p><p className="mt-1 text-sm text-ink-500">Pilih kurikulum dan sumber untuk mulai.</p></section>}
+      {errorMessage && <div role="alert" className="rounded-xl border border-rose/30 bg-rose-50 p-4 text-sm"><p className="font-bold text-rose">{errorMessage}</p><button type="button" onClick={() => { if (errorRetry === "load") loadAll(); else if (errorRetry === "commit") void commitCandidate(); setErrorMessage(""); setErrorRetry(null); }} className="mt-3 rounded-lg bg-rose px-3 py-2 text-xs font-bold text-white">Coba lagi</button></div>}
       {message && <p role="status" className="rounded-xl border border-border bg-surface-muted p-4 text-sm leading-6 text-ink-700">{message}</p>}
 
       {detailItemId && (() => {
