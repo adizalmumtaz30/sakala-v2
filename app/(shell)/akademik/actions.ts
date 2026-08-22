@@ -6,7 +6,7 @@ import * as academicContextUseCases from "@/lib/application/academicContext.usec
 import * as schoolProfileUseCases from "@/lib/application/schoolProfile.usecases";
 import * as periodeAkademikUseCases from "@/lib/application/periodeAkademik.usecases";
 import * as jamPelajaranUseCases from "@/lib/application/jamPelajaran.usecases";
-import { AcademicContextValidationError, type AcademicContext, type Semester } from "@/lib/domain/academicContext";
+import { AcademicContextValidationError, type AcademicContext, type Semester, type Jenjang, type Institution } from "@/lib/domain/academicContext";
 import { SchoolProfileValidationError, type SchoolProfile } from "@/lib/domain/schoolProfile";
 import {
   PeriodeAkademikValidationError,
@@ -23,11 +23,13 @@ export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string
 
 export async function createAcademicContextAction(
   tahunPelajaran: string,
-  semester: Semester
+  semester: Semester,
+  jenjang: Jenjang,
+  institution: Institution
 ): Promise<ActionResult<AcademicContext>> {
   try {
     const supabase = await createClient();
-    const context = await academicContextUseCases.createAcademicContext(supabase, { tahunPelajaran, semester });
+    const context = await academicContextUseCases.createAcademicContext(supabase, { tahunPelajaran, semester, jenjang, institution });
     revalidatePath("/akademik");
     revalidatePath("/");
     return { ok: true, data: context };

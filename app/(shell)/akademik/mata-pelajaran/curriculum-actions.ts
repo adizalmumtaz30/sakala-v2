@@ -79,6 +79,32 @@ export async function clearCurriculumDraftAction(academicContextId: string): Pro
   return { ok: true, data: null };
 }
 
+// V4 poin: tombol hapus untuk sumber lama & baru. Hapus di level source: hapus
+// versi (cascade ke item) dulu, baru source-nya sendiri, supaya tidak
+// melanggar FK restrict curriculum_version.source_id. Kalau source pernah
+// dipakai lewat curriculum_adoption (FK restrict curriculum_item_id), Postgres
+// menolak — ditangkap dan diberi pesan yang bisa dipahami operator, bukan
+// error teknis Postgres.
+export async function deleteCurriculumSourceAction(sourceId: string): Promise<CurriculumActionResult<null>> {
+  const supabase = await createClient();
+  const { data: versions, error: vErr } = await supabase.from("curriculum_version").select("id").eq("source_id", sourceId);
+  if (vErr) return { ok: false, error: vErr.message };
+  const versionIds = (versions ?? []).map((v: { id: string }) => v.id);
+  if (versionIds.length) {
+    const { error: delVErr } = await supabase.from("curriculum_version").delete().in("id", versionIds);
+    if (delVErr) {
+      if (delVErr.code === "23503") return { ok: false, error: "Sumber ini sudah dipakai di kurikulum resmi (pernah di-Commit), tidak bisa dihapus." };
+      return { ok: false, error: delVErr.message };
+    }
+  }
+  const { error: delSErr } = await supabase.from("curriculum_source").delete().eq("id", sourceId);
+  if (delSErr) {
+    if (delSErr.code === "23503") return { ok: false, error: "Sumber ini sudah dipakai di kurikulum resmi (pernah di-Commit), tidak bisa dihapus." };
+    return { ok: false, error: delSErr.message };
+  }
+  revalidatePath("/akademik/generate-kurikulum");
+  return { ok: true, data: null };
+}
 export async function getActiveAcademicContextAction() {
   const supabase = await createClient();
   const { data: contexts, error: contextError } = await supabase
