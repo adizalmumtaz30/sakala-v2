@@ -138,7 +138,7 @@ export default function RecommendationFlow({
       </div>
       {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-[11.5px] text-rose">{error}</p>}
       <div className="flex flex-wrap gap-2 border-t border-border/60 pt-3">
-        <Button onClick={() => lihatSolusi("complete_remaining_jp")} disabled={isPending} loading={isPending}>Lihat solusi</Button>
+        <Button onClick={() => lihatSolusi("complete_remaining_jp")} disabled={isPending} loading={isPending}>{isPending ? "Memeriksa solusi…" : "Lihat solusi"}</Button>
         <Button variant="secondary" onClick={() => lihatSolusi("fill_empty_slots")} disabled={isPending}>Isi slot kosong</Button>
         <Button variant="secondary" onClick={() => lihatSolusi("schedule_full_week")} disabled={isPending}>Susun semua mapel</Button>
       </div>
@@ -236,7 +236,7 @@ export default function RecommendationFlow({
       <p className="text-[11px] leading-5 text-ink-400">Belum ada perubahan yang diterapkan. Menekan tombol di bawah akan menyimpan sebagai <em>candidate</em> — jadwal committed baru berubah setelah ditinjau dan diterapkan eksplisit di Jadwal Cerdas.</p>
 
       <div className="flex flex-wrap gap-2 border-t border-border/60 pt-3">
-        <Button onClick={terapkan} disabled={isPending} loading={isPending}><CheckCircle2 className="mr-1.5 h-4 w-4" />Terapkan {plan.result.candidates.length} perubahan</Button>
+        <Button onClick={terapkan} disabled={isPending} loading={isPending}><CheckCircle2 className="mr-1.5 h-4 w-4" />{isPending ? "Menerapkan…" : `Terapkan ${plan.result.candidates.length} perubahan`}</Button>
         <Button variant="secondary" onClick={() => setStep("solution")} disabled={isPending}>Kembali</Button>
         <Button variant="ghost" onClick={batal} disabled={isPending}>Batal</Button>
       </div>

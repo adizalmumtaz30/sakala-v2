@@ -23,6 +23,16 @@ function classStatusTone(remainingJp: number): "success" | "warning" {
   return remainingJp === 0 ? "success" : "warning";
 }
 
+// §32 AI State — bahasa status sederhana, tanpa animasi "berpikir" berlebihan.
+type AiState = "checking" | "watching" | "checked";
+const AI_STATE_LABEL: Record<AiState, string> = { checking: "Sedang diperiksa", watching: "Memeriksa perubahan", checked: "Data diperiksa" };
+function AiStateBadge({ state }: { state: AiState }) {
+  return <span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10.5px] font-semibold ${state === "checked" ? "bg-emerald-50 text-emerald" : "bg-surface-muted text-ink-500"}`}>
+    {state === "checking" ? <Search size={11} className="animate-pulse" /> : state === "watching" ? <RotateCcw size={11} className="animate-spin" /> : <Check size={11} />}
+    {AI_STATE_LABEL[state]}
+  </span>;
+}
+
 // §28 Search — bahasa natural sederhana atas data kelas yang sudah ada di context
 // (tidak perlu panggilan backend baru; hasil selalu berupa data + tindakan, bukan
 // sekadar daftar pencarian).
@@ -110,13 +120,18 @@ export default function AiPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-6 pb-10">
       {/* §03/§05 — Header: identitas + konteks selalu terlihat, tidak pernah hilang. */}
-      <header className="space-y-1">
-        <div className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-brand-600" /><h1 className="text-[19px] font-semibold tracking-tight text-ink-900">SAKALA AI</h1></div>
-        <p className="text-[12.5px] text-ink-500">Pahami data. Temukan solusi.</p>
+      <header className="flex flex-wrap items-center justify-between gap-2">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-brand-600" /><h1 className="text-[19px] font-semibold tracking-tight text-ink-900">SAKALA AI</h1></div>
+          <p className="text-[12.5px] text-ink-500">Pahami data. Temukan solusi.</p>
+        </div>
+        {/* §32 AI State — mencerminkan status nyata (fetch/pending), bukan animasi berpikir dibuat-buat. */}
+        <AiStateBadge state={contextLoading ? "checking" : isPending ? "watching" : "checked"} />
       </header>
 
       {contextLoading ? (
         <Card className="space-y-3">
+          <p className="text-[11.5px] font-medium text-ink-400">Memeriksa data kelas…</p>
           <div className="h-3 w-40 animate-pulse rounded bg-surface-muted" />
           <div className="h-6 w-64 animate-pulse rounded bg-surface-muted" />
         </Card>
