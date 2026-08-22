@@ -20,7 +20,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { Sparkles, ArrowRight, CheckCircle2, Circle, X, Lightbulb, HelpCircle, Target, BookOpen, CalendarDays, GraduationCap } from "lucide-react";
-import { runAiCopilotIntentAction, saveAiCandidatesAction, type AiCopilotClassStatus, type AiCopilotIntent } from "@/app/(shell)/ai/actions";
+import { runAiCopilotIntentAction, planScheduleAction, saveAiCandidatesAction, type AiCopilotClassStatus, type AiCopilotIntent } from "@/app/(shell)/ai/actions";
 import type { AiSchedulePlan } from "@/lib/application/aiSchedulePlanner";
 import Button from "@/components/ui/Button";
 import { Card, Badge } from "@/components/ui/primitives";
@@ -63,6 +63,7 @@ export default function RecommendationFlow({
   const [intent, setIntent] = useState<AiCopilotIntent>("complete_remaining_jp");
   const [primaryPlan, setPrimaryPlan] = useState<AiSchedulePlan | null>(null);
   const [altPlan, setAltPlan] = useState<AiSchedulePlan | null>(null);
+  const [altFocusSubject, setAltFocusSubject] = useState<string | null>(null);
   const [variant, setVariant] = useState<"primary" | "alt">("primary");
   const [error, setError] = useState<string | null>(null);
   const [savedCount, setSavedCount] = useState<number | null>(null);
@@ -85,16 +86,21 @@ export default function RecommendationFlow({
     setVariant("primary");
     setAltPlan(null);
     startTransition(async () => {
-      // §23 Alternative Solutions — untuk temuan JP kurang, tawarkan juga cara lain
-      // (memanfaatkan slot kosong) sebagai pembanding, bukan cuma satu jalan.
-      const wantsAlternative = chosenIntent === "complete_remaining_jp";
+      // §23 Alternative Solutions — alternatif harus BENAR-BENAR berbeda hasilnya,
+      // bukan cuma judul tombol berbeda dengan hasil identik (itu pilihan palsu,
+      // melanggar §36). Untuk 'lengkapi JP kurang' dengan >1 mapel kurang, alternatif
+      // yang jujur adalah: fokus mapel dengan kekurangan terbesar dulu, secara
+      // bertahap — bukan intent lain yang ternyata dipetakan ke planner yang sama.
+      const topAlt = deficits.length > 1 ? deficits.reduce((max, d) => (d.remainingJp > max.remainingJp ? d : max), deficits[0]) : null;
       const [primaryResult, altResult] = await Promise.all([
         runAiCopilotIntentAction(chosenIntent, classStatus.id),
-        wantsAlternative ? runAiCopilotIntentAction("fill_empty_slots", classStatus.id) : Promise.resolve(null),
+        chosenIntent === "complete_remaining_jp" && topAlt
+          ? planScheduleAction(`Lengkapi ${topAlt.subjectName} kelas ${classStatus.label}.`)
+          : Promise.resolve(null),
       ]);
       if (!primaryResult.ok) { setError(primaryResult.error); return; }
       setPrimaryPlan(primaryResult.data);
-      if (altResult?.ok && altResult.data.result.candidates.length > 0) setAltPlan(altResult.data);
+      if (altResult?.ok && altResult.data.result.candidates.length > 0) { setAltPlan(altResult.data); setAltFocusSubject(topAlt?.subjectName ?? null); }
       setStep("solution");
     });
   }
@@ -116,6 +122,7 @@ export default function RecommendationFlow({
     setStep("finding");
     setPrimaryPlan(null);
     setAltPlan(null);
+    setAltFocusSubject(null);
     setVariant("primary");
     setError(null);
   }
@@ -169,17 +176,17 @@ export default function RecommendationFlow({
         <p className="col-span-2 mt-1 text-ink-400 sm:col-span-4">Data diperiksa: Target JP · Mata Pelajaran · Pembagian Mengajar · Jadwal committed.</p>
       </div>}
 
-      {/* §23 Alternative Solutions — tawarkan cara lain, bukan cuma satu jalan. */}
+      {/* §23 Alternative Solutions — dua strategi yang genuinely berbeda hasilnya: semua sekaligus vs bertahap. */}
       {altPlan && <div className="grid gap-2 sm:grid-cols-2">
         <button type="button" onClick={() => setVariant("primary")} className={`rounded-xl border p-3 text-left transition-colors ${variant === "primary" ? "border-brand-600/40 bg-brand-50" : "border-border bg-surface hover:border-brand-600/20"}`}>
           <p className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-brand-600">★ Disarankan</p>
-          <p className="mt-1 text-[12px] font-semibold text-ink-900">{INTENT_LABEL.complete_remaining_jp}</p>
-          <p className="mt-0.5 text-[11px] text-ink-500">{primaryPlan?.result.candidates.length ?? 0} slot · mengisi tepat mapel yang kurang</p>
+          <p className="mt-1 text-[12px] font-semibold text-ink-900">Lengkapi semua mapel yang kurang</p>
+          <p className="mt-0.5 text-[11px] text-ink-500">{primaryPlan?.result.candidates.length ?? 0} slot · {deficits.length} mapel sekaligus</p>
         </button>
         <button type="button" onClick={() => setVariant("alt")} className={`rounded-xl border p-3 text-left transition-colors ${variant === "alt" ? "border-brand-600/40 bg-brand-50" : "border-border bg-surface hover:border-brand-600/20"}`}>
           <p className="text-[10px] font-bold uppercase tracking-wide text-ink-400">Alternatif</p>
-          <p className="mt-1 text-[12px] font-semibold text-ink-900">{INTENT_LABEL.fill_empty_slots}</p>
-          <p className="mt-0.5 text-[11px] text-ink-500">{altPlan.result.candidates.length} slot · memanfaatkan slot kosong yang tersedia</p>
+          <p className="mt-1 text-[12px] font-semibold text-ink-900">Fokus {altFocusSubject} dulu</p>
+          <p className="mt-0.5 text-[11px] text-ink-500">{altPlan.result.candidates.length} slot · bertahap, sisanya menyusul lain kali</p>
         </button>
       </div>}
       <p className="text-[12px] leading-5 text-ink-500">{plan.explanation}</p>
