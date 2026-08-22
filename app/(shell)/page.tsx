@@ -32,6 +32,7 @@ export default async function DashboardPage() {
       adminName={summary.schoolProfile?.nama ?? null}
       context={formatContextLabel(summary.activeContext)}
       metrics={summary.metrics}
+      metricTrends={summary.metricTrends}
       jpInsight={summary.jpInsight}
       workload={summary.workloadTop}
       heatmap={intelligence.heatmap}
