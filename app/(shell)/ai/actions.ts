@@ -7,6 +7,8 @@ import { listAcademicContexts } from "@/lib/application/academicContext.usecases
 import { listKelas } from "@/lib/application/kelas.usecases";
 import { listMataPelajaran } from "@/lib/application/mata-pelajaran.usecases";
 import { listPembagianMengajar } from "@/lib/application/pembagianMengajar.usecases";
+import { getSchoolProfile } from "@/lib/application/schoolProfile.usecases";
+import { formatContextLabel } from "@/lib/domain/academicContext";
 
 export type AiActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -27,6 +29,8 @@ export interface AiCopilotClassStatus {
 
 export interface AiCopilotContext {
   academicContextId: string;
+  schoolName: string;
+  contextLabel: string;
   classes: AiCopilotClassStatus[];
   activeClassId: string | null;
 }
@@ -43,10 +47,11 @@ async function getActiveContext() {
 export async function getAiCopilotContextAction(): Promise<AiActionResult<AiCopilotContext>> {
   try {
     const { supabase, active } = await getActiveContext();
-    const [kelas, mapel, pembagian] = await Promise.all([
+    const [kelas, mapel, pembagian, schoolProfile] = await Promise.all([
       listKelas(supabase),
       listMataPelajaran(supabase),
       listPembagianMengajar(supabase, active.id),
+      getSchoolProfile(supabase),
     ]);
 
     const activeAssignments = pembagian.filter((p) => p.status === "aktif");
@@ -81,7 +86,7 @@ export async function getAiCopilotContextAction(): Promise<AiActionResult<AiCopi
       };
     }).filter((x) => x.targetJp > 0);
 
-    return { ok: true, data: { academicContextId: active.id, classes, activeClassId: classes[0]?.id ?? null } };
+    return { ok: true, data: { academicContextId: active.id, schoolName: schoolProfile?.namaSekolah ?? "Sekolah", contextLabel: formatContextLabel(active), classes, activeClassId: classes[0]?.id ?? null } };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Gagal membaca kondisi jadwal AI." };
   }
