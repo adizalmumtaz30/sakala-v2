@@ -20,7 +20,7 @@ export interface ReportDocumentProps {
   emptyMessage?: string;
 }
 
-const BRAND = "#166534";
+const BRAND = "#2F6FED";
 const INK = "#1f2937";
 const MUTED = "#6b7280";
 const BORDER = "#d1d5db";
