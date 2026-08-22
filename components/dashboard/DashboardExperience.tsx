@@ -286,6 +286,40 @@ function MiniCalendar({ heatmap }: { heatmap: DashboardHeatmapDay[] }) {
   </div>;
 }
 
+type AgendaTab = "hari-ini" | "mendatang";
+
+function AgendaSection({ agenda, guruList, guruByName }: { agenda: DashboardAgendaEntry[]; guruList: GuruLite[]; guruByName: Map<string, GuruLite> }) {
+  const [tab, setTab] = useState<AgendaTab>("hari-ini");
+  const todayAgenda = agenda.filter((e) => e.daysFromNow === 0);
+  const upcomingAgenda = agenda.filter((e) => e.daysFromNow > 0);
+  // Fallback: kalau hari ini kosong (mis. hari libur/tanpa jadwal), langsung tampilkan tab Mendatang supaya panel tidak kosong percuma.
+  const list = tab === "hari-ini" ? todayAgenda : upcomingAgenda;
+  const emptyText = tab === "hari-ini" ? "Belum ada jadwal untuk hari ini." : "Belum ada jadwal pada hari-hari berikutnya.";
+  return <Section title="Agenda" description="Jadwal dari konteks aktif." href="/jadwal" icon={<Clock3 size={14} />}
+    badge={<div className="ml-1 flex gap-0.5 rounded-full bg-surface-muted/60 p-0.5 text-[9px] font-semibold">
+      <button type="button" onClick={() => setTab("hari-ini")} className={`rounded-full px-2 py-0.5 transition-colors ${tab === "hari-ini" ? "bg-surface text-brand-700 shadow-sm" : "text-ink-400 hover:text-ink-700"}`}>Hari Ini{todayAgenda.length > 0 ? ` (${todayAgenda.length})` : ""}</button>
+      <button type="button" onClick={() => setTab("mendatang")} className={`rounded-full px-2 py-0.5 transition-colors ${tab === "mendatang" ? "bg-surface text-brand-700 shadow-sm" : "text-ink-400 hover:text-ink-700"}`}>Mendatang{upcomingAgenda.length > 0 ? ` (${upcomingAgenda.length})` : ""}</button>
+    </div>}>
+    <div className="space-y-1">
+      {list.slice(0, 4).map((e) => {
+        const teacher = e.teacher?.trim() || "Guru";
+        const className = e.className?.trim() || "Kelas";
+        const g = e.teacherId ? guruList.find((item) => item.id === e.teacherId) : guruByName.get(teacher);
+        return <Link key={e.id} href={`/jadwal?assignment=${encodeURIComponent(e.id)}`} aria-label={`${e.subject} · ${teacher} · ${className}`} className="group flex items-center gap-2.5 border-b border-border/50 py-2 last:border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">
+          <span className="w-[50px] shrink-0 text-[9px] font-bold tabular-nums text-brand-600">{e.time}</span>
+          <Avatar name={g?.namaGuru ?? teacher} size="md" kodeGuru={g?.kodeGuru} jenisKelamin={g?.jenisKelamin} />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[10.5px] font-semibold text-ink-900 group-hover:text-brand-700">{e.subject?.trim() || "Mata pelajaran"}</span>
+            <span className="block truncate text-[8.5px] text-ink-400">{tab === "mendatang" ? `${e.dayLabel} · ` : ""}{className} · {teacher}{e.room ? ` · ${e.room}` : ""}</span>
+          </span>
+          <ChevronRight size={11} className="text-ink-300 group-hover:text-brand-600" />
+        </Link>;
+      })}
+      {list.length === 0 && <p className="text-[10px] text-ink-400">{emptyText}</p>}
+    </div>
+  </Section>;
+}
+
 const NOTIF_TONE: Record<NotificationEntry["tone"], { icon: typeof Info; cls: string }> = {
   info: { icon: Info, cls: "bg-brand-50 text-brand-600" },
   success: { icon: CheckCircle2, cls: "bg-emerald-50 text-emerald" },

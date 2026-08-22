@@ -6,7 +6,7 @@ import type { HariSekolah } from "@/lib/domain/jamPelajaran";
 import { classifyBeban, type Guru } from "@/lib/domain/guru";
 
 export interface DashboardHeatmapDay { day: HariSekolah; label: string; total: number; level: 0|1|2|3|4; }
-export interface DashboardAgendaEntry { id:string; dayLabel:string; time:string; subject:string; teacher:string; teacherId:string|null; className:string; room:string|null; }
+export interface DashboardAgendaEntry { id:string; dayLabel:string; time:string; subject:string; teacher:string; teacherId:string|null; className:string; room:string|null; daysFromNow:number; }
 export interface DashboardActivityEntry { id:string; action:string; entityType:string; entityLabel:string|null; createdAt:string; }
 export interface DashboardBebanDistribution { ringan:number; normal:number; berat:number; }
 export interface DashboardHeatmapCell { periode:number; time:string; total:number; level:0|1|2|3|4; kelasCount:number; guruCount:number; ruanganCount:number; }
@@ -108,12 +108,12 @@ export async function getDashboardIntelligence(supabase:SupabaseClient, contextI
   const bebanDistribution=workloadFull.reduce((acc,w)=>{acc[w.beban]+=1;return acc;},{ringan:0,normal:0,berat:0} as DashboardBebanDistribution);
 
   const current=todayIndex();
-  const upcoming=committed.map(a=>({a,distance:(DAYS.indexOf(a.day)-current+7)%7})).sort((x,y)=>x.distance-y.distance||x.a.periodStart-y.a.periodStart).slice(0,6).map(({a})=>{
+  const upcoming=committed.map(a=>({a,distance:(DAYS.indexOf(a.day)-current+7)%7})).sort((x,y)=>x.distance-y.distance||x.a.periodStart-y.a.periodStart).slice(0,24).map(({a,distance})=>{
     const s=slots.get(`${a.day}:${a.periodStart}`);
     const teacherName=guru.get(a.teacherId) ?? "Guru";
     const className=kelas.get(a.classId) ?? "Kelas";
     const subject=mapel.get(a.subjectId) ?? "Mata pelajaran";
-    return {id:a.id,dayLabel:LABEL[a.day],time:s?`${s.waktuMulai}–${s.waktuSelesai}`:`Jam ke-${a.periodStart}`,subject,teacher:teacherName,teacherId:guru.has(a.teacherId)?a.teacherId:null,className,room:a.roomId?ruang.get(a.roomId)??null:null};
+    return {id:a.id,dayLabel:LABEL[a.day],time:s?`${s.waktuMulai}–${s.waktuSelesai}`:`Jam ke-${a.periodStart}`,subject,teacher:teacherName,teacherId:guru.has(a.teacherId)?a.teacherId:null,className,room:a.roomId?ruang.get(a.roomId)??null:null,daysFromNow:distance};
   });
   const recentActivity=audit.items.map(i=>({id:i.id,action:humanizeActivity(i.action,i.entityType,i.entityLabel),entityType:i.entityType,entityLabel:i.entityLabel,createdAt:i.createdAt}));
   return {heatmap,heatmapGrid,rooms,heatmapGridByRoom,bebanDistribution,workloadFull,upcomingAgenda:upcoming,recentActivity};
