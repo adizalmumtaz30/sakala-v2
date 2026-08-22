@@ -74,7 +74,17 @@ export default function RecommendationFlow({
   const plan = variant === "alt" && altPlan ? altPlan : primaryPlan;
 
   const deficits = classStatus.subjectDeficits;
-  if (deficits.length === 0) return null; // tidak ada temuan untuk kelas ini — komponen tidak render apa pun.
+
+  // §39 Success State — konfirmasi positif dengan data yang benar-benar ada
+  // (targetJp/scheduledJp), TIDAK menambah metrik seperti 'slot terisi' atau
+  // 'bentrok' karena classStatus tidak menyediakan data itu (§36: jangan mengarang).
+  if (deficits.length === 0) {
+    return <Card className="space-y-2">
+      <div className="flex items-center gap-2 text-emerald"><CheckCircle2 size={16} /><p className="text-[13.5px] font-semibold">Sudah sesuai</p></div>
+      <p className="text-[12px] leading-5 text-ink-500">Kelas {classStatus.label} sudah memiliki {classStatus.scheduledJp} dari {classStatus.targetJp} JP. Tidak ada masalah JP yang saya temukan untuk kelas ini saat ini.</p>
+      <CrossFeatureLinks />
+    </Card>;
+  }
 
   const totalKurang = deficits.reduce((s: number, d: { remainingJp: number }) => s + d.remainingJp, 0);
   const topDeficit = deficits[0];
