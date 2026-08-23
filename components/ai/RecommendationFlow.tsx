@@ -29,7 +29,7 @@
 import { useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { Sparkles, ArrowRight, CheckCircle2, Circle, X, Lightbulb, HelpCircle, Target, BookOpen, CalendarDays, GraduationCap, Pencil } from "lucide-react";
-import { runAiCopilotIntentAction, planScheduleAction, saveAiCandidatesAction, type AiCopilotClassStatus, type AiCopilotIntent } from "@/app/(shell)/ai/actions";
+import { runAiCopilotIntentAction, planScheduleAction, saveAiCandidatesAction, rollbackAiCandidatesAction, type AiCopilotClassStatus, type AiCopilotIntent } from "@/app/(shell)/ai/actions";
 import type { AiSchedulePlan } from "@/lib/application/aiSchedulePlanner";
 import Button from "@/components/ui/Button";
 
@@ -102,6 +102,8 @@ export default function RecommendationFlow({
   const [error, setError] = useState<string | null>(null);
   const [savedCount, setSavedCount] = useState<number | null>(null);
   const [skippedCount, setSkippedCount] = useState(0);
+  const [savedIds, setSavedIds] = useState<string[]>([]);
+  const [rolledBack, setRolledBack] = useState(false);
   const [whyOpen, setWhyOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -156,6 +158,8 @@ export default function RecommendationFlow({
       if (!result.ok) { setError(result.error); return; }
       setSavedCount(result.data.savedCount);
       setSkippedCount(result.data.skippedCount);
+      setSavedIds(result.data.savedIds);
+      setRolledBack(false);
       setStep("done");
       onCandidatesSaved();
     });
@@ -168,6 +172,20 @@ export default function RecommendationFlow({
     setAltFocusSubject(null);
     setVariant("primary");
     setError(null);
+  }
+
+  // §25 Rollback — hapus candidate yang barusan disimpan. Risiko rendah (belum
+  // menyentuh jadwal committed), jadi langsung tanpa konfirmasi tambahan.
+  function kembalikan() {
+    if (savedIds.length === 0) return;
+    setError(null);
+    startTransition(async () => {
+      const result = await rollbackAiCandidatesAction(savedIds);
+      if (!result.ok) { setError(result.error); return; }
+      setRolledBack(true);
+      setSavedIds([]);
+      onCandidatesSaved();
+    });
   }
 
   const stageStatus = (s: FlowStep): "done" | "active" | "upcoming" => {
@@ -308,21 +326,30 @@ export default function RecommendationFlow({
     <Stage status={stageStatus("done")} title={STAGE_TITLE.done} isLast>
       {stageStatus("done") === "upcoming" && <p className="text-[11.5px] text-ink-300">Menunggu tahap sebelumnya.</p>}
       {stageStatus("done") === "active" && <div className="sakala-stage-enter space-y-3">
-        <div className="flex items-center gap-2 text-emerald"><CheckCircle2 size={16} /><p className="text-[13.5px] font-semibold">Sudah diperbarui</p></div>
-        <ExecutionRow label="Candidate jadwal disimpan" done />
-        <ExecutionRow label="Jadwal committed diperbarui" done={false} note="menunggu ditinjau di Jadwal Cerdas" />
+        {rolledBack ? (
+          <>
+            <div className="flex items-center gap-2 text-ink-600"><Circle size={14} className="text-ink-300" /><p className="text-[13.5px] font-semibold">Dikembalikan</p></div>
+            <p className="text-[12px] leading-5 text-ink-500">{savedCount} candidate yang tadi disimpan sudah dihapus lagi. Tidak ada yang berubah pada jadwal committed.</p>
+          </>
+        ) : <>
+          <div className="flex items-center gap-2 text-emerald"><CheckCircle2 size={16} /><p className="text-[13.5px] font-semibold">Sudah diperbarui</p></div>
+          <ExecutionRow label="Candidate jadwal disimpan" done />
+          <ExecutionRow label="Jadwal committed diperbarui" done={false} note="menunggu ditinjau di Jadwal Cerdas" />
 
-        <div className="rounded-lg bg-surface-muted p-3 text-[12.5px] text-ink-700">
-          <strong>{savedCount}</strong> candidate tersimpan{skippedCount > 0 && <span className="text-amber"> · {skippedCount} dilewati karena conflict</span>}.
-          Lanjutkan ke <Link href="/jadwal-cerdas" className="font-semibold text-violet hover:underline">Jadwal Cerdas</Link> untuk meninjau dan menerapkan ke jadwal resmi.
-        </div>
+          <div className="space-y-2 rounded-lg bg-surface-muted p-3 text-[12.5px] text-ink-700">
+            <p><strong>{savedCount}</strong> candidate tersimpan{skippedCount > 0 && <span className="text-amber"> · {skippedCount} dilewati karena conflict</span>}.
+            Lanjutkan ke <Link href="/jadwal-cerdas" className="font-semibold text-violet hover:underline">Jadwal Cerdas</Link> untuk meninjau dan menerapkan ke jadwal resmi.</p>
+            {error && <p className="text-[11.5px] text-rose">{error}</p>}
+            <button type="button" onClick={kembalikan} disabled={isPending} className="text-[11px] font-semibold text-ink-500 underline decoration-dotted hover:text-rose disabled:opacity-50">{isPending ? "Mengembalikan…" : "Kembalikan"}</button>
+          </div>
+        </>}
 
         {sisaDeficit.length > 0 ? <div className="flex items-start gap-2.5 border-t border-border/60 pt-3">
           <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-violet" />
           <div className="min-w-0">
             <p className="text-[11px] font-semibold text-ink-900">Saya menemukan {sisaDeficit.length} hal lagi</p>
             <p className="mt-0.5 text-[11.5px] leading-5 text-ink-500">{sisaDeficit[0].subjectName} masih kekurangan {sisaDeficit[0].remainingJp} JP.</p>
-            <Button variant="accent" size="sm" className="mt-2" onClick={() => { setStep("finding"); setPrimaryPlan(null); setAltPlan(null); setVariant("primary"); setSavedCount(null); }}>Lihat solusi</Button>
+            <Button variant="accent" size="sm" className="mt-2" onClick={() => { setStep("finding"); setPrimaryPlan(null); setAltPlan(null); setVariant("primary"); setSavedCount(null); setRolledBack(false); }}>Lihat solusi</Button>
           </div>
         </div> : <p className="border-t border-border/60 pt-3 text-[12px] text-ink-500">Tidak ada masalah JP lain yang saya temukan untuk kelas ini saat ini.</p>}
       </div>}

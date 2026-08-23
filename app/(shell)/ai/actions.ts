@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { planScheduleFromCommand, type AiSchedulePlan } from "@/lib/application/aiSchedulePlanner";
 import { saveCandidatesAction, commitAssignmentsAction } from "@/app/(shell)/jadwal-cerdas/actions";
+import * as scheduleAssignmentUseCases from "@/lib/application/scheduleAssignment.usecases";
 import { listAcademicContexts } from "@/lib/application/academicContext.usecases";
 import { listKelas } from "@/lib/application/kelas.usecases";
 import { listMataPelajaran } from "@/lib/application/mata-pelajaran.usecases";
@@ -178,8 +179,25 @@ export async function runAiCopilotIntentAction(
 /** Explicit user action: save the AI preview as candidate rows. */
 export async function saveAiCandidatesAction(
   drafts: Parameters<typeof saveCandidatesAction>[0]
-): Promise<AiActionResult<{ savedCount: number; skippedCount: number }>> {
-  return saveCandidatesAction(drafts);
+): Promise<AiActionResult<{ savedCount: number; skippedCount: number; savedIds: string[] }>> {
+  const result = await saveCandidatesAction(drafts);
+  return result;
+}
+
+// §25 Rollback — hapus candidate yang barusan disimpan (bukan jadwal committed,
+// jadi ini aman & langsung tanpa konfirmasi tambahan, sesuai §19 risiko rendah).
+export async function rollbackAiCandidatesAction(ids: string[]): Promise<AiActionResult<{ removedCount: number }>> {
+  try {
+    const supabase = await getActiveContext().then((c) => c.supabase);
+    let removed = 0;
+    for (const id of ids) {
+      await scheduleAssignmentUseCases.deleteAssignment(supabase, id);
+      removed += 1;
+    }
+    return { ok: true, data: { removedCount: removed } };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Gagal mengembalikan candidate." };
+  }
 }
 
 /** Explicit user action: commit only after candidate review/approval. */
