@@ -19,8 +19,20 @@ import RecommendationFlow from "@/components/ai/RecommendationFlow";
 
 type AiPlan = Extract<Awaited<ReturnType<typeof planScheduleAction>>, { ok: true }>["data"];
 
-function classStatusTone(remainingJp: number): "success" | "warning" {
-  return remainingJp === 0 ? "success" : "warning";
+function classStatusTone(remainingJp: number, belumSiapJp: number): "success" | "warning" | "danger" {
+  if (remainingJp === 0) return "success";
+  return belumSiapJp > 0 ? "danger" : "warning";
+}
+
+// AI Action Contract — "Belum Siap" (guru belum ditentukan) TIDAK BOLEH
+// disamarkan jadi "kurang" generik: AI tidak bisa menjadwalkan mapel yang
+// belum punya guru sama sekali, jadi label ini harus beda dari "belum
+// terjadwal" (yang memang bisa langsung AI kerjakan).
+function classStatusLabel(remainingJp: number, belumSiapJp: number): string {
+  if (remainingJp === 0) return "Sesuai";
+  if (belumSiapJp > 0 && belumSiapJp >= remainingJp) return `${belumSiapJp} JP guru belum ditentukan`;
+  if (belumSiapJp > 0) return `${belumSiapJp} JP guru belum ada · ${remainingJp - belumSiapJp} JP belum terjadwal`;
+  return `${remainingJp} JP belum terjadwal`;
 }
 
 // §32 AI State — bahasa status sederhana, tanpa animasi "berpikir" berlebihan.
@@ -156,7 +168,7 @@ export default function AiPage() {
               <div className="space-y-1.5">
                 <p className="text-[11.5px] text-ink-500">{searchResults.length > 0 ? `Saya menemukan ${searchResults.length} kelas.` : "Saya belum menemukan kelas yang cocok dengan itu."}</p>
                 {searchResults.map((c) => <button key={c.id} type="button" onClick={() => selectClass(c.id)} className="flex w-full items-center justify-between gap-3 rounded-xl border border-border bg-surface px-3 py-2.5 text-left hover:border-violet/30 hover:bg-violet-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet/40">
-                  <span className="flex items-center gap-2.5"><span className="text-[13px] font-semibold text-ink-900">{c.label}</span><Badge tone={classStatusTone(c.remainingJp)}>{c.remainingJp === 0 ? "Sesuai" : `${c.remainingJp} JP kurang`}</Badge></span>
+                  <span className="flex items-center gap-2.5"><span className="text-[13px] font-semibold text-ink-900">{c.label}</span><Badge tone={classStatusTone(c.remainingJp, c.belumSiapJp)}>{classStatusLabel(c.remainingJp, c.belumSiapJp)}</Badge></span>
                   <span className="text-[10.5px] font-semibold text-violet">Tinjau →</span>
                 </button>)}
               </div>
@@ -196,7 +208,7 @@ export default function AiPage() {
               <div className={`rounded-xl p-4 ${selectedClass.remainingJp === 0 ? "bg-emerald-50" : "bg-violet-50"}`}>
                 <div className="flex items-baseline gap-1"><span className="text-[30px] font-light leading-none tabular-nums text-ink-900">{kondisiKelas.jpLabel}</span><span className="text-[11px] font-medium text-ink-400">JP</span></div>
                 <div className="mt-1.5 text-[11px] font-medium text-ink-600">{kondisiKelas.jpSubtitle}</div>
-                <div className="mt-1.5"><Badge tone={classStatusTone(selectedClass.remainingJp)}>{selectedClass.remainingJp === 0 ? "Sesuai" : `${selectedClass.remainingJp} JP kurang`}</Badge></div>
+                <div className="mt-1.5"><Badge tone={classStatusTone(selectedClass.remainingJp, selectedClass.belumSiapJp)}>{classStatusLabel(selectedClass.remainingJp, selectedClass.belumSiapJp)}</Badge></div>
               </div>
               <button type="button" onClick={() => document.getElementById("mapel-kurang")?.scrollIntoView({ behavior: "smooth", block: "start" })} disabled={kondisiKelas.mapelKurang === 0} className="rounded-xl bg-surface-muted p-4 text-left transition-colors enabled:hover:bg-violet-50 disabled:cursor-default">
                 <div className="text-[30px] font-light leading-none tabular-nums text-ink-900">{kondisiKelas.mapelKurang}</div>
@@ -251,10 +263,9 @@ export default function AiPage() {
 
 // §04 Class Selection — kartu workspace, bukan form: tampilkan status JP sebelum dipilih.
 function ClassCard({ status, onSelect }: { status: AiCopilotClassStatus; onSelect: () => void }) {
-  const ok = status.remainingJp === 0;
   return <button type="button" onClick={onSelect} className="group flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4 text-left transition-all hover:-translate-y-0.5 hover:border-violet/30 hover:shadow-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet/40">
     <span className="text-[14px] font-semibold text-ink-900 group-hover:text-violet">{status.label}</span>
     <span className="text-[11px] tabular-nums text-ink-500">{status.scheduledJp} / {status.targetJp} JP</span>
-    <Badge tone={ok ? "success" : "warning"}>{ok ? "Sesuai" : `${status.remainingJp} JP kurang`}</Badge>
+    <Badge tone={classStatusTone(status.remainingJp, status.belumSiapJp)}>{classStatusLabel(status.remainingJp, status.belumSiapJp)}</Badge>
   </button>;
 }

@@ -7,6 +7,7 @@ import { listAcademicContexts } from "@/lib/application/academicContext.usecases
 import { listKelas } from "@/lib/application/kelas.usecases";
 import { listMataPelajaran } from "@/lib/application/mata-pelajaran.usecases";
 import { listPembagianMengajar } from "@/lib/application/pembagianMengajar.usecases";
+import { getTargetJpView } from "@/lib/application/targetJp.usecases";
 import { listGuru } from "@/lib/application/guru.usecases";
 import { getSchoolProfile } from "@/lib/application/schoolProfile.usecases";
 import { formatContextLabel } from "@/lib/domain/academicContext";
@@ -25,7 +26,9 @@ export interface AiCopilotClassStatus {
   targetJp: number;
   scheduledJp: number;
   remainingJp: number;
-  subjectDeficits: Array<{ subjectId: string; subjectName: string; targetJp: number; scheduledJp: number; remainingJp: number }>;
+  /** JP yang belum punya guru sama sekali (authority: target_jp resmi). AI wajib membedakan ini dari "sudah punya guru tapi belum terjadwal". */
+  belumSiapJp: number;
+  subjectDeficits: Array<{ subjectId: string; subjectName: string; targetJp: number; scheduledJp: number; remainingJp: number; belumSiapJp: number }>;
 }
 
 export interface AiCopilotContext {
@@ -47,46 +50,63 @@ async function getActiveContext() {
   return { supabase, active };
 }
 
-/** Read-only context snapshot for the AI Copilot. No schedule mutation occurs here. */
+/** Read-only context snapshot for the AI Copilot. No schedule mutation occurs here.
+ *
+ * SAKALA MASTER RULE (AI Action Contract): target/remaining di sini WAJIB
+ * berasal dari tabel target_jp resmi (lewat getTargetJpView, authority yang
+ * sama dipakai halaman Target JP) — bukan dihitung ulang dari Pembagian
+ * Mengajar. Sebelumnya fungsi ini menjumlah jpPerMinggu Pembagian Mengajar
+ * langsung, jadi AI Copilot bisa menyarankan "kelas ini sudah selesai"
+ * padahal masih ada mapel yang belum punya guru sama sekali — persis kasus
+ * 19/40 yang jadi dasar kontrak ini.
+ */
 export async function getAiCopilotContextAction(): Promise<AiActionResult<AiCopilotContext>> {
   try {
     const { supabase, active } = await getActiveContext();
-    const [kelas, mapel, pembagian, schoolProfile, guru] = await Promise.all([
+    const [kelas, mapel, schoolProfile, guru, targetJpView] = await Promise.all([
       listKelas(supabase),
       listMataPelajaran(supabase),
-      listPembagianMengajar(supabase, active.id),
       getSchoolProfile(supabase),
       listGuru(supabase),
+      getTargetJpView(supabase, active.id),
     ]);
 
-    const activeAssignments = pembagian.filter((p) => p.status === "aktif");
+    const rowsByKelas = new Map<string, typeof targetJpView.rows>();
+    for (const row of targetJpView.rows) {
+      const list = rowsByKelas.get(row.kelasId) ?? [];
+      list.push(row);
+      rowsByKelas.set(row.kelasId, list);
+    }
+
     const classes = kelas.map((k) => {
-      const assignments = activeAssignments.filter((p) => p.kelasId === k.id);
-      const bySubject = new Map<string, { targetJp: number; scheduledJp: number }>();
-      for (const item of assignments) {
-        const current = bySubject.get(item.mataPelajaranId) ?? { targetJp: 0, scheduledJp: 0 };
-        current.targetJp += item.jpPerMinggu;
-        current.scheduledJp += item.jpTerjadwal ?? Math.max(0, item.jpPerMinggu - (item.jpTersisa ?? item.jpPerMinggu));
-        bySubject.set(item.mataPelajaranId, current);
-      }
-      const subjectDeficits = [...bySubject.entries()]
-        .map(([subjectId, value]) => ({
-          subjectId,
-          subjectName: mapel.find((m) => m.id === subjectId)?.nama ?? "Mata Pelajaran",
-          targetJp: value.targetJp,
-          scheduledJp: value.scheduledJp,
-          remainingJp: Math.max(0, value.targetJp - value.scheduledJp),
+      const rows = rowsByKelas.get(k.id) ?? [];
+      // "Kekurangan" di sini mencakup DUA hal sekaligus, dan keduanya wajib
+      // terlihat: mapel yang belum punya guru (belumSiapJp) DAN mapel yang
+      // sudah punya guru tapi belum masuk jadwal (belumTerjadwalJp). AI tidak
+      // boleh menganggap "guru belum ada" sebagai "sudah selesai".
+      const subjectDeficits = rows
+        .map((r) => ({
+          subjectId: r.mataPelajaranId,
+          subjectName: r.mataPelajaranNama,
+          targetJp: r.targetJp,
+          scheduledJp: r.terjadwalJp,
+          remainingJp: r.belumSiapJp + r.belumTerjadwalJp,
+          belumSiapJp: r.belumSiapJp,
         }))
         .filter((x) => x.remainingJp > 0)
         .sort((a, b) => b.remainingJp - a.remainingJp);
-      const targetJp = assignments.reduce((sum, item) => sum + item.jpPerMinggu, 0);
-      const scheduledJp = assignments.reduce((sum, item) => sum + (item.jpTerjadwal ?? Math.max(0, item.jpPerMinggu - (item.jpTersisa ?? item.jpPerMinggu))), 0);
+
+      const targetJp = rows.reduce((sum, r) => sum + r.targetJp, 0);
+      const scheduledJp = rows.reduce((sum, r) => sum + r.terjadwalJp, 0);
+      const belumSiapJp = rows.reduce((sum, r) => sum + r.belumSiapJp, 0);
+
       return {
         id: k.id,
         label: `${k.tingkat} ${k.namaRombel}`.trim(),
         targetJp,
         scheduledJp,
         remainingJp: Math.max(0, targetJp - scheduledJp),
+        belumSiapJp,
         subjectDeficits,
       };
     }).filter((x) => x.targetJp > 0);
