@@ -35,13 +35,13 @@ export async function generateCandidatesAction(
 /** Simpan hasil preview sebagai baris status="candidate" — transisi ke Candidate Review. */
 export async function saveCandidatesAction(
   drafts: Parameters<typeof saveGeneratedCandidates>[1]
-): Promise<ActionResult<{ savedCount: number; skippedCount: number }>> {
+): Promise<ActionResult<{ savedCount: number; skippedCount: number; savedIds: string[] }>> {
   try {
     const supabase = await createClient();
     const result = await saveGeneratedCandidates(supabase, drafts);
     revalidatePath("/jadwal-cerdas");
     revalidatePath("/");
-    return { ok: true, data: { savedCount: result.saved.length, skippedCount: result.skipped.length } };
+    return { ok: true, data: { savedCount: result.saved.length, skippedCount: result.skipped.length, savedIds: result.saved.map((a) => a.id) } };
   } catch (err) {
     return { ok: false, error: toMessage(err) };
   }
