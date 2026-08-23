@@ -44,10 +44,10 @@ const emptyForm = {
 
 type FormState = typeof emptyForm;
 
-export default function MataPelajaranWorkspace({ initialData }: { initialData: MataPelajaran[] }) {
+export default function MataPelajaranWorkspace({ initialData, initialQuery }: { initialData: MataPelajaran[]; initialQuery?: string }) {
   const router = useRouter();
   const [data, setData] = useState<MataPelajaran[]>(initialData);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery ?? "");
   const [modalOpen, setModalOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState<MataPelajaran | null>(null);

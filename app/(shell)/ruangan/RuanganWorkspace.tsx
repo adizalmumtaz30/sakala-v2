@@ -9,9 +9,9 @@ import Input from "@/components/ui/Input";
 import Modal from "@/components/ui/Modal";
 import { Card, Badge, EmptyState } from "@/components/ui/primitives";
 
-export default function RuanganWorkspace({ initialData }: { initialData: Ruangan[] }) {
+export default function RuanganWorkspace({ initialData, initialQuery }: { initialData: Ruangan[]; initialQuery?: string }) {
   const [data, setData] = useState<Ruangan[]>(initialData);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery ?? "");
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Ruangan | null>(null);
   const [formError, setFormError] = useState<string | null>(null);

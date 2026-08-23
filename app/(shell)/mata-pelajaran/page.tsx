@@ -3,11 +3,12 @@ import { listMataPelajaran } from "@/lib/application/mata-pelajaran.usecases";
 import MataPelajaranWorkspace from "./MataPelajaranWorkspace";
 import { ErrorState } from "@/components/ui/primitives";
 
-export default async function MataPelajaranPage() {
+export default async function MataPelajaranPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   try {
     const supabase = await createClient();
     const data = await listMataPelajaran(supabase);
-    return <MataPelajaranWorkspace initialData={data} />;
+    const { q } = await searchParams;
+    return <MataPelajaranWorkspace initialData={data} initialQuery={q ?? ""} />;
   } catch {
     return (
       <div className="mx-auto max-w-3xl pt-10">
