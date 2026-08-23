@@ -28,10 +28,10 @@
 
 import { useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
-import { Sparkles, ArrowRight, CheckCircle2, Circle, X, Lightbulb, HelpCircle, Target, BookOpen, CalendarDays, GraduationCap, Pencil } from "lucide-react";
-import { runAiCopilotIntentAction, planScheduleAction, saveAiCandidatesAction, rollbackAiCandidatesAction, type AiCopilotClassStatus, type AiCopilotIntent } from "@/app/(shell)/ai/actions";
+import { runAiCopilotIntentAction, planScheduleAction, saveAiCandidatesAction, rollbackAiCandidatesAction, kurangiJpAction, type AiCopilotClassStatus, type AiCopilotIntent } from "@/app/(shell)/ai/actions";
 import type { AiSchedulePlan } from "@/lib/application/aiSchedulePlanner";
 import Button from "@/components/ui/Button";
+import { Sparkles, ArrowRight, CheckCircle2, Circle, X, Lightbulb, HelpCircle, Target, BookOpen, CalendarDays, GraduationCap, Pencil, AlertTriangle } from "lucide-react";
 
 type FlowStep = "finding" | "solution" | "preview" | "done";
 const STAGE_ORDER: FlowStep[] = ["finding", "solution", "preview", "done"];
@@ -82,6 +82,50 @@ function Stage({ status, title, isLast, onReopen, children }: { status: "done" |
   </div>;
 }
 
+function ExcessAlert({ excess, onKurangi, isPending, pendingId, error }: {
+  excess: AiCopilotClassStatus["subjectExcess"];
+  onKurangi: (assignmentId: string) => void;
+  isPending: boolean;
+  pendingId: string | null;
+  error: string | null;
+}) {
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  if (excess.length === 0) return null;
+  const top = excess[0];
+  return <div className="sakala-stage-enter space-y-3 rounded-xl border border-amber/25 bg-amber-50/60 p-4">
+    <div className="flex items-start gap-2.5">
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber" />
+      <div className="min-w-0">
+        <p className="text-[13px] font-semibold leading-5 text-ink-900"><span className="tabular-nums">{excess.reduce((s, e) => s + e.excessJp, 0)}</span> JP kelebihan dari target</p>
+        <p className="mt-1 text-[12px] leading-5 text-ink-500">
+          {top.subjectName} terjadwal {top.scheduledJp} JP, padahal target hanya {top.targetJp} JP.
+          {excess.length > 1 && ` ${excess.length - 1} mapel lain juga kelebihan — buka Jadwal untuk detail lengkap.`}
+        </p>
+      </div>
+    </div>
+    <div className="space-y-1.5">
+      {top.schedules.map((s) => {
+        const isConfirming = confirmId === s.id;
+        return <div key={s.id} className="rounded-lg bg-surface px-3 py-2">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[12px] font-medium text-ink-800">{s.day.charAt(0).toUpperCase() + s.day.slice(1)} · JP {s.periodStart}{s.periodEnd !== s.periodStart ? `–${s.periodEnd}` : ""}</span>
+            {!isConfirming && <button type="button" onClick={() => setConfirmId(s.id)} disabled={isPending} className="text-[11px] font-semibold text-amber hover:underline disabled:opacity-50">Kurangi</button>}
+          </div>
+          {/* §19 Risiko sedang — tampilkan dampak sebelum tindakan, bukan hapus sekali klik. */}
+          {isConfirming && <div className="mt-2 flex items-center justify-between gap-3 rounded-lg bg-amber-50 px-2.5 py-2">
+            <span className="text-[11px] text-ink-600">Slot ini akan dikosongkan dari jadwal.</span>
+            <span className="flex shrink-0 gap-2">
+              <button type="button" onClick={() => setConfirmId(null)} disabled={isPending} className="text-[11px] font-medium text-ink-500 hover:text-ink-700">Batal</button>
+              <button type="button" onClick={() => onKurangi(s.id)} disabled={isPending} className="text-[11px] font-semibold text-rose hover:underline disabled:opacity-50">{isPending && pendingId === s.id ? "Mengurangi…" : "Ya, kurangi"}</button>
+            </span>
+          </div>}
+        </div>;
+      })}
+    </div>
+    {error && <p className="text-[11.5px] text-rose">{error}</p>}
+  </div>;
+}
+
 export default function RecommendationFlow({
   classStatus,
   subjectNames,
@@ -106,14 +150,31 @@ export default function RecommendationFlow({
   const [rolledBack, setRolledBack] = useState(false);
   const [whyOpen, setWhyOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [kurangiPendingId, setKurangiPendingId] = useState<string | null>(null);
+  const [kurangiError, setKurangiError] = useState<string | null>(null);
+
+  function kurangi(assignmentId: string) {
+    setKurangiError(null);
+    setKurangiPendingId(assignmentId);
+    startTransition(async () => {
+      const result = await kurangiJpAction(assignmentId);
+      setKurangiPendingId(null);
+      if (!result.ok) { setKurangiError(result.error); return; }
+      onCandidatesSaved();
+    });
+  }
 
   const plan = variant === "alt" && altPlan ? altPlan : primaryPlan;
   const deficits = classStatus.subjectDeficits;
+  const excess = classStatus.subjectExcess;
 
   // §39 Success State — konfirmasi positif dengan data yang benar-benar ada
   // (targetJp/scheduledJp), TIDAK menambah metrik seperti 'slot terisi' atau
   // 'bentrok' karena classStatus tidak menyediakan data itu (§36: jangan mengarang).
+  // §14/§19 — kalau ada kelebihan JP, itu bukan 'sudah sesuai' — tampilkan
+  // ExcessAlert dengan tindakan 'Kurangi', bukan Success State yang membohongi.
   if (deficits.length === 0) {
+    if (excess.length > 0) return <ExcessAlert excess={excess} onKurangi={kurangi} isPending={isPending} pendingId={kurangiPendingId} error={kurangiError} />;
     return <div className="sakala-stage-enter space-y-3">
       <div className="flex items-center gap-2 text-emerald"><CheckCircle2 size={16} /><p className="text-[13.5px] font-semibold">Sudah sesuai</p></div>
       <p className="text-[12px] leading-5 text-ink-500">Kelas {classStatus.label} sudah memiliki {classStatus.scheduledJp} dari {classStatus.targetJp} JP. Tidak ada masalah JP yang saya temukan untuk kelas ini saat ini.</p>
@@ -197,7 +258,9 @@ export default function RecommendationFlow({
   const targets = plan?.interpretedTargets ?? [];
   const sisaDeficit = deficits.filter((d) => !plan?.interpretedTargets?.some((t) => t.subjectId === d.subjectId));
 
-  return <div className="space-y-0">
+  return <div className="space-y-4">
+    {excess.length > 0 && <ExcessAlert excess={excess} onKurangi={kurangi} isPending={isPending} pendingId={kurangiPendingId} error={kurangiError} />}
+    <div className="space-y-0">
     {/* ── Tahap 1: Temuan (§08-10) ── */}
     <Stage status={stageStatus("finding")} title={STAGE_TITLE.finding} isLast={false} onReopen={step !== "finding" ? batal : undefined}>
       {stageStatus("finding") === "active" ? (
@@ -354,6 +417,7 @@ export default function RecommendationFlow({
         </div> : <p className="border-t border-border/60 pt-3 text-[12px] text-ink-500">Tidak ada masalah JP lain yang saya temukan untuk kelas ini saat ini.</p>}
       </div>}
     </Stage>
+    </div>
   </div>;
 }
 

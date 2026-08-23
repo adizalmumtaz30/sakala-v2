@@ -20,6 +20,7 @@ import type { HariSekolah } from "@/lib/domain/jamPelajaran";
 const ASSIGNMENT_ACTIVE_STATUSES = new Set(["draft", "candidate", "committed"]);
 
 export interface TargetJpScheduleRef {
+  id: string;
   day: HariSekolah;
   periodStart: number;
   periodEnd: number;
@@ -54,6 +55,14 @@ export interface TargetJpRow {
   terjadwalJp: number;
   /** siapJp - terjadwalJp. */
   belumTerjadwalJp: number;
+  /** Guru dialokasikan MELEBIHI target_jp resmi (jpPerMinggu total > target_jp) —
+   * sebelumnya diam-diam disembunyikan lewat Math.min(target_jp, assignedJp).
+   * AI (dan fitur lain) perlu tahu ini supaya tidak melaporkan 'sudah sesuai'
+   * padahal sebenarnya ada alokasi guru yang perlu dikoreksi. */
+  assignedExcessJp: number;
+  /** JP yang benar-benar terjadwal MELEBIHI siapJp (kelebihan riil di jadwal) —
+   * sebelumnya diam-diam disembunyikan lewat Math.min(siapJp, scheduledRaw). */
+  scheduledExcessJp: number;
   status: TargetJpStatus;
   guruAssignments: TargetJpGuruAssignment[];
   schedules: TargetJpScheduleRef[];
@@ -120,14 +129,16 @@ export async function getTargetJpView(supabase: SupabaseClient, academicContextI
     const assignedJp = guruAssignments.reduce((sum, g) => sum + g.jpPerMinggu, 0);
     const siapJp = Math.min(target.target_jp, assignedJp);
     const belumSiapJp = target.target_jp - siapJp;
+    const assignedExcessJp = Math.max(0, assignedJp - target.target_jp);
 
     const scheduledRaw = guruAssignments.reduce((sum, g) => sum + g.jpTerjadwal, 0);
     const terjadwalJp = Math.min(siapJp, scheduledRaw);
     const belumTerjadwalJp = siapJp - terjadwalJp;
+    const scheduledExcessJp = Math.max(0, scheduledRaw - siapJp);
 
     const schedules = activeAssignments
       .filter((a) => a.subjectId === target.mata_pelajaran_id && a.classId === target.kelas_id)
-      .map((a) => ({ day: a.day, periodStart: a.periodStart, periodEnd: a.periodEnd, status: a.status }))
+      .map((a) => ({ id: a.id, day: a.day, periodStart: a.periodStart, periodEnd: a.periodEnd, status: a.status }))
       .sort((a, b) => a.periodStart - b.periodStart);
 
     return {
@@ -142,6 +153,8 @@ export async function getTargetJpView(supabase: SupabaseClient, academicContextI
       belumSiapJp,
       terjadwalJp,
       belumTerjadwalJp,
+      assignedExcessJp,
+      scheduledExcessJp,
       status: classify(target.target_jp, siapJp, terjadwalJp),
       guruAssignments,
       schedules,
