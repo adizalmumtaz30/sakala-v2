@@ -3,8 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ChevronDown, ChevronRight } from "lucide-react";
-import type { TargetJpView, TargetJpRow } from "@/lib/application/targetJp.usecases";
-import type { JpSummaryStatus } from "@/lib/domain/pembagianMengajar";
+import type { TargetJpView, TargetJpRow, TargetJpStatus } from "@/lib/application/targetJp.usecases";
 import { formatHari } from "@/lib/domain/jamPelajaran";
 import { Card, Badge, EmptyState } from "@/components/ui/primitives";
 
@@ -13,24 +12,23 @@ interface Props {
   view: TargetJpView;
 }
 
-// Bagian 29: state resmi — istilah ini yang harus tampil ke user, bukan
-// nama internal JpSummaryStatus (kosong/sebagian/penuh/lebih).
-const STATUS_LABEL: Record<JpSummaryStatus, string> = {
-  kosong: "Belum Mulai",
-  sebagian: "Belum Lengkap",
-  penuh: "Lengkap",
-  lebih: "Melebihi Target",
+// Kontrak §53-54 — bahasa operator, bukan istilah teknis.
+const STATUS_LABEL: Record<TargetJpStatus, string> = {
+  belum_siap: "Guru Belum Ditentukan",
+  siap_belum_terjadwal: "Siap, Belum Terjadwal",
+  sebagian_terjadwal: "Sebagian Terjadwal",
+  lengkap: "Lengkap Terjadwal",
 };
-const STATUS_TONE: Record<JpSummaryStatus, "neutral" | "warning" | "success" | "danger"> = {
-  kosong: "neutral",
-  sebagian: "warning",
-  penuh: "success",
-  lebih: "danger",
+const STATUS_TONE: Record<TargetJpStatus, "neutral" | "warning" | "success" | "danger"> = {
+  belum_siap: "danger",
+  siap_belum_terjadwal: "warning",
+  sebagian_terjadwal: "warning",
+  lengkap: "success",
 };
-const STATUS_FILTERS: (JpSummaryStatus | "semua")[] = ["semua", "kosong", "sebagian", "penuh", "lebih"];
+const STATUS_FILTERS: (TargetJpStatus | "semua")[] = ["semua", "belum_siap", "siap_belum_terjadwal", "sebagian_terjadwal", "lengkap"];
 
 export default function TargetJpWorkspace({ activeContextLabel, view }: Props) {
-  const [filter, setFilter] = useState<JpSummaryStatus | "semua">("semua");
+  const [filter, setFilter] = useState<TargetJpStatus | "semua">("semua");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const filteredRows = filter === "semua" ? view.rows : view.rows.filter((r) => r.status === filter);
@@ -43,36 +41,44 @@ export default function TargetJpWorkspace({ activeContextLabel, view }: Props) {
         </Link>
         <h1 className="text-[20px] font-bold text-ink-900">Target JP</h1>
         <p className="text-[13px] text-ink-500">
-          Kelengkapan jadwal per kombinasi Guru+Mapel+Kelas — konteks aktif:{" "}
+          Kebutuhan resmi per Kelas+Mapel (dari Target JP hasil Generate Kurikulum) dibandingkan kesiapan guru dan jadwal — konteks aktif:{" "}
           <span className="font-medium text-ink-700">{activeContextLabel}</span>
         </p>
       </div>
 
-      {/* Key Metrics (Bagian 29): target JP, scheduled JP, difference, completion percentage — level keseluruhan */}
+      {/* Empat angka wajib beda (kontrak §7): Target, Siap, Terjadwal, Belum Siap. */}
       <Card>
         <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
           <div>
-            <p className="text-[11.5px] text-ink-400">Completion</p>
-            <p className="text-[24px] font-bold text-ink-900">{view.overallCompletionPercent}%</p>
+            <p className="text-[11.5px] text-ink-400">Target JP</p>
+            <p className="text-[24px] font-bold text-ink-900">{view.overallTargetJp}</p>
           </div>
           <div>
-            <p className="text-[11.5px] text-ink-400">Target JP</p>
-            <p className="text-[16px] font-semibold text-ink-900">{view.overallTargetJp}</p>
+            <p className="text-[11.5px] text-ink-400">Siap dijadwalkan</p>
+            <p className="text-[16px] font-semibold text-ink-900">{view.overallSiapJp}</p>
           </div>
           <div>
             <p className="text-[11.5px] text-ink-400">Terjadwal</p>
-            <p className="text-[16px] font-semibold text-ink-900">{view.overallScheduledJp}</p>
+            <p className="text-[16px] font-semibold text-ink-900">{view.overallTerjadwalJp}</p>
           </div>
           <div>
-            <p className="text-[11.5px] text-ink-400">Selisih</p>
-            <p className={`text-[16px] font-semibold ${view.overallTargetJp - view.overallScheduledJp > 0 ? "text-amber" : "text-ink-900"}`}>
-              {view.overallTargetJp - view.overallScheduledJp}
-            </p>
+            <p className="text-[11.5px] text-ink-400">Guru Belum Ditentukan</p>
+            <p className={`text-[16px] font-semibold ${view.overallBelumSiapJp > 0 ? "text-rose" : "text-ink-900"}`}>{view.overallBelumSiapJp} JP</p>
           </div>
         </div>
+        {/* Kalimat status (kontrak §40-44) — bukan sekadar angka, dan tidak pernah klaim selesai kalau belum benar-benar selesai. */}
+        <p className="mt-3 border-t border-border pt-3 text-[12.5px] leading-relaxed text-ink-600">
+          {view.overallTargetJp === 0
+            ? "Belum ada Target JP resmi untuk konteks ini. Isi lewat Generate Kurikulum terlebih dahulu."
+            : view.overallBelumSiapJp > 0
+              ? <>Target JP resmi <b>{view.overallTargetJp}</b>. <b>{view.overallSiapJp}</b> JP sudah punya guru dan siap dijadwalkan, <b className="text-rose">{view.overallBelumSiapJp} JP belum punya guru</b>.</>
+              : view.overallBelumTerjadwalJp > 0
+                ? <>Semua {view.overallTargetJp} JP sudah punya guru. <b>{view.overallTerjadwalJp}</b> JP sudah masuk jadwal, <b>{view.overallBelumTerjadwalJp} JP</b> masih menunggu slot.</>
+                : <>🟢 {view.overallTargetJp}/{view.overallTargetJp} JP sudah terjadwal.</>}
+        </p>
       </Card>
 
-      {/* Per-subject rollup (Bagian 29: "per-subject target; per-subject actual") */}
+      {/* Per-subject rollup */}
       {view.subjectRollups.length > 0 && (
         <Card className="p-0">
           <p className="px-5 pt-4 text-[12.5px] font-semibold text-ink-700">Per Mata Pelajaran</p>
@@ -82,7 +88,7 @@ export default function TargetJpWorkspace({ activeContextLabel, view }: Props) {
                 <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: s.mataPelajaranWarna ?? "#C6CAD3" }} aria-hidden="true" />
                 <span className="flex-1 text-[13px] text-ink-900">{s.mataPelajaranNama}</span>
                 <span className="text-[12px] text-ink-400">
-                  {s.scheduledJp}/{s.targetJp} JP
+                  {s.terjadwalJp}/{s.targetJp} JP{s.belumSiapJp > 0 && <span className="text-rose"> ({s.belumSiapJp} belum ada guru)</span>}
                 </span>
                 <Badge tone={STATUS_TONE[s.status]}>{STATUS_LABEL[s.status]}</Badge>
               </li>
@@ -107,12 +113,12 @@ export default function TargetJpWorkspace({ activeContextLabel, view }: Props) {
         ))}
       </div>
 
-      {/* Per-combination detail — klik untuk expose affected schedule (Bagian 29) */}
+      {/* Per Kelas+Mapel detail */}
       <Card className="p-0">
         {filteredRows.length === 0 ? (
           <EmptyState
-            title={view.rows.length === 0 ? "Belum ada Pembagian Mengajar aktif" : "Tidak ada yang cocok filter ini"}
-            description={view.rows.length === 0 ? "Tambahkan dulu di halaman Pembagian Mengajar." : undefined}
+            title={view.rows.length === 0 ? "Belum ada Target JP resmi" : "Tidak ada yang cocok filter ini"}
+            description={view.rows.length === 0 ? "Isi Target JP lewat Generate Kurikulum terlebih dahulu." : undefined}
           />
         ) : (
           <ul>
@@ -132,24 +138,27 @@ function TargetJpRowItem({ row, expanded, onToggle }: { row: TargetJpRow; expand
       <button onClick={onToggle} className="flex w-full flex-wrap items-center gap-3 px-5 py-3 text-left hover:bg-surface-muted/60">
         {expanded ? <ChevronDown size={14} className="shrink-0 text-ink-300" /> : <ChevronRight size={14} className="shrink-0 text-ink-300" />}
         <div className="min-w-[160px] flex-1">
-          <p className="text-[13.5px] font-medium text-ink-900">{row.guruNama}</p>
+          <p className="text-[13.5px] font-medium text-ink-900">{row.mataPelajaranNama} · {row.kelasLabel}</p>
           <p className="text-[12px] text-ink-400">
-            {row.mataPelajaranNama} · {row.kelasLabel}
+            {row.guruAssignments.length === 0 ? "Guru belum ditentukan" : row.guruAssignments.map((g) => g.guruNama).join(", ")}
           </p>
         </div>
         <span className="text-[12px] text-ink-400">
-          {row.scheduledJp}/{row.targetJp} JP{" "}
-          {row.difference !== 0 && <span className={row.difference > 0 ? "text-amber" : "text-rose"}>({row.difference > 0 ? "-" : "+"}{Math.abs(row.difference)})</span>}
+          {row.terjadwalJp}/{row.targetJp} JP{" "}
+          {row.belumSiapJp > 0 && <span className="text-rose">({row.belumSiapJp} belum ada guru)</span>}
         </span>
         <Badge tone={STATUS_TONE[row.status]}>{STATUS_LABEL[row.status]}</Badge>
       </button>
 
       {expanded && (
         <div className="border-t border-dashed border-border bg-surface-muted/40 px-5 py-3 pl-11">
+          <p className="text-[11.5px] text-ink-500">
+            Target {row.targetJp} JP · Siap {row.siapJp} JP · Terjadwal {row.terjadwalJp} JP · Belum Siap {row.belumSiapJp} JP
+          </p>
           {row.schedules.length === 0 ? (
-            <p className="text-[12px] text-ink-400">Belum ada jadwal (draft/candidate/committed) untuk kombinasi ini.</p>
+            <p className="mt-2 text-[12px] text-ink-400">Belum ada jadwal (draft/candidate/committed) untuk kombinasi ini.</p>
           ) : (
-            <div className="flex flex-wrap gap-1.5">
+            <div className="mt-2 flex flex-wrap gap-1.5">
               {row.schedules.map((s, i) => (
                 <span key={i} className="rounded-lg border border-border bg-surface px-2 py-1 text-[11.5px] text-ink-700">
                   {formatHari(s.day)} · Jam {s.periodStart === s.periodEnd ? s.periodStart : `${s.periodStart}-${s.periodEnd}`}

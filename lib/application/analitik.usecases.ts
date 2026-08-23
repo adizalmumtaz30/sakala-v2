@@ -7,9 +7,8 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { listGuru } from "@/lib/application/guru.usecases";
-import { getTargetJpView, type TargetJpRow } from "@/lib/application/targetJp.usecases";
+import { getTargetJpView, type TargetJpRow, type TargetJpStatus } from "@/lib/application/targetJp.usecases";
 import { scheduleAssignmentRepository } from "@/lib/data-access/scheduleAssignment.repository";
-import type { JpSummaryStatus } from "@/lib/domain/pembagianMengajar";
 
 const ASSIGNMENT_ACTIVE_STATUSES = new Set(["draft", "candidate", "committed"]);
 
@@ -22,40 +21,38 @@ export interface AnalitikBebanGuru {
 }
 
 export interface AnalitikJpBreakdown {
-  status: JpSummaryStatus;
+  status: TargetJpStatus;
   label: string;
   count: number;
 }
 
 export interface AnalitikKonflikRow {
   id: string;
-  guruNama: string;
   mataPelajaranNama: string;
   kelasLabel: string;
   targetJp: number;
-  scheduledJp: number;
-  /** Positif = kekurangan JP (belum lengkap), negatif = kelebihan JP (JP_MISMATCH "lebih"). */
-  difference: number;
-  status: Extract<JpSummaryStatus, "sebagian" | "lebih">;
+  /** JP yang belum punya guru sama sekali — authority dari tabel Target JP resmi, bukan Pembagian Mengajar. */
+  belumSiapJp: number;
+  status: TargetJpStatus;
 }
 
 export interface AnalitikView {
   /** Distribusi beban mengajar guru saat ini, diurutkan dari beban tertinggi. Bukan cuma top-5 (lihat Dashboard) — daftar penuh untuk analitik. */
   bebanGuru: AnalitikBebanGuru[];
-  /** Breakdown status JP per kombinasi Guru+Mapel+Kelas, untuk chart ringkasan. */
+  /** Breakdown status Target JP per kombinasi Kelas+Mapel (authority resmi), untuk chart ringkasan. */
   jpBreakdown: AnalitikJpBreakdown[];
-  /** Kombinasi yang berstatus "sebagian" (belum lengkap) atau "lebih" (melebihi target) — dua-duanya bentuk JP_MISMATCH aktif. */
+  /** Kombinasi yang guru-nya belum lengkap ditentukan — JP resmi yang masih "Belum Siap". */
   konflikAktif: AnalitikKonflikRow[];
   totalKombinasiAktif: number;
 }
 
-const JP_STATUS_LABEL: Record<JpSummaryStatus, string> = {
-  kosong: "Belum Mulai",
-  sebagian: "Belum Lengkap",
-  penuh: "Lengkap",
-  lebih: "Melebihi Target",
+const JP_STATUS_LABEL: Record<TargetJpStatus, string> = {
+  belum_siap: "Guru Belum Ditentukan",
+  siap_belum_terjadwal: "Siap, Belum Terjadwal",
+  sebagian_terjadwal: "Sebagian Terjadwal",
+  lengkap: "Lengkap Terjadwal",
 };
-const JP_STATUS_ORDER: JpSummaryStatus[] = ["kosong", "sebagian", "penuh", "lebih"];
+const JP_STATUS_ORDER: TargetJpStatus[] = ["belum_siap", "siap_belum_terjadwal", "sebagian_terjadwal", "lengkap"];
 
 export async function getAnalitikView(supabase: SupabaseClient, academicContextId: string): Promise<AnalitikView> {
   // Reuse Target JP View — sudah menghitung scheduledJp per kombinasi, jadi
@@ -85,8 +82,8 @@ export async function getAnalitikView(supabase: SupabaseClient, academicContextI
     }))
     .sort((a, b) => b.totalJamCommitted - a.totalJamCommitted);
 
-  // --- Breakdown status JP (reshape dari targetJpView.rows, tidak query baru) ---
-  const countByStatus = new Map<JpSummaryStatus, number>();
+  // --- Breakdown status Target JP (reshape dari targetJpView.rows, tidak query baru) ---
+  const countByStatus = new Map<TargetJpStatus, number>();
   for (const row of targetJpView.rows) {
     countByStatus.set(row.status, (countByStatus.get(row.status) ?? 0) + 1);
   }
@@ -96,20 +93,18 @@ export async function getAnalitikView(supabase: SupabaseClient, academicContextI
     count: countByStatus.get(status) ?? 0,
   }));
 
-  // --- Konflik aktif (JP_MISMATCH saat ini: "sebagian" = belum lengkap, "lebih" = melebihi target) ---
+  // --- Kombinasi yang guru-nya belum lengkap ditentukan (authority: Target JP resmi) ---
   const konflikAktif: AnalitikKonflikRow[] = targetJpView.rows
-    .filter((r): r is TargetJpRow & { status: "sebagian" | "lebih" } => r.status === "sebagian" || r.status === "lebih")
+    .filter((r): r is TargetJpRow & { status: "belum_siap" } => r.status === "belum_siap")
     .map((r) => ({
       id: r.id,
-      guruNama: r.guruNama,
       mataPelajaranNama: r.mataPelajaranNama,
       kelasLabel: r.kelasLabel,
       targetJp: r.targetJp,
-      scheduledJp: r.scheduledJp,
-      difference: r.difference,
+      belumSiapJp: r.belumSiapJp,
       status: r.status,
     }))
-    .sort((a, b) => Math.abs(b.difference) - Math.abs(a.difference));
+    .sort((a, b) => b.belumSiapJp - a.belumSiapJp);
 
   return {
     bebanGuru,

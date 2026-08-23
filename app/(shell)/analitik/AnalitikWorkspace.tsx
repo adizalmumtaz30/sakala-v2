@@ -22,10 +22,10 @@ interface Props {
 }
 
 const STATUS_TONE: Record<string, "neutral" | "warning" | "success" | "danger"> = {
-  kosong: "neutral",
-  sebagian: "warning",
-  penuh: "success",
-  lebih: "danger",
+  belum_siap: "danger",
+  siap_belum_terjadwal: "warning",
+  sebagian_terjadwal: "warning",
+  lengkap: "success",
 };
 
 const TEACHER_ACCENTS = [
@@ -81,7 +81,7 @@ export default function AnalitikWorkspace({ activeContextLabel, schoolName, view
   const maxJpCount = Math.max(1, ...view.jpBreakdown.map((b) => b.count));
   const totalScheduledJp = view.bebanGuru.reduce((sum, guru) => sum + guru.totalJamCommitted, 0);
   const totalConflicts = view.konflikAktif.length;
-  const completedJp = view.jpBreakdown.find((item) => item.status === "penuh")?.count ?? 0;
+  const completedJp = view.jpBreakdown.find((item) => item.status === "lengkap")?.count ?? 0;
   const completionRate = view.totalKombinasiAktif > 0
     ? Math.round((completedJp / view.totalKombinasiAktif) * 100)
     : 0;
@@ -279,7 +279,7 @@ export default function AnalitikWorkspace({ activeContextLabel, schoolName, view
               {view.jpBreakdown.map((b) => (
                 <div
                   key={b.status}
-                  className={b.status === "penuh" ? "bg-emerald" : b.status === "sebagian" ? "bg-amber" : b.status === "lebih" ? "bg-rose" : "bg-border-strong"}
+                  className={b.status === "lengkap" ? "bg-emerald" : b.status === "belum_siap" ? "bg-rose" : "bg-amber"}
                   style={{ width: `${view.totalKombinasiAktif ? (b.count / view.totalKombinasiAktif) * 100 : 0}%` }}
                   title={`${b.label}: ${b.count}`}
                 />
@@ -294,7 +294,7 @@ export default function AnalitikWorkspace({ activeContextLabel, schoolName, view
                     <div className="min-w-0 flex-1">
                       <div className="h-1.5 overflow-hidden rounded-full bg-surface-muted">
                         <div
-                          className={b.status === "penuh" ? "h-full rounded-full bg-emerald" : b.status === "lebih" ? "h-full rounded-full bg-rose" : b.status === "sebagian" ? "h-full rounded-full bg-amber" : "h-full rounded-full bg-border-strong"}
+                          className={b.status === "lengkap" ? "h-full rounded-full bg-emerald" : b.status === "belum_siap" ? "h-full rounded-full bg-rose" : "h-full rounded-full bg-amber"}
                           style={{ width: `${b.count === 0 ? 0 : Math.max(4, percentage)}%` }}
                         />
                       </div>
@@ -337,30 +337,28 @@ export default function AnalitikWorkspace({ activeContextLabel, schoolName, view
                 { key: "selisih", label: "Selisih" },
                 { key: "status", label: "Status" },
               ]}
-              rows={view.konflikAktif.map((k) => ({ guru: k.guruNama, mapel: k.mataPelajaranNama, kelas: k.kelasLabel, terjadwal: k.scheduledJp, target: k.targetJp, selisih: `${k.difference > 0 ? "-" : "+"}${Math.abs(k.difference)}`, status: k.status === "lebih" ? "Melebihi Target" : "Belum Lengkap" }))}
+              rows={view.konflikAktif.map((k) => ({ mapel: k.mataPelajaranNama, kelas: k.kelasLabel, terjadwal: k.targetJp - k.belumSiapJp, target: k.targetJp, selisih: `-${k.belumSiapJp}`, status: "Guru Belum Ditentukan" }))}
             />
           }
         />
         {view.konflikAktif.length === 0 ? (
           <div className="px-5 pb-4">
-            <EmptyState title="Tidak ada konflik JP" description="Semua kombinasi aktif sudah lengkap atau memang belum mulai dijadwalkan." />
+            <EmptyState title="Tidak ada konflik JP" description="Semua kombinasi Target JP resmi sudah punya guru." />
           </div>
         ) : (
           <ul className="px-5 pb-4 pt-3" aria-label="Konflik JP aktif">
             {view.konflikAktif.map((k) => (
               <li key={k.id} className="flex flex-col gap-3 border-b border-border py-3.5 last:border-0 sm:flex-row sm:items-center">
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[13px] font-semibold text-ink-900">{k.guruNama}</p>
-                  <p className="truncate text-[11.5px] text-ink-400">{k.mataPelajaranNama} · {k.kelasLabel}</p>
+                  <p className="truncate text-[13px] font-semibold text-ink-900">{k.mataPelajaranNama}</p>
+                  <p className="truncate text-[11.5px] text-ink-400">{k.kelasLabel}</p>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="tabular-nums text-[12px] font-semibold text-ink-700">
-                    {k.scheduledJp}/{k.targetJp} JP
-                    <span className={k.difference > 0 ? "ml-1 text-amber" : "ml-1 text-rose"}>
-                      ({k.difference > 0 ? "-" : "+"}{Math.abs(k.difference)})
-                    </span>
+                    {k.targetJp - k.belumSiapJp}/{k.targetJp} JP
+                    <span className="ml-1 text-rose">(-{k.belumSiapJp})</span>
                   </span>
-                  <Badge tone={STATUS_TONE[k.status]}>{k.status === "lebih" ? "Melebihi Target" : "Belum Lengkap"}</Badge>
+                  <Badge tone={STATUS_TONE[k.status]}>Guru Belum Ditentukan</Badge>
                 </div>
               </li>
             ))}

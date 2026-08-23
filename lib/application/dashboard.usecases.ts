@@ -52,6 +52,16 @@ export interface DashboardJpInsight {
   completionPercent: number;
 }
 
+// PERINGATAN (kontrak SAKALA — Production Flow, Authority & AI Action Contract):
+// jpInsight di atas dihitung MURNI dari Pembagian Mengajar aktif, TIDAK dari
+// tabel target_jp resmi — jadi "completionPercent" di sini artinya "dari yang
+// SUDAH punya guru, berapa persen sudah terjadwal", BUKAN "dari Target JP
+// resmi sekolah, berapa persen selesai". Field ini saat ini TIDAK dirender di
+// UI Dashboard manapun (dead code). Kalau mau dipakai lagi untuk widget,
+// jangan dilabeli "Target JP" — pakai getTargetJpView() dari
+// targetJp.usecases.ts sebagai authority yang benar, seperti yang sudah
+// diperbaiki di halaman /pembagian-mengajar/target-jp.
+
 export interface DashboardWorkloadEntry {
   guruId: string;
   namaGuru: string;
