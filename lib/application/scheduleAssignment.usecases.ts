@@ -134,8 +134,9 @@ export async function addAssignment(
  *
  * IMPORTANT: committed rows are immutable history. Moving a committed row
  * creates a NEW candidate row; the old committed row is never mutated before
- * explicit commit. If commit=true, the new candidate is committed through the
- * same single commit path and the previous active version is superseded.
+ * explicit commit. After the new row is committed, the previous row is
+ * archived so the operational timetable cannot contain both the old and new
+ * position.
  */
 export async function moveAssignment(
   supabase: SupabaseClient,
@@ -166,11 +167,38 @@ export async function moveAssignment(
 
   // Committed source rows are copied, never mutated. Non-committed rows can
   // still be edited in place while they remain outside the committed history.
-  const candidate = existing.status === "committed"
+  const wasCommitted = existing.status === "committed";
+  const candidate = wasCommitted
     ? await saveAssignmentDraft(supabase, draft)
     : await updateAssignmentDraft(supabase, existing.id, draft);
 
-  const result = await commitAssignments(supabase, existing.academicContextId, [candidate.assignment.id], label ?? "Pindah jadwal", "Dipindahkan via Jadwal Operational Workspace");
+  const result = await commitAssignments(
+    supabase,
+    existing.academicContextId,
+    [candidate.assignment.id],
+    label ?? "Pindah jadwal",
+    "Dipindahkan via Jadwal Operational Workspace"
+  );
+
+  // Critical invariant: a move creates a replacement assignment. The old
+  // committed row must no longer participate in the operational timetable.
+  // It remains in the database as immutable history with status=archived.
+  if (wasCommitted && candidate.assignment.id !== existing.id) {
+    const archived = await scheduleAssignmentRepository.setStatus(supabase, existing.id, "archived", existing.versionId);
+    await recordAuditEvent({
+      supabase,
+      academicContextId: existing.academicContextId,
+      action: "move",
+      entityType: "schedule_assignment",
+      entityId: existing.id,
+      entityLabel: label ?? "Pindah jadwal",
+      before: existing,
+      after: archived,
+      source: "manual",
+      reason: "Assignment lama diarsipkan setelah assignment pengganti berhasil di-commit.",
+    });
+  }
+
   const moved = await scheduleAssignmentRepository.findById(supabase, candidate.assignment.id);
   if (!moved) {
     throw new ScheduleAssignmentValidationError("id", "Assignment tidak ditemukan setelah dipindahkan.");
