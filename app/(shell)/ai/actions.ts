@@ -212,11 +212,21 @@ export async function saveAiCandidatesAction(
 // ini menyentuh jadwal committed asli, jadi risikonya §19 "sedang", bukan
 // "rendah" -- UI wajib menampilkan dampak (slot mana yang akan kosong) sebelum
 // tindakan, bukan tombol sekali klik tanpa konteks.
-export async function kurangiJpAction(assignmentId: string): Promise<AiActionResult<null>> {
+// §14 Action Type "Kurangi" — hapus satu slot jadwal committed yang kelebihan.
+// SAKALA MASTER RULE (Read-Back): baca ulang data resmi setelah menulis,
+// jangan klaim berhasil hanya karena tidak ada exception. Assignment
+// committed WAJIB di-archive (bukan hard-delete) — immutabilitas committed
+// schedule sudah jadi aturan di commitAssignments(); aksi ini sebelumnya
+// memanggil deleteAssignment() polos yang melanggar aturan itu.
+export async function kurangiJpAction(assignmentId: string): Promise<AiActionResult<{ archived: boolean }>> {
   try {
     const { supabase } = await getActiveContext();
-    await scheduleAssignmentUseCases.deleteAssignment(supabase, assignmentId);
-    return { ok: true, data: null };
+    const result = await scheduleAssignmentUseCases.archiveOrDeleteAssignment(supabase, assignmentId);
+    // Read-back: pastikan status resmi memang sudah berubah sebelum bilang berhasil.
+    const verify = await scheduleAssignmentUseCases.getScheduleAssignment(supabase, assignmentId);
+    const confirmed = result.archived ? verify?.status === "archived" : verify === null;
+    if (!confirmed) return { ok: false, error: "Perubahan belum bisa dipastikan tersimpan — data resmi belum mencerminkan penghapusan ini. Coba lagi." };
+    return { ok: true, data: result };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Gagal mengurangi JP." };
   }
@@ -224,15 +234,19 @@ export async function kurangiJpAction(assignmentId: string): Promise<AiActionRes
 
 // §25 Rollback — hapus candidate yang barusan disimpan (bukan jadwal committed,
 // jadi ini aman & langsung tanpa konfirmasi tambahan, sesuai §19 risiko rendah).
-export async function rollbackAiCandidatesAction(ids: string[]): Promise<AiActionResult<{ removedCount: number }>> {
+// Read-Back: setiap id diverifikasi benar-benar hilang sebelum masuk hitungan removedCount.
+export async function rollbackAiCandidatesAction(ids: string[]): Promise<AiActionResult<{ removedCount: number; unconfirmedIds: string[] }>> {
   try {
-    const supabase = await getActiveContext().then((c) => c.supabase);
+    const { supabase } = await getActiveContext();
     let removed = 0;
+    const unconfirmedIds: string[] = [];
     for (const id of ids) {
-      await scheduleAssignmentUseCases.deleteAssignment(supabase, id);
-      removed += 1;
+      await scheduleAssignmentUseCases.archiveOrDeleteAssignment(supabase, id);
+      const verify = await scheduleAssignmentUseCases.getScheduleAssignment(supabase, id);
+      if (verify === null) removed += 1;
+      else unconfirmedIds.push(id);
     }
-    return { ok: true, data: { removedCount: removed } };
+    return { ok: true, data: { removedCount: removed, unconfirmedIds } };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Gagal mengembalikan candidate." };
   }
