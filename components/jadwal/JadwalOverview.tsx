@@ -33,6 +33,7 @@ export default function JadwalOverview({
   jamPelajaranList: JamPelajaran[];
 }) {
   const committed = assignments.filter((a) => a.status === "committed");
+  const candidates = assignments.filter((a) => a.status === "candidate" || a.status === "draft");
   const scheduledJp = committed.reduce((sum, a) => sum + Math.max(1, a.periodEnd - a.periodStart + 1), 0);
   const classCount = new Set(committed.map((a) => a.classId)).size;
   const activeDays = activeModel?.hariAktif ?? [];
@@ -78,6 +79,16 @@ export default function JadwalOverview({
         <Metric label="Slot pembelajaran" value={activeJam.length} hint="tersedia" />
         <Metric label="Kondisi" value={health} hint={conflictUnits === 0 ? "✓ aman" : "perlu cek"} tone={conflictUnits === 0 ? "success" : "danger"} />
       </div>
+
+      {candidates.length > 0 && (
+        <div className="flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50/70 px-4 py-3.5 md:flex-row md:items-center md:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700"><Sparkles size={15} /></div>
+            <div className="min-w-0"><p className="text-[12px] font-semibold text-amber-900">Ada {candidates.length} kandidat jadwal yang belum diterapkan.</p><p className="mt-0.5 text-[11.5px] leading-5 text-amber-800/80">Kandidat berasal dari proses perencanaan. Periksa dulu sebelum menerapkannya ke jadwal operasional.</p></div>
+          </div>
+          <Link href="/jadwal-cerdas" className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-amber-300 bg-surface px-3 text-[11.5px] font-semibold text-amber-900 hover:bg-amber-100">Tinjau kandidat <ArrowRight size={12} /></Link>
+        </div>
+      )}
 
       <div className="grid gap-3 md:grid-cols-3">
         <Link href="/ai" className="group rounded-2xl border border-border bg-surface p-4 shadow-soft transition hover:-translate-y-0.5 hover:border-brand-600/25 hover:shadow-md">
