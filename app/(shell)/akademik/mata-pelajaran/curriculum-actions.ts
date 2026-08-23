@@ -105,6 +105,141 @@ export async function deleteCurriculumSourceAction(sourceId: string): Promise<Cu
   revalidatePath("/akademik/generate-kurikulum");
   return { ok: true, data: null };
 }
+// ============================================================================
+// Import Sumber Baru dari PDF — ekstraksi teks gratis (pdf-parse), tanpa API
+// berbayar. Heuristik regex mencari baris "<nama mapel> ... <angka> JP", jadi
+// akurasinya TIDAK sekuat model AI — karena itu hasilnya selalu masuk sebagai
+// source_tier 2 (bukan 1) dan status 'unverified', supaya tetap diblokir dari
+// Commit (lihat guard di adoptCurriculumItemsAction) sampai admin meninjau
+// dan mempromosikannya lewat promoteCurriculumSourceToOfficialAction.
+// ============================================================================
+
+export interface ExtractedCurriculumRow {
+  subjectName: string;
+  weeklyTarget: number;
+}
+
+export async function extractCurriculumPdfAction(formData: FormData): Promise<CurriculumActionResult<{ fileName: string; rows: ExtractedCurriculumRow[]; rawTextPreview: string }>> {
+  const file = formData.get("file");
+  if (!(file instanceof File)) return { ok: false, error: "File PDF tidak ditemukan." };
+  if (file.type !== "application/pdf") return { ok: false, error: "Hanya file PDF yang didukung." };
+
+  let text: string;
+  try {
+    const { PDFParse } = await import("pdf-parse");
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const parser = new PDFParse({ data: buffer });
+    const result = await parser.getText();
+    text = result.text ?? "";
+  } catch {
+    return { ok: false, error: "Sumber belum dapat dibaca. Periksa file lalu coba lagi." };
+  }
+
+  if (!text.trim()) return { ok: false, error: "Tidak ada teks yang bisa diekstrak dari PDF ini (kemungkinan hasil scan/gambar)." };
+
+  // Heuristik baris: "<teks mapel> ... <angka 1-2 digit>" opsional diikuti
+  // "JP"/"jam". Baris yang cocok pola tabel resmi kurikulum yang lazim.
+  const lines = text.split(/\r?\n/);
+  const rowPattern = /^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s.'()/-]{2,60}?)\s*[:\-.]?\s*(\d{1,2})\s*(?:jp|jam)?\s*$/i;
+  const rows: ExtractedCurriculumRow[] = [];
+  const seen = new Set<string>();
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const match = line.match(rowPattern);
+    if (!match) continue;
+    const subjectName = match[1].trim().replace(/\s{2,}/g, " ");
+    const weeklyTarget = Number(match[2]);
+    if (subjectName.length < 3 || weeklyTarget < 1 || weeklyTarget > 60) continue;
+    const key = subjectName.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    rows.push({ subjectName, weeklyTarget });
+  }
+
+  return { ok: true, data: { fileName: file.name, rows, rawTextPreview: text.slice(0, 400) } };
+}
+
+export async function saveExtractedCurriculumSourceAction(input: {
+  fileName: string;
+  institution: "Kemenag" | "Kemendikdasmen";
+  classLevel: string;
+  rows: ExtractedCurriculumRow[];
+}): Promise<CurriculumActionResult<{ versionId: string }>> {
+  if (!input.rows.length) return { ok: false, error: "Tidak ada baris yang dikonfirmasi untuk disimpan." };
+  const supabase = await createClient();
+  const institutionCode = input.institution === "Kemenag" ? "kementerian_agama" : "kemendikdasmen";
+  const officialUrl = `internal-upload://${input.fileName}-${Date.now()}`;
+
+  const { data: source, error: sourceError } = await supabase
+    .from("curriculum_source")
+    .insert({
+      institution: institutionCode,
+      source_tier: 2, // Bukan tier 1 (authority resmi) — hasil ekstraksi mandiri, bukan link regulasi pemerintah.
+      source_type: "pdf_upload",
+      name: input.fileName,
+      official_url: officialUrl,
+      status: "unverified",
+      notes: "Diimpor lewat ekstraksi PDF gratis (heuristik, bukan AI) — perlu ditinjau admin sebelum bisa dipakai untuk Commit.",
+    })
+    .select("id")
+    .single();
+  if (sourceError) return { ok: false, error: sourceError.message };
+
+  const { data: version, error: versionError } = await supabase
+    .from("curriculum_version")
+    .insert({
+      source_id: source.id,
+      curriculum_name: input.fileName.replace(/\.pdf$/i, ""),
+      issuing_institution: input.institution,
+      effective_status: "unknown",
+      version_key: `upload-${source.id}`,
+      verification_status: "unverified",
+    })
+    .select("id")
+    .single();
+  if (versionError) return { ok: false, error: versionError.message };
+
+  const itemRows = input.rows.map((row) => ({
+    curriculum_version_id: version.id,
+    subject_name: row.subjectName,
+    class_level: input.classLevel,
+    allocation_type: "weekly" as const,
+    official_allocation: row.weeklyTarget,
+    weekly_target: row.weeklyTarget,
+    derivation_status: "not_derived" as const,
+    derivation_method: "Ekstraksi PDF heuristik (pdf-parse, tanpa AI)",
+    category: "wajib" as const,
+    extraction_status: "unverified" as const,
+  }));
+  const { error: itemError } = await supabase.from("curriculum_item").insert(itemRows);
+  if (itemError) return { ok: false, error: itemError.message };
+
+  revalidatePath("/akademik/generate-kurikulum");
+  return { ok: true, data: { versionId: version.id } };
+}
+
+// Promosi manual jadi authority resmi — satu-satunya cara sumber upload bisa
+// dipakai untuk Commit (menegakkan "Cross-check tidak dapat menjadi
+// authority" tanpa terkecuali; harus eksplisit ditinjau manusia).
+export async function promoteCurriculumSourceToOfficialAction(sourceId: string): Promise<CurriculumActionResult<null>> {
+  const supabase = await createClient();
+  const { error: sourceError } = await supabase.from("curriculum_source").update({ source_tier: 1, status: "official", last_verified_at: new Date().toISOString() }).eq("id", sourceId);
+  if (sourceError) return { ok: false, error: sourceError.message };
+
+  const { data: versions, error: vErr } = await supabase.from("curriculum_version").select("id").eq("source_id", sourceId);
+  if (vErr) return { ok: false, error: vErr.message };
+  const versionIds = (versions ?? []).map((v: { id: string }) => v.id);
+  if (versionIds.length) {
+    const { error: updVErr } = await supabase.from("curriculum_version").update({ verification_status: "verified", effective_status: "berlaku", verified_at: new Date().toISOString() }).in("id", versionIds);
+    if (updVErr) return { ok: false, error: updVErr.message };
+    const { error: updIErr } = await supabase.from("curriculum_item").update({ extraction_status: "verified" }).in("curriculum_version_id", versionIds);
+    if (updIErr) return { ok: false, error: updIErr.message };
+  }
+  revalidatePath("/akademik/generate-kurikulum");
+  return { ok: true, data: null };
+}
+
 export async function getActiveAcademicContextAction() {
   const supabase = await createClient();
   const { data: contexts, error: contextError } = await supabase
