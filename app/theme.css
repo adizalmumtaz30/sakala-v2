@@ -210,4 +210,20 @@ html.dark .bg-emerald-50.text-emerald {
 
 @media (prefers-reduced-motion: reduce) {
   html, body { transition: none; }
+  .sakala-thread-dot--active { animation: none !important; }
+  .sakala-stage-enter { animation: none !important; }
 }
+
+/* SAKALA AI — signature "thread" identity (violet = the AI's own voice/process,
+   distinct from the app's blue brand used for ordinary navigation). */
+@keyframes sakala-pulse-ring {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-violet) 35%, transparent); }
+  50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--color-violet) 0%, transparent); }
+}
+.sakala-thread-dot--active { animation: sakala-pulse-ring 2.2s ease-in-out infinite; }
+
+@keyframes sakala-stage-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.sakala-stage-enter { animation: sakala-stage-enter 260ms ease-out; }

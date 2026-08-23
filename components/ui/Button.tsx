@@ -1,7 +1,7 @@
 import { forwardRef } from "react";
 import { Loader2 } from "lucide-react";
 
-type Variant = "primary" | "secondary" | "ghost" | "danger";
+type Variant = "primary" | "secondary" | "ghost" | "danger" | "accent";
 type Size = "sm" | "md" | "lg";
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -15,6 +15,9 @@ const variantClass: Record<Variant, string> = {
   secondary: "border border-border bg-surface text-ink-900 hover:bg-surface-muted",
   ghost: "text-ink-700 hover:bg-surface-muted",
   danger: "bg-rose text-white hover:bg-rose/90",
+  // Aksen SAKALA AI — dipakai khusus di halaman AI untuk membedakan tindakan
+  // yang berasal dari rekomendasi AI dari navigasi biasa (yang tetap biru).
+  accent: "bg-violet text-white hover:bg-violet/90 disabled:bg-violet/50 focus-visible:ring-violet/40",
 };
 
 const sizeClass: Record<Size, string> = {
