@@ -34,6 +34,7 @@ export default async function DashboardPage() {
       metrics={summary.metrics}
       metricTrends={summary.metricTrends}
       jpInsight={summary.jpInsight}
+      scheduleConflicts={summary.scheduleConflicts}
       workload={summary.workloadTop}
       heatmap={intelligence.heatmap}
       heatmapGrid={intelligence.heatmapGrid}

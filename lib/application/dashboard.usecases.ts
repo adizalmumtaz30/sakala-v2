@@ -19,6 +19,7 @@ import { listMataPelajaran } from "@/lib/application/mata-pelajaran.usecases";
 import { listKelas } from "@/lib/application/kelas.usecases";
 import { listRuangan } from "@/lib/application/ruangan.usecases";
 import { listPembagianMengajar } from "@/lib/application/pembagianMengajar.usecases";
+import { scanCommittedConflicts } from "@/lib/application/conflictEngine";
 import { scheduleAssignmentRepository } from "@/lib/data-access/scheduleAssignment.repository";
 import { dashboardMetricSnapshotRepository } from "@/lib/data-access/dashboardMetricSnapshot.repository";
 import { summarizeJp, type JpSummaryStatus } from "@/lib/domain/pembagianMengajar";
@@ -45,6 +46,12 @@ export interface DashboardKeyMetrics {
   totalJtm: number;
 }
 
+export interface DashboardScheduleConflictSummary {
+  total: number;
+  /** Maks 5 contoh pesan konflik teratas — cukup utk operator lihat sekilas, bukan daftar lengkap (buka /jadwal utk itu). */
+  samples: string[];
+}
+
 export interface DashboardJpInsight {
   totalKombinasi: number;
   countByStatus: Record<JpSummaryStatus, number>;
@@ -65,6 +72,8 @@ export interface DashboardSummary {
   jpInsight: DashboardJpInsight;
   /** Top 5 guru berdasarkan total jam mengajar committed — kosong kalau belum ada jadwal committed. */
   workloadTop: DashboardWorkloadEntry[];
+  /** Bentrok guru/kelas/ruangan NYATA yang aktif sekarang di jadwal committed — bukan histori, bukan validasi 1 kandidat. */
+  scheduleConflicts: DashboardScheduleConflictSummary;
   /** Sparkline+trend per KPI card, dari histori snapshot harian nyata (bukan fabrikasi) — null kalau belum ada konteks aktif. */
   metricTrends: DashboardMetricTrends | null;
 }
@@ -106,6 +115,7 @@ export async function getDashboardSummary(supabase: SupabaseClient): Promise<Das
       metrics: baseMetrics,
       jpInsight: { totalKombinasi: 0, countByStatus: EMPTY_JP_COUNT, completionPercent: 0 },
       workloadTop: [],
+      scheduleConflicts: { total: 0, samples: [] },
       metricTrends: null,
     };
   }
@@ -177,12 +187,23 @@ export async function getDashboardSummary(supabase: SupabaseClient): Promise<Das
     metricTrends = null;
   }
 
+  // Konflik jadwal NYATA (bentrok guru/kelas/ruangan) yang aktif sekarang di committed assignments —
+  // beda dari JP_MISMATCH (jpInsight di atas, itu soal target JP belum/lebih terpenuhi).
+  const kelasById = new Map(kelasList.map((k) => [k.id, k.namaRombel]));
+  const ruanganById = new Map(ruanganList.map((r) => [r.id, r.nama]));
+  const rawConflicts = scanCommittedConflicts(committed, { guru: guruById, kelas: kelasById, ruangan: ruanganById });
+  const scheduleConflicts: DashboardScheduleConflictSummary = {
+    total: rawConflicts.length,
+    samples: rawConflicts.slice(0, 5).map((c) => c.message),
+  };
+
   return {
     schoolProfile,
     activeContext,
     metrics: finalMetrics,
     jpInsight: { totalKombinasi: pembagianAktif.length, countByStatus, completionPercent },
     workloadTop,
+    scheduleConflicts,
     metricTrends,
   };
 }

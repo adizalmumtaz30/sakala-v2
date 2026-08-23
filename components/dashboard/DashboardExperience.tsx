@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { Activity, ArrowRight, Bell, BookOpen, CalendarCheck2, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, DoorOpen, Info, AlertTriangle, Layers, Lightbulb, Plus, Sparkles, ShieldCheck, Upload, MoreHorizontal, Search, Users, X, Settings2, GripVertical, Minus, RotateCcw, BarChart3, LineChartIcon, PieChart } from "lucide-react";
 import type { ReactNode } from "react";
-import type { DashboardKeyMetrics, DashboardJpInsight, DashboardWorkloadEntry, DashboardMetricTrends, DashboardMetricSpark } from "@/lib/application/dashboard.usecases";
+import type { DashboardKeyMetrics, DashboardJpInsight, DashboardWorkloadEntry, DashboardMetricTrends, DashboardMetricSpark, DashboardScheduleConflictSummary } from "@/lib/application/dashboard.usecases";
 import type { DashboardActivityEntry, DashboardAgendaEntry, DashboardHeatmapDay, DashboardHeatmapGridDay, DashboardBebanDistribution, DashboardWorkloadFullEntry, DashboardRoomLite } from "@/lib/application/dashboard.intelligence";
 import type { NotificationEntry } from "@/lib/application/notifications.usecases";
 import type { HariSekolah } from "@/lib/domain/jamPelajaran";
@@ -380,14 +380,14 @@ function NotificationsPanel({ notifications }: { notifications: NotificationEntr
   </div>;
 }
 
-function FloatingActionDock() {
+function FloatingActionDock({ conflictCount }: { conflictCount: number }) {
   const [more, setMore] = useState(false);
   const focusRing = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40";
-  const actions: { label: string; href: string; icon: ReactNode }[] = [
+  const actions: { label: string; href: string; icon: ReactNode; badge?: number }[] = [
     { label: "Tambah Guru", href: "/guru?new=1", icon: <Plus size={16} /> },
     { label: "Generate Jadwal", href: "/jadwal-cerdas", icon: <Sparkles size={16} /> },
     { label: "Validasi Jadwal", href: "/jadwal", icon: <ShieldCheck size={16} /> },
-    { label: "Lihat Konflik", href: "/analitik#konflik-jp-aktif", icon: <AlertTriangle size={16} /> },
+    { label: "Lihat Konflik", href: "/jadwal", icon: <AlertTriangle size={16} />, badge: conflictCount > 0 ? conflictCount : undefined },
     { label: "Import Data", href: "/guru?import=1", icon: <Upload size={16} /> },
   ];
   const moreActions: { label: string; href: string; icon: ReactNode }[] = [
@@ -398,8 +398,11 @@ function FloatingActionDock() {
   ];
   return <nav aria-label="Aksi cepat" className="pointer-events-none sticky bottom-4 z-10 mt-1 flex justify-center">
     <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-border/70 bg-surface/95 p-1.5 shadow-[0_10px_30px_rgba(15,23,42,.12)] backdrop-blur">
-      {actions.map((a) => <Link key={a.href} href={a.href} className={`group flex flex-col items-center gap-1 rounded-full px-3 py-1.5 text-ink-600 transition-colors hover:bg-brand-50 hover:text-brand-700 ${focusRing}`}>
-        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-muted text-ink-600 group-hover:bg-brand-100 group-hover:text-brand-700">{a.icon}</span>
+      {actions.map((a) => <Link key={a.href + a.label} href={a.href} className={`group flex flex-col items-center gap-1 rounded-full px-3 py-1.5 text-ink-600 transition-colors hover:bg-brand-50 hover:text-brand-700 ${focusRing}`}>
+        <span className="relative flex h-8 w-8 items-center justify-center rounded-full bg-surface-muted text-ink-600 group-hover:bg-brand-100 group-hover:text-brand-700">
+          {a.icon}
+          {a.badge !== undefined && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose px-1 text-[8px] font-bold text-white animate-pulse">{a.badge}</span>}
+        </span>
         <span className="whitespace-nowrap text-[8.5px] font-semibold">{a.label}</span>
       </Link>)}
       <div className="relative">
@@ -472,9 +475,12 @@ function greetingSalutation(): string {
   return "Selamat malam";
 }
 
-function SmartInsight({ jpInsight, bebanTertinggi, bebanDistribution }: { jpInsight: DashboardJpInsight; bebanTertinggi: DashboardWorkloadFullEntry[]; bebanDistribution: DashboardBebanDistribution }) {
+function SmartInsight({ jpInsight, bebanTertinggi, bebanDistribution, scheduleConflicts }: { jpInsight: DashboardJpInsight; bebanTertinggi: DashboardWorkloadFullEntry[]; bebanDistribution: DashboardBebanDistribution; scheduleConflicts: DashboardScheduleConflictSummary }) {
   type Signal = { level: "critical" | "warning" | "good"; text: string; href: string };
   const signals: Signal[] = [];
+  if (scheduleConflicts.total > 0) {
+    signals.push({ level: "critical", text: `${scheduleConflicts.total} bentrok jadwal aktif (guru/kelas/ruangan terjadwal bersamaan)${scheduleConflicts.samples[0] ? ` — ${scheduleConflicts.samples[0]}` : ""}`, href: "/jadwal" });
+  }
   if (jpInsight.countByStatus.kosong > 0) {
     signals.push({ level: "critical", text: `${jpInsight.countByStatus.kosong} kombinasi guru+mapel+kelas belum punya jadwal sama sekali.`, href: "/pembagian-mengajar" });
   }
@@ -485,7 +491,7 @@ function SmartInsight({ jpInsight, bebanTertinggi, bebanDistribution }: { jpInsi
     signals.push({ level: "warning", text: `${bebanDistribution.berat} guru dengan beban berat (≥ 33 JP/minggu)${bebanTertinggi[0] ? ` — tertinggi ${bebanTertinggi[0].namaGuru} (${bebanTertinggi[0].totalJamMengajar} JP)` : ""}.`, href: "/guru" });
   }
   if (signals.length === 0 && jpInsight.totalKombinasi > 0) {
-    signals.push({ level: "good", text: `Semua ${jpInsight.totalKombinasi} kombinasi JP dalam kondisi aman, tidak ada yang perlu ditindaklanjuti.`, href: "/analitik" });
+    signals.push({ level: "good", text: `Semua ${jpInsight.totalKombinasi} kombinasi JP terpenuhi, tidak ada bentrok jadwal aktif. Aman untuk ditindaklanjuti.`, href: "/analitik" });
   }
   if (jpInsight.totalKombinasi === 0) {
     signals.push({ level: "warning", text: "Belum ada Pembagian Mengajar aktif — mulai dari sana untuk mengisi jadwal.", href: "/pembagian-mengajar" });
@@ -508,7 +514,7 @@ function SmartInsight({ jpInsight, bebanTertinggi, bebanDistribution }: { jpInsi
   </div>;
 }
 
-export default function DashboardExperience({ schoolName, adminName, context, metrics, metricTrends, jpInsight, workload, heatmap, heatmapGrid, rooms, heatmapGridByRoom, bebanDistribution, workloadFull, agenda, activity, guruList, notifications }: { schoolName: string; adminName: string | null; context: string | null; metrics: DashboardKeyMetrics; metricTrends: DashboardMetricTrends | null; jpInsight: DashboardJpInsight; workload: DashboardWorkloadEntry[]; heatmap: DashboardHeatmapDay[]; heatmapGrid: DashboardHeatmapGridDay[]; rooms: DashboardRoomLite[]; heatmapGridByRoom: Record<string, DashboardHeatmapGridDay[]>; bebanDistribution: DashboardBebanDistribution; workloadFull: DashboardWorkloadFullEntry[]; agenda: DashboardAgendaEntry[]; activity: DashboardActivityEntry[]; guruList: GuruLite[]; notifications: NotificationEntry[] }) {
+export default function DashboardExperience({ schoolName, adminName, context, metrics, metricTrends, jpInsight, scheduleConflicts, workload, heatmap, heatmapGrid, rooms, heatmapGridByRoom, bebanDistribution, workloadFull, agenda, activity, guruList, notifications }: { schoolName: string; adminName: string | null; context: string | null; metrics: DashboardKeyMetrics; metricTrends: DashboardMetricTrends | null; jpInsight: DashboardJpInsight; scheduleConflicts: DashboardScheduleConflictSummary; workload: DashboardWorkloadEntry[]; heatmap: DashboardHeatmapDay[]; heatmapGrid: DashboardHeatmapGridDay[]; rooms: DashboardRoomLite[]; heatmapGridByRoom: Record<string, DashboardHeatmapGridDay[]>; bebanDistribution: DashboardBebanDistribution; workloadFull: DashboardWorkloadFullEntry[]; agenda: DashboardAgendaEntry[]; activity: DashboardActivityEntry[]; guruList: GuruLite[]; notifications: NotificationEntry[] }) {
   const guruByName = new Map(guruList.map((g) => [g.namaGuru, g]));
   const bebanTertinggi = workloadFull.slice(0, 4);
   const salutation = useMemo(() => greetingSalutation(), []);
@@ -536,7 +542,7 @@ export default function DashboardExperience({ schoolName, adminName, context, me
     heatmapGrid: <Section title="Heatmap Jadwal" description="Kepadatan tiap jam pelajaran sepekan." href="/jadwal" icon={<Activity size={14} />}><HeatmapGrid grid={heatmapGrid} rooms={rooms} gridByRoom={heatmapGridByRoom} /></Section>,
     bebanTertinggi: <Section title="Beban Guru Tertinggi" description="Guru dengan JP committed tertinggi." href="/guru" icon={<Users size={14} />} badge={<span className="ml-1 inline-flex items-center gap-1 rounded-full border border-border bg-surface-muted px-2 py-0.5 text-[9px] font-bold text-ink-500">Top 5</span>}><div className="space-y-2">{bebanTertinggi.map((e) => { const style = BEBAN_STYLE[e.beban]; const g = guruList.find((item) => item.id === e.guruId); return <Link key={e.guruId} href={`/guru?teacher=${encodeURIComponent(e.guruId)}`} aria-label={`${e.namaGuru}: ${e.totalJamMengajar} JP, ${style.label}`} className="group flex items-center gap-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"><Avatar name={e.namaGuru} size="md" kodeGuru={g?.kodeGuru} jenisKelamin={g?.jenisKelamin} /><span className="min-w-0 flex-1 truncate text-[10px] font-medium text-ink-800 group-hover:text-brand-700">{e.namaGuru}</span><span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[8px] font-bold ${style.badge}`}>{style.label}</span><span className="text-[10px] font-bold tabular-nums text-ink-800">{e.totalJamMengajar} JP</span></Link>; })}{bebanTertinggi.length === 0 && <p className="text-[10px] text-ink-400">Belum ada guru aktif dengan jadwal committed.</p>}</div></Section>,
     aktivitas: <Section title="Aktivitas Terbaru" description="Perubahan terakhir pada konteks aktif." href="/riwayat" icon={<Clock3 size={14} />}><div className="space-y-2.5">{activity.slice(0, 4).map((a) => { const isGuru = a.entityType.toLowerCase().replace(/[- ]+/g, "_") === "guru"; const guru = isGuru && a.entityLabel ? guruByName.get(a.entityLabel) : undefined; return <Link key={a.id} href="/riwayat" className="group flex items-start gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">{isGuru ? <Avatar name={a.entityLabel} size="sm" kodeGuru={guru?.kodeGuru} jenisKelamin={guru?.jenisKelamin} /> : <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald"><CheckCircle2 size={12} aria-hidden="true" /></span>}<div className="min-w-0"><p className="truncate text-[10px] font-medium text-ink-800 group-hover:text-brand-700">{a.action}</p><time className="text-[8.5px] text-ink-400">{new Date(a.createdAt).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" })}</time></div></Link>; })}</div></Section>,
-    insight: <Section title="Insight" description="Sinyal yang layak diperhatikan, urut prioritas." href="/analitik" icon={<Lightbulb size={14} />}><SmartInsight jpInsight={jpInsight} bebanTertinggi={bebanTertinggi} bebanDistribution={bebanDistribution} /></Section>,
+    insight: <Section title="Insight" description="Sinyal yang layak diperhatikan, urut prioritas." href="/analitik" icon={<Lightbulb size={14} />}><SmartInsight jpInsight={jpInsight} bebanTertinggi={bebanTertinggi} bebanDistribution={bebanDistribution} scheduleConflicts={scheduleConflicts} /></Section>,
     kalender: <Section title="Mini Kalender" description="Bulan berjalan · titik menandai hari dengan jadwal committed." icon={<CalendarDays size={14} />}><MiniCalendar heatmap={heatmap} /></Section>,
     agenda: <AgendaSection agenda={agenda} guruList={guruList} guruByName={guruByName} />,
     notifikasi: <Section title="Notifikasi Terbaru" description="Aktivitas terbaru pada konteks aktif." href="/notifikasi" icon={<Bell size={14} />}><NotificationsPanel notifications={notifications} /></Section>,
@@ -572,6 +578,6 @@ export default function DashboardExperience({ schoolName, adminName, context, me
         >{widgetContent[id]}</Widget>)}
       </div>
     </div>
-    <FloatingActionDock />
+    <FloatingActionDock conflictCount={scheduleConflicts.total} />
   </main>;
 }
