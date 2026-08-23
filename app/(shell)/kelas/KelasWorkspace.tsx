@@ -21,9 +21,9 @@ const STATUS_OPTIONS = [
   { value: "nonaktif", label: "Tidak Aktif" },
 ];
 
-export default function KelasWorkspace({ initialData }: { initialData: Kelas[] }) {
+export default function KelasWorkspace({ initialData, initialQuery }: { initialData: Kelas[]; initialQuery?: string }) {
   const [data, setData] = useState<Kelas[]>(initialData);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery ?? "");
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Kelas | null>(null);
   const [formError, setFormError] = useState<string | null>(null);

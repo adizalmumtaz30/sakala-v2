@@ -15,11 +15,11 @@ import { Card, Badge, EmptyState } from "@/components/ui/primitives";
 import ImportModal, { type ImportRowResult } from "@/components/import/ImportModal";
 import { teacherColor } from "@/lib/utils/teacherColor";
 
-export default function GuruWorkspace({ initialData }: { initialData: Guru[] }) {
+export default function GuruWorkspace({ initialData, initialQuery }: { initialData: Guru[]; initialQuery?: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [data, setData] = useState<Guru[]>(initialData);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery ?? "");
   const [modalOpen, setModalOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState<Guru | null>(null);

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Search, Bell, ChevronDown, Wifi, WifiOff, GraduationCap, Moon, Sun, CheckCircle2, Info, AlertTriangle } from "lucide-react";
 import type { NotificationEntry } from "@/lib/application/notifications.usecases";
+import { OPEN_COMMAND_PALETTE_EVENT } from "@/components/layout/CommandPalette";
 
 function initialsOf(nama: string): string {
   const parts = nama.trim().split(/\s+/).filter(Boolean);
@@ -162,6 +163,7 @@ export default function Header({
     >
       <button
         type="button"
+        onClick={() => window.dispatchEvent(new CustomEvent(OPEN_COMMAND_PALETTE_EVENT))}
         className={`flex max-w-md flex-1 items-center gap-2 rounded-xl border border-border bg-surface-muted px-3.5 py-2.5 text-left text-ink-400 transition-all duration-150 hover:border-brand-600/30 hover:shadow-soft ${focusRing}`}
         aria-label="Buka pencarian global"
       >
