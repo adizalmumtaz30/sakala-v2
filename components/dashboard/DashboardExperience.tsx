@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { Activity, ArrowRight, Bell, BookOpen, CalendarCheck2, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, DoorOpen, Info, AlertTriangle, Layers, Lightbulb, Plus, Sparkles, ShieldCheck, Upload, MoreHorizontal, Search, Users, X, Settings2, GripVertical, Minus, RotateCcw, BarChart3, LineChartIcon, PieChart } from "lucide-react";
 import type { ReactNode } from "react";
 import type { DashboardKeyMetrics, DashboardJpInsight, DashboardWorkloadEntry, DashboardMetricTrends, DashboardMetricSpark } from "@/lib/application/dashboard.usecases";
@@ -52,11 +52,34 @@ function MiniSpark({ values }: { values: number[] }) {
   </svg>;
 }
 
+function useCountUp(target: number, durationMs = 500): number {
+  const [display, setDisplay] = useState(target);
+  const prevRef = useRef(target);
+  useEffect(() => {
+    const from = prevRef.current;
+    prevRef.current = target;
+    if (from === target) return;
+    let raf: number;
+    const start = performance.now();
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / durationMs);
+      const eased = 1 - Math.pow(1 - t, 3); // ease-out cubic
+      setDisplay(Math.round(from + (target - from) * eased));
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target]);
+  return display;
+}
+
 function KpiCard({ label, value, suffix, icon, href, spark }: { label: string; value: number; suffix?: string; icon: ReactNode; href: string; spark?: DashboardMetricSpark }) {
+  const animatedValue = useCountUp(value);
   return <Link href={href} className="group flex flex-col gap-2.5 rounded-[16px] border border-border/70 bg-surface/95 p-3.5 shadow-[0_1px_2px_rgba(15,23,42,.03)] transition-all hover:-translate-y-0.5 hover:border-brand-600/25 hover:shadow-[0_8px_20px_rgba(15,23,42,.06)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">
-    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">{icon}</span>
+    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600 transition-transform duration-200 group-hover:scale-110">{icon}</span>
     <span className="min-w-0">
-      <span className="flex items-baseline gap-1"><strong className="text-[16px] font-bold leading-none tabular-nums text-ink-900 group-hover:text-brand-700">{value}</strong>{suffix && <span className="text-[8.5px] font-medium text-ink-400">{suffix}</span>}</span>
+      <span className="flex items-baseline gap-1"><strong className="text-[16px] font-bold leading-none tabular-nums text-ink-900 group-hover:text-brand-700">{animatedValue}</strong>{suffix && <span className="text-[8.5px] font-medium text-ink-400">{suffix}</span>}</span>
       <span className="mt-1.5 block truncate text-[9px] font-medium text-ink-400">{label}</span>
       {spark && spark.trend !== null ? (
         <span className={`mt-0.5 block text-[8px] font-semibold ${spark.trend > 0 ? "text-emerald" : spark.trend < 0 ? "text-rose" : "text-ink-400"}`}>{spark.trend > 0 ? "↑" : spark.trend < 0 ? "↓" : "—"} {spark.trend !== 0 ? Math.abs(spark.trend) : "stabil"}{spark.trend !== 0 ? " dari data sebelumnya" : ""}</span>
@@ -449,6 +472,42 @@ function greetingSalutation(): string {
   return "Selamat malam";
 }
 
+function SmartInsight({ jpInsight, bebanTertinggi, bebanDistribution }: { jpInsight: DashboardJpInsight; bebanTertinggi: DashboardWorkloadFullEntry[]; bebanDistribution: DashboardBebanDistribution }) {
+  type Signal = { level: "critical" | "warning" | "good"; text: string; href: string };
+  const signals: Signal[] = [];
+  if (jpInsight.countByStatus.kosong > 0) {
+    signals.push({ level: "critical", text: `${jpInsight.countByStatus.kosong} kombinasi guru+mapel+kelas belum punya jadwal sama sekali.`, href: "/pembagian-mengajar" });
+  }
+  if (jpInsight.countByStatus.lebih > 0) {
+    signals.push({ level: "warning", text: `${jpInsight.countByStatus.lebih} kombinasi melebihi target JP mingguan.`, href: "/analitik" });
+  }
+  if (bebanDistribution.berat > 0) {
+    signals.push({ level: "warning", text: `${bebanDistribution.berat} guru dengan beban berat (≥ 33 JP/minggu)${bebanTertinggi[0] ? ` — tertinggi ${bebanTertinggi[0].namaGuru} (${bebanTertinggi[0].totalJamMengajar} JP)` : ""}.`, href: "/guru" });
+  }
+  if (signals.length === 0 && jpInsight.totalKombinasi > 0) {
+    signals.push({ level: "good", text: `Semua ${jpInsight.totalKombinasi} kombinasi JP dalam kondisi aman, tidak ada yang perlu ditindaklanjuti.`, href: "/analitik" });
+  }
+  if (jpInsight.totalKombinasi === 0) {
+    signals.push({ level: "warning", text: "Belum ada Pembagian Mengajar aktif — mulai dari sana untuk mengisi jadwal.", href: "/pembagian-mengajar" });
+  }
+  const styleFor: Record<Signal["level"], { dot: string; text: string }> = {
+    critical: { dot: "bg-rose animate-pulse", text: "text-ink-900" },
+    warning: { dot: "bg-amber", text: "text-ink-900" },
+    good: { dot: "bg-emerald", text: "text-ink-700" },
+  };
+  return <div className="flex flex-col gap-2">
+    {jpInsight.totalKombinasi > 0 && <div className="mb-0.5 flex items-center gap-2"><div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-muted"><div className="h-full rounded-full bg-brand-500 transition-all" style={{ width: `${jpInsight.completionPercent}%` }} /></div><span className="shrink-0 text-[9.5px] font-bold tabular-nums text-ink-600">{jpInsight.completionPercent}% terpenuhi</span></div>}
+    {signals.slice(0, 3).map((s, i) => {
+      const style = styleFor[s.level];
+      return <Link key={i} href={s.href} className="group flex items-start gap-2 rounded-lg p-1.5 hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">
+        <span className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${style.dot}`} />
+        <span className={`min-w-0 flex-1 text-[10.5px] leading-4 ${style.text}`}>{s.text}</span>
+        <ArrowRight size={11} className="mt-0.5 shrink-0 text-ink-300 opacity-0 transition-opacity group-hover:opacity-100" />
+      </Link>;
+    })}
+  </div>;
+}
+
 export default function DashboardExperience({ schoolName, adminName, context, metrics, metricTrends, jpInsight, workload, heatmap, heatmapGrid, rooms, heatmapGridByRoom, bebanDistribution, workloadFull, agenda, activity, guruList, notifications }: { schoolName: string; adminName: string | null; context: string | null; metrics: DashboardKeyMetrics; metricTrends: DashboardMetricTrends | null; jpInsight: DashboardJpInsight; workload: DashboardWorkloadEntry[]; heatmap: DashboardHeatmapDay[]; heatmapGrid: DashboardHeatmapGridDay[]; rooms: DashboardRoomLite[]; heatmapGridByRoom: Record<string, DashboardHeatmapGridDay[]>; bebanDistribution: DashboardBebanDistribution; workloadFull: DashboardWorkloadFullEntry[]; agenda: DashboardAgendaEntry[]; activity: DashboardActivityEntry[]; guruList: GuruLite[]; notifications: NotificationEntry[] }) {
   const guruByName = new Map(guruList.map((g) => [g.namaGuru, g]));
   const bebanTertinggi = workloadFull.slice(0, 4);
@@ -477,7 +536,7 @@ export default function DashboardExperience({ schoolName, adminName, context, me
     heatmapGrid: <Section title="Heatmap Jadwal" description="Kepadatan tiap jam pelajaran sepekan." href="/jadwal" icon={<Activity size={14} />}><HeatmapGrid grid={heatmapGrid} rooms={rooms} gridByRoom={heatmapGridByRoom} /></Section>,
     bebanTertinggi: <Section title="Beban Guru Tertinggi" description="Guru dengan JP committed tertinggi." href="/guru" icon={<Users size={14} />} badge={<span className="ml-1 inline-flex items-center gap-1 rounded-full border border-border bg-surface-muted px-2 py-0.5 text-[9px] font-bold text-ink-500">Top 5</span>}><div className="space-y-2">{bebanTertinggi.map((e) => { const style = BEBAN_STYLE[e.beban]; const g = guruList.find((item) => item.id === e.guruId); return <Link key={e.guruId} href={`/guru?teacher=${encodeURIComponent(e.guruId)}`} aria-label={`${e.namaGuru}: ${e.totalJamMengajar} JP, ${style.label}`} className="group flex items-center gap-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"><Avatar name={e.namaGuru} size="md" kodeGuru={g?.kodeGuru} jenisKelamin={g?.jenisKelamin} /><span className="min-w-0 flex-1 truncate text-[10px] font-medium text-ink-800 group-hover:text-brand-700">{e.namaGuru}</span><span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[8px] font-bold ${style.badge}`}>{style.label}</span><span className="text-[10px] font-bold tabular-nums text-ink-800">{e.totalJamMengajar} JP</span></Link>; })}{bebanTertinggi.length === 0 && <p className="text-[10px] text-ink-400">Belum ada guru aktif dengan jadwal committed.</p>}</div></Section>,
     aktivitas: <Section title="Aktivitas Terbaru" description="Perubahan terakhir pada konteks aktif." href="/riwayat" icon={<Clock3 size={14} />}><div className="space-y-2.5">{activity.slice(0, 4).map((a) => { const isGuru = a.entityType.toLowerCase().replace(/[- ]+/g, "_") === "guru"; const guru = isGuru && a.entityLabel ? guruByName.get(a.entityLabel) : undefined; return <Link key={a.id} href="/riwayat" className="group flex items-start gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">{isGuru ? <Avatar name={a.entityLabel} size="sm" kodeGuru={guru?.kodeGuru} jenisKelamin={guru?.jenisKelamin} /> : <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald"><CheckCircle2 size={12} aria-hidden="true" /></span>}<div className="min-w-0"><p className="truncate text-[10px] font-medium text-ink-800 group-hover:text-brand-700">{a.action}</p><time className="text-[8.5px] text-ink-400">{new Date(a.createdAt).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" })}</time></div></Link>; })}</div></Section>,
-    insight: <Section title="Insight" description="Sinyal yang layak diperhatikan." href="/analitik" icon={<Lightbulb size={14} />}><Link href="/analitik" className="group block rounded-xl bg-brand-50/60 p-3 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"><p className="text-[11px] font-semibold leading-4 text-ink-900">{bebanTertinggi[0]?.namaGuru ? `${bebanTertinggi[0].namaGuru} memiliki beban JP tertinggi.` : "Jadwal akademik siap dianalisis."}</p><p className="mt-1 text-[9.5px] leading-4 text-ink-500">Buka Analitik untuk melihat distribusi dan pola yang lebih lengkap.</p><span className="mt-2 inline-flex items-center gap-1 text-[9.5px] font-semibold text-brand-600">Analisis <ArrowRight size={11} /></span></Link></Section>,
+    insight: <Section title="Insight" description="Sinyal yang layak diperhatikan, urut prioritas." href="/analitik" icon={<Lightbulb size={14} />}><SmartInsight jpInsight={jpInsight} bebanTertinggi={bebanTertinggi} bebanDistribution={bebanDistribution} /></Section>,
     kalender: <Section title="Mini Kalender" description="Bulan berjalan · titik menandai hari dengan jadwal committed." icon={<CalendarDays size={14} />}><MiniCalendar heatmap={heatmap} /></Section>,
     agenda: <AgendaSection agenda={agenda} guruList={guruList} guruByName={guruByName} />,
     notifikasi: <Section title="Notifikasi Terbaru" description="Aktivitas terbaru pada konteks aktif." href="/notifikasi" icon={<Bell size={14} />}><NotificationsPanel notifications={notifications} /></Section>,
