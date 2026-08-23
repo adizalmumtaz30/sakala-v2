@@ -2,8 +2,8 @@
 
 import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, CheckCircle2, ChevronRight, FileUp, Link2, RefreshCw, Save, Search, X } from "lucide-react";
-import { adoptCurriculumItemsAction, listCurriculumIntelligenceAction, getCurriculumDraftAction, saveCurriculumDraftAction, clearCurriculumDraftAction, recordCurriculumGenerateEventAction, getPreviouslyAdoptedSubjectsAction, deleteCurriculumSourceAction } from "../mata-pelajaran/curriculum-actions";
+import { ArrowLeft, CheckCircle2, ChevronRight, Link2, RefreshCw, Save, Search, ShieldCheck, Sparkles, UploadCloud, X } from "lucide-react";
+import { adoptCurriculumItemsAction, listCurriculumIntelligenceAction, getCurriculumDraftAction, saveCurriculumDraftAction, clearCurriculumDraftAction, recordCurriculumGenerateEventAction, getPreviouslyAdoptedSubjectsAction, deleteCurriculumSourceAction, extractCurriculumPdfAction, saveExtractedCurriculumSourceAction, promoteCurriculumSourceToOfficialAction, type ExtractedCurriculumRow } from "../mata-pelajaran/curriculum-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -79,15 +79,31 @@ export default function GenerateKurikulumPage() {
   // Laporan user #2 — tombol hapus sumber (lama & baru).
   const [deletingSourceId, setDeletingSourceId] = useState<string | null>(null);
   const [confirmDeleteSourceId, setConfirmDeleteSourceId] = useState<string | null>(null);
+  // Laporan user #3 (PDF, versi gratis tanpa API berbayar) — ekstraksi
+  // heuristik pdf-parse. Selalu masuk sebagai tier-2/unverified; baru bisa
+  // dipakai Commit setelah admin eksplisit menekan "Tandai Resmi".
+  const [pdfExtracting, setPdfExtracting] = useState(false);
+  const [pdfFileName, setPdfFileName] = useState("");
+  const [extractedRows, setExtractedRows] = useState<ExtractedCurriculumRow[]>([]);
+  const [extractError, setExtractError] = useState("");
+  const [extractClassLevel, setExtractClassLevel] = useState("");
+  const [extractInstitution, setExtractInstitution] = useState<"Kemenag" | "Kemendikdasmen">("Kemenag");
+  const [savingExtracted, setSavingExtracted] = useState(false);
+  const [promotingSourceId, setPromotingSourceId] = useState<string | null>(null);
 
   const activeContext = contexts.find((x) => x.is_active) ?? null;
   const verifiedVersions = useMemo(() => versions.filter((v) => v.verification_status === "verified"), [versions]);
+  // Library "Sumber sebelumnya" tampilkan SEMUA versi (termasuk hasil import
+  // PDF yang belum ditinjau) — supaya operator bisa melihat & menandainya
+  // resmi. verifiedVersions (di atas) tetap dipakai khusus untuk auto-pilih
+  // & Generate, supaya yang belum ditinjau tidak diam-diam ikut ke-generate.
+  const libraryVersions = versions;
   const activeVersion = versions.find((x) => x.id === versionId) ?? null;
   const activeSource = sources.find((x) => x.id === activeVersion?.source_id) ?? null;
   // V4 poin 9 — filter Source Library dari data institusi/tahun yang benar-benar ada.
   const distinctInstitutions = useMemo(() => Array.from(new Set(sources.map((s) => s.institution).filter(Boolean))), [sources]);
-  const distinctYears = useMemo(() => Array.from(new Set(verifiedVersions.map((v) => v.regulation_year).filter((y): y is number => y != null))).sort((a, b) => b - a), [verifiedVersions]);
-  const filteredVersions = verifiedVersions.filter((v) => {
+  const distinctYears = useMemo(() => Array.from(new Set(libraryVersions.map((v) => v.regulation_year).filter((y): y is number => y != null))).sort((a, b) => b - a), [libraryVersions]);
+  const filteredVersions = libraryVersions.filter((v) => {
     const inst = sources.find((s) => s.id === v.source_id)?.institution ?? "";
     const matchesSearch = v.curriculum_name.toLowerCase().includes(sourceSearch.toLowerCase());
     const matchesInstitution = !sourceInstitutionFilter || inst === sourceInstitutionFilter;
@@ -357,7 +373,44 @@ export default function GenerateKurikulumPage() {
     setCommitting(false); setSyncStep(0);
   }
 
-  function onFileChange(event: ChangeEvent<HTMLInputElement>) { setFileName(event.target.files?.[0]?.name ?? ""); setUpdateReady(false); }
+  async function onFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setFileName(file.name); setUpdateReady(false); setExtractError(""); setExtractedRows([]); setPdfFileName(file.name);
+    if (file.type !== "application/pdf") { setExtractError("Hanya file PDF yang didukung."); return; }
+    setPdfExtracting(true);
+    const formData = new FormData(); formData.append("file", file);
+    const result = await extractCurriculumPdfAction(formData);
+    setPdfExtracting(false);
+    if (!result.ok) { setExtractError(result.error); return; }
+    if (!result.data.rows.length) { setExtractError("Tidak ada baris \"mata pelajaran · JP\" yang terdeteksi. Coba PDF lain atau masukkan manual lewat Link."); return; }
+    setExtractedRows(result.data.rows);
+  }
+
+  function removeExtractedRow(subjectName: string) {
+    setExtractedRows((current) => current.filter((r) => r.subjectName !== subjectName));
+  }
+
+  async function confirmExtractedSource() {
+    if (!extractedRows.length || !extractClassLevel) return;
+    setSavingExtracted(true);
+    const result = await saveExtractedCurriculumSourceAction({ fileName: pdfFileName, institution: extractInstitution, classLevel: extractClassLevel, rows: extractedRows });
+    setSavingExtracted(false);
+    if (!result.ok) { setExtractError(result.error); return; }
+    setExtractedRows([]); setFileName(""); setPdfFileName(""); setExtractClassLevel("");
+    setMessage(`Sumber baru tersimpan (${extractedRows.length} mata pelajaran) — status "Perlu ditinjau". Tekan "Tandai Resmi" pada sumber ini di daftar Sumber Sebelumnya setelah dicek manual, baru bisa dipakai untuk Commit.`);
+    setUpdateMode("previous");
+    void loadAll();
+  }
+
+  async function handlePromoteSource(sourceId: string) {
+    setPromotingSourceId(sourceId);
+    const result = await promoteCurriculumSourceToOfficialAction(sourceId);
+    setPromotingSourceId(null);
+    if (!result.ok) { setErrorMessage(result.error); setErrorRetry(null); return; }
+    setMessage("Sumber ditandai resmi — sekarang bisa dipakai untuk Generate dan Commit.");
+    void loadAll();
+  }
 
   return (
     <div className="mx-auto max-w-6xl space-y-5 pb-24">
@@ -481,14 +534,41 @@ export default function GenerateKurikulumPage() {
 
       {sourceDrawer && activeVersion && <div className="fixed inset-0 z-50 bg-black/20" onClick={() => setSourceDrawer(false)}><aside className="absolute right-0 top-0 h-full w-full max-w-md overflow-y-auto bg-surface p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}><div className="flex items-start justify-between"><div><p className="text-xs font-bold uppercase tracking-wider text-ink-500">Source Preview</p><h2 className="mt-1 text-xl font-bold">{activeVersion.curriculum_name}</h2><p className="text-sm text-ink-600">{activeSource ? institutionLabel(activeSource.institution) : "Kemenag"} · {activeVersion.regulation_year ?? "—"}</p></div><button onClick={() => setSourceDrawer(false)} aria-label="Tutup"><X className="h-5 w-5" /></button></div><div className="mt-6 space-y-4 text-sm"><div><p className="font-semibold">Status</p>{(() => { const s = activeVersion.verification_status; const cfg = s === "verified" ? { text: "✓ Siap digunakan", cls: "text-emerald-700" } : s === "blocked" ? { text: "× Tidak dapat digunakan", cls: "text-rose-700" } : { text: "⚠ Perlu ditinjau", cls: "text-amber-700" }; return <p className={`mt-1 ${cfg.cls}`}>{cfg.text}</p>; })()}</div><div><p className="font-semibold">Sumber</p><p className="mt-1">{activeSource?.name ?? "Regulasi resmi"}</p></div><div><p className="font-semibold">Regulasi</p><p className="mt-1 text-ink-600">{activeVersion.regulation_number ?? "Belum dicantumkan"}{activeVersion.regulation_title ? ` · ${activeVersion.regulation_title}` : ""}</p></div><div className="flex gap-2 pt-3"><button onClick={() => setSourceDrawer(false)} disabled={activeVersion.verification_status === "blocked"} className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40">Gunakan sumber</button><button onClick={() => setSourceDrawer(false)} className="rounded-xl border border-border px-4 py-2.5 text-sm font-semibold">Tutup</button></div></div></aside></div>}
 
-      {updateOpen && <div className="fixed inset-0 z-50 bg-black/20 p-4" onClick={() => setUpdateOpen(false)}><div role="dialog" aria-modal="true" className="mx-auto mt-[8vh] max-h-[84vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-border bg-surface p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}><div className="flex items-start justify-between"><div><p className="text-xs font-bold uppercase tracking-wider text-brand-700">Update</p><h2 className="mt-1 text-xl font-bold">Perbarui pilihan kurikulum</h2><p className="mt-1 text-sm text-ink-600">Menggunakan konteks aktif · {activeContext?.jenjang ?? "—"} · {activeContext?.institution ?? "—"} · {activeContext?.tahun_pelajaran ?? "—"} · {activeContext?.semester ?? "—"}</p></div><button onClick={() => setUpdateOpen(false)} aria-label="Tutup"><X className="h-5 w-5" /></button></div><div className="mt-5 flex rounded-xl bg-surface-muted p-1"><button onClick={() => setUpdateMode("previous")} className={`flex-1 rounded-lg px-3 py-2 text-sm font-bold ${updateMode === "previous" ? "bg-surface shadow-sm" : "text-ink-500"}`}>Sumber sebelumnya</button><button onClick={() => setUpdateMode("new")} className={`flex-1 rounded-lg px-3 py-2 text-sm font-bold ${updateMode === "new" ? "bg-surface shadow-sm" : "text-ink-500"}`}>Sumber baru</button></div>{updateMode === "previous" ? <div className="mt-4 space-y-2"><div className="flex items-center gap-2 rounded-xl border border-border px-3 py-2"><Search className="h-4 w-4 text-ink-400" /><input value={sourceSearch} onChange={(e) => setSourceSearch(e.target.value)} placeholder="Cari sumber..." className="w-full bg-transparent text-sm outline-none" /></div>{(distinctInstitutions.length > 1 || distinctYears.length > 1) && <div className="flex flex-wrap gap-4"><div className="flex flex-wrap gap-1.5"><button onClick={() => setSourceInstitutionFilter("")} className={`rounded-full px-2.5 py-1 text-xs font-semibold ${!sourceInstitutionFilter ? "bg-brand-600 text-white" : "bg-surface-muted text-ink-600"}`}>Semua</button>{distinctInstitutions.map((inst) => <button key={inst} onClick={() => setSourceInstitutionFilter(inst)} className={`rounded-full px-2.5 py-1 text-xs font-semibold ${sourceInstitutionFilter === inst ? "bg-brand-600 text-white" : "bg-surface-muted text-ink-600"}`}>{institutionLabel(inst)}</button>)}</div><div className="flex flex-wrap gap-1.5"><button onClick={() => setSourceYearFilter("")} className={`rounded-full px-2.5 py-1 text-xs font-semibold ${sourceYearFilter === "" ? "bg-brand-600 text-white" : "bg-surface-muted text-ink-600"}`}>Semua Tahun</button>{distinctYears.map((y) => <button key={y} onClick={() => setSourceYearFilter(y)} className={`rounded-full px-2.5 py-1 text-xs font-semibold ${sourceYearFilter === y ? "bg-brand-600 text-white" : "bg-surface-muted text-ink-600"}`}>{y}</button>)}</div></div>}{filteredVersions.map((v) => { const inst = sources.find((s) => s.id === v.source_id)?.institution; const isConfirming = confirmDeleteSourceId === v.source_id; return <div key={v.id} className={`w-full rounded-xl border p-4 text-left ${versionId === v.id ? "border-brand-600 bg-brand-50" : "border-border"}`}>
-          <button type="button" onClick={() => chooseVersion(v.id)} className="w-full text-left"><p className="font-semibold">{v.curriculum_name}</p><p className="mt-1 text-sm text-ink-600">{inst ? institutionLabel(inst) : "Kemenag"} · {v.regulation_year ?? "—"}</p>{versionId === v.id && <p className="mt-1 text-xs font-bold text-emerald-700">✓ Dipilih</p>}</button>
-          {isConfirming ? (
-            <div className="mt-2 flex items-center gap-2 border-t border-border pt-2 text-xs"><span className="text-ink-600">Hapus sumber ini?</span><button type="button" onClick={() => void handleDeleteSource(v.source_id)} disabled={deletingSourceId === v.source_id} className="rounded-lg bg-rose px-2.5 py-1.5 font-bold text-white disabled:opacity-50">{deletingSourceId === v.source_id ? "Menghapus…" : "Ya, hapus"}</button><button type="button" onClick={() => setConfirmDeleteSourceId(null)} className="rounded-lg border border-border px-2.5 py-1.5 font-semibold">Batal</button></div>
-          ) : (
-            <button type="button" onClick={() => setConfirmDeleteSourceId(v.source_id)} className="mt-2 border-t border-border pt-2 text-xs font-semibold text-rose">Hapus sumber</button>
-          )}
-        </div>; })}{!filteredVersions.length && <p className="py-4 text-center text-sm text-ink-500">Tidak ada sumber yang cocok.</p>}</div> : <div className="mt-4 space-y-3"><div className="grid gap-3 md:grid-cols-2"><label className="rounded-xl border border-border p-4"><span className="mb-2 flex items-center gap-2 text-sm font-semibold"><Link2 className="h-4 w-4" /> Link</span><input value={sourceUrl} onChange={(e) => { setSourceUrl(e.target.value); setDuplicateAcknowledged(false); }} placeholder="https://..." inputMode="url" className="w-full rounded-lg border border-border px-3 py-2 text-sm" /></label><label className="cursor-pointer rounded-xl border border-border p-4"><span className="mb-2 flex items-center gap-2 text-sm font-semibold"><FileUp className="h-4 w-4" /> Import File</span><input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" onChange={onFileChange} className="w-full text-sm" /><span className="mt-2 block text-xs text-ink-500">{fileName || "Belum ada file dipilih"}</span></label></div>{duplicateSource && !duplicateAcknowledged && <div className="rounded-xl border border-amber/30 bg-amber-50 p-4 text-sm"><p className="font-bold text-amber">Sumber serupa ditemukan.</p><p className="mt-1 text-ink-700">"{duplicateSource.name}" sudah tersimpan dengan link yang sama.</p><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={useStoredSource} className="rounded-lg bg-brand-600 px-3 py-2 text-xs font-bold text-white">Gunakan yang tersimpan</button><button type="button" onClick={() => setDuplicateAcknowledged(true)} className="rounded-lg border border-border bg-surface px-3 py-2 text-xs font-semibold">Gunakan sumber baru</button></div></div>}</div>}<div className="mt-5 flex items-center justify-between gap-3"><p className="text-sm text-ink-600">{updateReady ? "✓ Pilihan siap digunakan" : "Data resmi belum berubah."}</p><button type="button" onClick={() => void applyUpdateSelection()} disabled={updating} className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${updating ? "animate-spin" : ""}`} /> {updating ? "Mencari…" : "Gunakan sumber"}</button></div></div></div>}
+      {updateOpen && <div className="fixed inset-0 z-50 bg-black/20 p-4" onClick={() => setUpdateOpen(false)}><div role="dialog" aria-modal="true" className="mx-auto mt-[8vh] max-h-[84vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-border bg-surface p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}><div className="flex items-start justify-between"><div><p className="text-xs font-bold uppercase tracking-wider text-brand-700">Update</p><h2 className="mt-1 text-xl font-bold">Perbarui pilihan kurikulum</h2><p className="mt-1 text-sm text-ink-600">Menggunakan konteks aktif · {activeContext?.jenjang ?? "—"} · {activeContext?.institution ?? "—"} · {activeContext?.tahun_pelajaran ?? "—"} · {activeContext?.semester ?? "—"}</p></div><button onClick={() => setUpdateOpen(false)} aria-label="Tutup"><X className="h-5 w-5" /></button></div><div className="mt-5 flex rounded-xl bg-surface-muted p-1"><button onClick={() => setUpdateMode("previous")} className={`flex-1 rounded-lg px-3 py-2 text-sm font-bold ${updateMode === "previous" ? "bg-surface shadow-sm" : "text-ink-500"}`}>Sumber sebelumnya</button><button onClick={() => setUpdateMode("new")} className={`flex-1 rounded-lg px-3 py-2 text-sm font-bold ${updateMode === "new" ? "bg-surface shadow-sm" : "text-ink-500"}`}>Sumber baru</button></div>{updateMode === "previous" ? <div className="mt-4 space-y-2"><div className="flex items-center gap-2 rounded-xl border border-border px-3 py-2"><Search className="h-4 w-4 text-ink-400" /><input value={sourceSearch} onChange={(e) => setSourceSearch(e.target.value)} placeholder="Cari sumber..." className="w-full bg-transparent text-sm outline-none" /></div>{(distinctInstitutions.length > 1 || distinctYears.length > 1) && <div className="flex flex-wrap gap-4"><div className="flex flex-wrap gap-1.5"><button onClick={() => setSourceInstitutionFilter("")} className={`rounded-full px-2.5 py-1 text-xs font-semibold ${!sourceInstitutionFilter ? "bg-brand-600 text-white" : "bg-surface-muted text-ink-600"}`}>Semua</button>{distinctInstitutions.map((inst) => <button key={inst} onClick={() => setSourceInstitutionFilter(inst)} className={`rounded-full px-2.5 py-1 text-xs font-semibold ${sourceInstitutionFilter === inst ? "bg-brand-600 text-white" : "bg-surface-muted text-ink-600"}`}>{institutionLabel(inst)}</button>)}</div><div className="flex flex-wrap gap-1.5"><button onClick={() => setSourceYearFilter("")} className={`rounded-full px-2.5 py-1 text-xs font-semibold ${sourceYearFilter === "" ? "bg-brand-600 text-white" : "bg-surface-muted text-ink-600"}`}>Semua Tahun</button>{distinctYears.map((y) => <button key={y} onClick={() => setSourceYearFilter(y)} className={`rounded-full px-2.5 py-1 text-xs font-semibold ${sourceYearFilter === y ? "bg-brand-600 text-white" : "bg-surface-muted text-ink-600"}`}>{y}</button>)}</div></div>}{filteredVersions.map((v) => { const src = sources.find((s) => s.id === v.source_id); const inst = src?.institution; const isConfirming = confirmDeleteSourceId === v.source_id; const needsPromotion = src && (src.status !== "official"); return <div key={v.id} className={`w-full rounded-xl border p-4 text-left ${versionId === v.id ? "border-brand-600 bg-brand-50" : "border-border"}`}>
+          <button type="button" onClick={() => chooseVersion(v.id)} className="w-full text-left"><p className="font-semibold">{v.curriculum_name}</p><p className="mt-1 text-sm text-ink-600">{inst ? institutionLabel(inst) : "Kemenag"} · {v.regulation_year ?? "—"}</p>{versionId === v.id && <p className="mt-1 text-xs font-bold text-emerald-700">✓ Dipilih</p>}{needsPromotion && <p className="mt-1 text-xs font-bold text-amber">⚠ Perlu ditinjau — belum bisa dipakai Commit</p>}</button>
+          <div className="mt-2 flex flex-wrap items-center gap-3 border-t border-border pt-2">
+            {needsPromotion && src && <button type="button" onClick={() => void handlePromoteSource(src.id)} disabled={promotingSourceId === src.id} className="flex items-center gap-1 text-xs font-semibold text-brand-700 disabled:opacity-50"><ShieldCheck className="h-3.5 w-3.5" /> {promotingSourceId === src.id ? "Menandai…" : "Tandai Resmi"}</button>}
+            {isConfirming ? (
+              <div className="flex items-center gap-2 text-xs"><span className="text-ink-600">Hapus sumber ini?</span><button type="button" onClick={() => void handleDeleteSource(v.source_id)} disabled={deletingSourceId === v.source_id} className="rounded-lg bg-rose px-2.5 py-1.5 font-bold text-white disabled:opacity-50">{deletingSourceId === v.source_id ? "Menghapus…" : "Ya, hapus"}</button><button type="button" onClick={() => setConfirmDeleteSourceId(null)} className="rounded-lg border border-border px-2.5 py-1.5 font-semibold">Batal</button></div>
+            ) : (
+              <button type="button" onClick={() => setConfirmDeleteSourceId(v.source_id)} className="text-xs font-semibold text-rose">Hapus sumber</button>
+            )}
+          </div>
+        </div>; })}{!filteredVersions.length && <p className="py-4 text-center text-sm text-ink-500">Tidak ada sumber yang cocok.</p>}</div> : <div className="mt-4 space-y-3">
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="rounded-xl border border-border p-4"><span className="mb-2 flex items-center gap-2 text-sm font-semibold"><Link2 className="h-4 w-4" /> Link</span><input value={sourceUrl} onChange={(e) => { setSourceUrl(e.target.value); setDuplicateAcknowledged(false); }} placeholder="https://..." inputMode="url" className="w-full rounded-lg border border-border px-3 py-2 text-sm" /></label>
+            <label className="cursor-pointer rounded-xl border border-border p-4"><span className="mb-2 flex items-center gap-2 text-sm font-semibold"><UploadCloud className="h-4 w-4" /> Import PDF</span><input type="file" accept=".pdf" onChange={(e) => void onFileChange(e)} className="w-full text-sm" /><span className="mt-2 block text-xs text-ink-500">{pdfExtracting ? "Membaca PDF…" : fileName || "Ekstraksi teks otomatis (gratis, heuristik — bukan AI)"}</span></label>
+          </div>
+
+          {/* Preview hasil ekstraksi PDF — operator meninjau & mengoreksi
+              sebelum disimpan. Ini titik "human review" yang membuat status
+              boleh dinaikkan lewat Tandai Resmi nanti. */}
+          {extractError && <p className="rounded-xl border border-rose/30 bg-rose-50 px-3.5 py-2.5 text-sm text-rose">{extractError}</p>}
+          {extractedRows.length > 0 && <div className="rounded-xl border border-brand-600/30 bg-brand-50 p-4">
+            <div className="flex items-center gap-2 text-sm font-bold text-brand-700"><Sparkles className="h-4 w-4" /> {extractedRows.length} baris terdeteksi dari "{pdfFileName}" — tinjau dulu</div>
+            <p className="mt-1 text-xs text-ink-600">Ekstraksi heuristik (pola teks "mapel · angka JP"), bukan AI — mungkin ada yang salah tangkap atau kelewat. Hapus baris yang tidak sesuai.</p>
+            <ul className="mt-3 max-h-52 space-y-1 overflow-y-auto">{extractedRows.map((r) => <li key={r.subjectName} className="flex items-center justify-between gap-2 rounded-lg bg-surface px-3 py-2 text-sm"><span>{r.subjectName} — <b>{r.weeklyTarget} JP</b></span><button type="button" onClick={() => removeExtractedRow(r.subjectName)} aria-label={`Hapus ${r.subjectName}`} className="text-ink-400 hover:text-rose"><X className="h-4 w-4" /></button></li>)}</ul>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <label className="text-xs font-semibold text-ink-600">Jenjang kelas untuk semua baris ini<select value={extractClassLevel} onChange={(e) => setExtractClassLevel(e.target.value)} className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-ink-900"><option value="">Pilih jenjang</option>{["VII", "VIII", "IX", "X", "XI", "XII"].map((lvl) => <option key={lvl} value={lvl}>{lvl}</option>)}</select></label>
+              <label className="text-xs font-semibold text-ink-600">Kementerian/Badan<select value={extractInstitution} onChange={(e) => setExtractInstitution(e.target.value as "Kemenag" | "Kemendikdasmen")} className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-ink-900"><option value="Kemenag">Kemenag</option><option value="Kemendikdasmen">Kemendikdasmen</option></select></label>
+            </div>
+            <button type="button" onClick={() => void confirmExtractedSource()} disabled={savingExtracted || !extractClassLevel || !extractedRows.length} className="mt-3 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{savingExtracted ? "Menyimpan…" : "Simpan sebagai sumber baru"}</button>
+          </div>}
+
+          {duplicateSource && !duplicateAcknowledged && <div className="rounded-xl border border-amber/30 bg-amber-50 p-4 text-sm"><p className="font-bold text-amber">Sumber serupa ditemukan.</p><p className="mt-1 text-ink-700">"{duplicateSource.name}" sudah tersimpan dengan link yang sama.</p><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={useStoredSource} className="rounded-lg bg-brand-600 px-3 py-2 text-xs font-bold text-white">Gunakan yang tersimpan</button><button type="button" onClick={() => setDuplicateAcknowledged(true)} className="rounded-lg border border-border bg-surface px-3 py-2 text-xs font-semibold">Gunakan sumber baru</button></div></div>}
+        </div>}
+        <div className="mt-5 flex items-center justify-between gap-3"><p className="text-sm text-ink-600">{updateReady ? "✓ Pilihan siap digunakan" : "Data resmi belum berubah."}</p><button type="button" onClick={() => void applyUpdateSelection()} disabled={updating || (updateMode === "new" && !sourceUrl.trim())} className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${updating ? "animate-spin" : ""}`} /> {updating ? "Mencari…" : "Gunakan sumber"}</button></div>
+      </div></div>}
 
       {compareOpen && <div className="fixed inset-0 z-[60] bg-black/20 p-4" onClick={() => setCompareOpen(false)}><div role="dialog" aria-modal="true" className="mx-auto mt-[12vh] w-full max-w-lg rounded-2xl border border-border bg-surface p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}><p className="text-xs font-bold uppercase tracking-wider text-brand-700">Automatic Compare</p><h2 className="mt-1 text-xl font-bold">Perubahan ditemukan</h2><p className="mt-1 text-sm text-ink-600">{changedIds.length} perubahan perlu ditinjau sebelum sinkronisasi.</p><div className="mt-4 space-y-2 rounded-xl bg-surface-muted p-4 text-sm">{changedIds.slice(0, 8).map((id) => { const item = candidate.find((x) => x.id === id); return item ? <div key={id} className="flex justify-between gap-3"><span>{item.subject_name}</span><strong>{baseline[id] ?? "—"} → {item.manualTarget ?? "—"}</strong></div> : null; })}{changedIds.length > 8 && <p className="text-xs text-ink-500">+ {changedIds.length - 8} perubahan lainnya</p>}{newIds.length > 0 && <p className="pt-2 text-sm font-semibold text-brand-700">{newIds.length} mata pelajaran baru ditemukan.</p>}</div><p className="mt-4 text-sm text-ink-600">Saran: gunakan hasil terbaru. Data yang tidak berubah tidak perlu ditinjau satu per satu.</p><div className="mt-5 flex flex-wrap justify-end gap-2"><button onClick={() => setCompareOpen(false)} className="rounded-xl border border-border px-4 py-2.5 text-sm font-semibold">Tinjau perbedaan</button><button onClick={() => void commitCandidate()} className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white">Gunakan hasil terbaru</button></div></div></div>}
     </div>
