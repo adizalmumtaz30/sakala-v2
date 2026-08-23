@@ -12,6 +12,7 @@ import { getSchoolProfile } from "@/lib/application/schoolProfile.usecases";
 import JadwalWorkspace from "./JadwalWorkspace";
 import JadwalPointerDrag from "@/components/jadwal/JadwalPointerDrag";
 import ScheduleExportPanel from "@/components/jadwal/ScheduleExportPanel";
+import JadwalOverview from "@/components/jadwal/JadwalOverview";
 import { ErrorState, EmptyState } from "@/components/ui/primitives";
 
 export default async function JadwalPage() {
@@ -50,6 +51,14 @@ export default async function JadwalPage() {
     return (
       <div data-sakala-jadwal-root>
         <h1 className="sr-only">Jadwal</h1>
+        <div className="mx-auto max-w-6xl px-4 pt-6">
+          <JadwalOverview
+            activeContext={activeContext}
+            activeModel={activeModel ?? null}
+            assignments={allAssignments}
+            jamPelajaranList={jamPelajaranList}
+          />
+        </div>
         <JadwalPointerDrag academicContextId={activeContext.id} scheduleModels={scheduleModels} assignments={allAssignments} />
         <JadwalWorkspace
           activeContext={activeContext}
