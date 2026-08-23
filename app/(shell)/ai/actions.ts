@@ -30,6 +30,11 @@ export interface AiCopilotClassStatus {
   /** JP yang belum punya guru sama sekali (authority: target_jp resmi). AI wajib membedakan ini dari "sudah punya guru tapi belum terjadwal". */
   belumSiapJp: number;
   subjectDeficits: Array<{ subjectId: string; subjectName: string; targetJp: number; scheduledJp: number; remainingJp: number; belumSiapJp: number }>;
+  /** JP yang terjadwal MELEBIHI target resmi — sebelumnya tidak pernah terlihat
+   * (source data lama membungkam kelebihan lewat Math.min). AI wajib melaporkan
+   * ini, bukan diam-diam menganggap kelas 'sudah sesuai' padahal kelebihan. */
+  excessJp: number;
+  subjectExcess: Array<{ subjectId: string; subjectName: string; targetJp: number; scheduledJp: number; excessJp: number; schedules: Array<{ id: string; day: string; periodStart: number; periodEnd: number }> }>;
 }
 
 export interface AiCopilotContext {
@@ -97,9 +102,25 @@ export async function getAiCopilotContextAction(): Promise<AiActionResult<AiCopi
         .filter((x) => x.remainingJp > 0)
         .sort((a, b) => b.remainingJp - a.remainingJp);
 
+      // §14/§19 — kelebihan JP (terjadwal > target resmi) sebelumnya tidak
+      // pernah dilaporkan karena data sumbernya membungkam lewat Math.min.
+      // AI wajib melaporkan ini secara jujur, bukan diam-diam anggap "sesuai".
+      const subjectExcess = rows
+        .filter((r) => r.scheduledExcessJp > 0)
+        .map((r) => ({
+          subjectId: r.mataPelajaranId,
+          subjectName: r.mataPelajaranNama,
+          targetJp: r.targetJp,
+          scheduledJp: r.terjadwalJp + r.scheduledExcessJp,
+          excessJp: r.scheduledExcessJp,
+          schedules: r.schedules.map((s) => ({ id: s.id, day: s.day, periodStart: s.periodStart, periodEnd: s.periodEnd })),
+        }))
+        .sort((a, b) => b.excessJp - a.excessJp);
+
       const targetJp = rows.reduce((sum, r) => sum + r.targetJp, 0);
       const scheduledJp = rows.reduce((sum, r) => sum + r.terjadwalJp, 0);
       const belumSiapJp = rows.reduce((sum, r) => sum + r.belumSiapJp, 0);
+      const excessJp = rows.reduce((sum, r) => sum + r.scheduledExcessJp, 0);
 
       return {
         id: k.id,
@@ -109,6 +130,8 @@ export async function getAiCopilotContextAction(): Promise<AiActionResult<AiCopi
         remainingJp: Math.max(0, targetJp - scheduledJp),
         belumSiapJp,
         subjectDeficits,
+        excessJp,
+        subjectExcess,
       };
     }).filter((x) => x.targetJp > 0);
 
@@ -182,6 +205,21 @@ export async function saveAiCandidatesAction(
 ): Promise<AiActionResult<{ savedCount: number; skippedCount: number; savedIds: string[] }>> {
   const result = await saveCandidatesAction(drafts);
   return result;
+}
+
+// §14 Action Type "Kurangi" — hapus satu slot jadwal committed yang berkontribusi
+// pada kelebihan JP. Ini BEDA dari rollback (yang menghapus candidate AI sendiri):
+// ini menyentuh jadwal committed asli, jadi risikonya §19 "sedang", bukan
+// "rendah" -- UI wajib menampilkan dampak (slot mana yang akan kosong) sebelum
+// tindakan, bukan tombol sekali klik tanpa konteks.
+export async function kurangiJpAction(assignmentId: string): Promise<AiActionResult<null>> {
+  try {
+    const { supabase } = await getActiveContext();
+    await scheduleAssignmentUseCases.deleteAssignment(supabase, assignmentId);
+    return { ok: true, data: null };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Gagal mengurangi JP." };
+  }
 }
 
 // §25 Rollback — hapus candidate yang barusan disimpan (bukan jadwal committed,
