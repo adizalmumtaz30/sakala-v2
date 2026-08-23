@@ -18,8 +18,8 @@ import { scheduleModelRepository } from "@/lib/data-access/scheduleModel.reposit
 import { scheduleAssignmentRepository } from "@/lib/data-access/scheduleAssignment.repository";
 import { pembagianMengajarRepository } from "@/lib/data-access/pembagianMengajar.repository";
 import { isFixedSlot } from "@/lib/domain/slotTemplate";
-import { formatHari } from "@/lib/domain/jamPelajaran";
-import { periodsOverlap, type ScheduleAssignmentDraft } from "@/lib/domain/scheduleAssignment";
+import { formatHari, type HariSekolah } from "@/lib/domain/jamPelajaran";
+import { periodsOverlap, type ScheduleAssignmentDraft, type ScheduleAssignment } from "@/lib/domain/scheduleAssignment";
 import { summarizeJp } from "@/lib/domain/pembagianMengajar";
 import { isBlockingSeverity, nextConflictId, toJpReconciliationState, type ScheduleConflict } from "@/lib/domain/conflict";
 
@@ -331,4 +331,51 @@ function rangeInclusive(start: number, end: number): number[] {
   const out: number[] = [];
   for (let n = start; n <= end; n += 1) out.push(n);
   return out;
+}
+
+/**
+ * Pindai SELURUH assignment committed pada satu konteks akademik, cari
+ * bentrok guru/kelas/ruangan yang benar-benar aktif SAAT INI — bukan
+ * validasi satu kandidat saat edit (itu tugas validateAssignmentCandidate).
+ * Operator butuh ini supaya dashboard bisa jujur menjawab "apakah jadwal
+ * yang sudah committed sekarang bebas bentrok?" tanpa harus buka Jadwal dan
+ * cek manual satu-satu. O(n²) per hari — aman untuk skala satu sekolah
+ * (puluhan-ratusan assignment/hari, bukan ribuan).
+ */
+export function scanCommittedConflicts(
+  assignments: ScheduleAssignment[],
+  names?: { guru?: Map<string, string>; kelas?: Map<string, string>; ruangan?: Map<string, string> },
+): ScheduleConflict[] {
+  const conflicts: ScheduleConflict[] = [];
+  const committed = assignments.filter((a) => a.status === "committed");
+  const byDay = new Map<HariSekolah, ScheduleAssignment[]>();
+  for (const a of committed) {
+    const list = byDay.get(a.day) ?? [];
+    list.push(a);
+    byDay.set(a.day, list);
+  }
+  const guruName = (id: string) => names?.guru?.get(id) ?? "seorang guru";
+  const kelasName = (id: string) => names?.kelas?.get(id) ?? "kelas lain";
+  const ruanganName = (id: string) => names?.ruangan?.get(id) ?? "ruangan itu";
+
+  for (const [day, list] of byDay) {
+    for (let i = 0; i < list.length; i += 1) {
+      for (let j = i + 1; j < list.length; j += 1) {
+        const a = list[i], b = list[j];
+        if (!periodsOverlap(a.periodStart, a.periodEnd, b.periodStart, b.periodEnd)) continue;
+        const jam = a.periodStart === a.periodEnd ? `jam ke-${a.periodStart}` : `jam ke-${a.periodStart} s.d. ke-${b.periodEnd}`;
+        const hari = formatHari(day);
+        if (a.teacherId === b.teacherId) {
+          conflicts.push({ conflictId: nextConflictId(), severity: "error", type: "TEACHER_OVERLAP", entityType: "teacher", entityIds: [a.teacherId], scheduleIds: [a.id, b.id], message: `${guruName(a.teacherId)} mengajar ${kelasName(a.classId)} dan ${kelasName(b.classId)} bersamaan pada ${jam} hari ${hari}.`, resolutionHint: "Pindahkan salah satu jadwal ke jam lain.", blocking: true });
+        }
+        if (a.classId === b.classId) {
+          conflicts.push({ conflictId: nextConflictId(), severity: "error", type: "CLASS_OVERLAP", entityType: "class", entityIds: [a.classId], scheduleIds: [a.id, b.id], message: `${kelasName(a.classId)} punya 2 mata pelajaran terjadwal bersamaan pada ${jam} hari ${hari}.`, resolutionHint: "Pindahkan salah satu jadwal ke jam lain.", blocking: true });
+        }
+        if (a.roomId && b.roomId && a.roomId === b.roomId) {
+          conflicts.push({ conflictId: nextConflictId(), severity: "error", type: "ROOM_OVERLAP", entityType: "room", entityIds: [a.roomId], scheduleIds: [a.id, b.id], message: `Ruangan ${ruanganName(a.roomId)} dipakai ${kelasName(a.classId)} dan ${kelasName(b.classId)} bersamaan pada ${jam} hari ${hari}.`, resolutionHint: "Pindahkan salah satu jadwal ke ruangan lain.", blocking: true });
+        }
+      }
+    }
+  }
+  return conflicts;
 }
