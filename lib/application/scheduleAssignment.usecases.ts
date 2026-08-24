@@ -14,6 +14,7 @@ import { scheduleAssignmentRepository } from "@/lib/data-access/scheduleAssignme
 import { scheduleVersionRepository } from "@/lib/data-access/scheduleVersion.repository";
 import { validateAssignmentCandidate } from "@/lib/application/conflictEngine";
 import { recordAuditEvent } from "@/lib/application/auditLog.usecases";
+import type { AuditSource } from "@/lib/domain/auditLog";
 
 export interface ValidationResult {
   conflicts: ScheduleConflict[];
@@ -81,7 +82,7 @@ export async function deleteAssignment(supabase: SupabaseClient, id: string): Pr
   return scheduleAssignmentRepository.remove(supabase, id);
 }
 
-export async function archiveOrDeleteAssignment(supabase: SupabaseClient, id: string): Promise<{ archived: boolean }> {
+export async function archiveOrDeleteAssignment(supabase: SupabaseClient, id: string, source: AuditSource = "manual", callerReason?: string | null): Promise<{ archived: boolean }> {
   const existing = await scheduleAssignmentRepository.findById(supabase, id);
   if (!existing) {
     throw new ScheduleAssignmentValidationError("id", "Assignment tidak ditemukan.");
@@ -96,7 +97,8 @@ export async function archiveOrDeleteAssignment(supabase: SupabaseClient, id: st
       entityId: id,
       entityLabel: null,
       before: existing,
-      reason: "Assignment committed di-archive, bukan dihapus permanen.",
+      source,
+      reason: callerReason ? `Assignment committed di-archive, bukan dihapus permanen. ${callerReason}` : "Assignment committed di-archive, bukan dihapus permanen.",
     });
     return { archived: true };
   }
@@ -109,6 +111,8 @@ export async function archiveOrDeleteAssignment(supabase: SupabaseClient, id: st
     entityId: id,
     entityLabel: null,
     before: existing,
+    source,
+    reason: callerReason ?? null,
   });
   return { archived: false };
 }
