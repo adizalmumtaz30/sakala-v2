@@ -28,7 +28,7 @@
 
 import { useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
-import { runAiCopilotIntentAction, planScheduleAction, saveAiCandidatesAction, rollbackAiCandidatesAction, kurangiJpAction, type AiCopilotClassStatus, type AiCopilotIntent } from "@/app/(shell)/ai/actions";
+import { runAiCopilotIntentAction, planScheduleAction, saveAiCandidatesAction, rollbackAiCandidatesAction, kurangiJpAction, tetapkanGuruAction, type AiCopilotClassStatus, type AiCopilotIntent } from "@/app/(shell)/ai/actions";
 import type { AiSchedulePlan } from "@/lib/application/aiSchedulePlanner";
 import Button from "@/components/ui/Button";
 import { Sparkles, ArrowRight, CheckCircle2, Circle, X, Lightbulb, HelpCircle, Target, BookOpen, CalendarDays, GraduationCap, Pencil, AlertTriangle } from "lucide-react";
@@ -126,6 +126,44 @@ function ExcessAlert({ excess, onKurangi, isPending, pendingId, error }: {
   </div>;
 }
 
+function MissingTeacherAlert({ subjects, onTetapkan, isPending, pendingKey, error }: {
+  subjects: AiCopilotClassStatus["subjectDeficits"];
+  onTetapkan: (subjectId: string, guruId: string, jpPerMinggu: number) => void;
+  isPending: boolean;
+  pendingKey: string | null;
+  error: string | null;
+}) {
+  const top = subjects[0];
+  return <div className="sakala-stage-enter space-y-3 rounded-xl border border-violet/25 bg-violet-50/50 p-4">
+    <div className="flex items-start gap-2.5">
+      <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-violet" />
+      <div className="min-w-0">
+        <p className="text-[13px] font-semibold leading-5 text-ink-900"><span className="tabular-nums">{subjects.reduce((s, d) => s + d.belumSiapJp, 0)}</span> JP belum ada guru</p>
+        <p className="mt-1 text-[12px] leading-5 text-ink-500">
+          {top.subjectName} butuh {top.belumSiapJp} JP guru — belum ada Pembagian Mengajar untuk mapel ini di kelas ini.
+          {subjects.length > 1 && ` ${subjects.length - 1} mapel lain juga belum ada guru.`}
+          {" "}Ini tidak bisa dijadwalkan sampai gurunya ditentukan lebih dulu.
+        </p>
+      </div>
+    </div>
+    {/* AI mengusulkan guru yang SUDAH mengajar mapel ini di kelas lain — bukan
+        tebakan buta. Kalau tidak ada satu pun, jujur bilang begitu, bukan
+        mengarang usulan (§36). Operator tetap yang menyetujui secara eksplisit. */}
+    {top.suggestedTeachers.length > 0 ? <div className="space-y-1.5">
+      <p className="text-[10px] font-bold uppercase tracking-[.1em] text-ink-400">Usulan — sudah mengajar {top.subjectName} di kelas lain</p>
+      {top.suggestedTeachers.map((t) => {
+        const key = `${top.subjectId}:${t.id}`;
+        return <div key={t.id} className="flex items-center justify-between gap-3 rounded-lg bg-surface px-3 py-2">
+          <span className="text-[12px] font-medium text-ink-800">{t.name}</span>
+          <button type="button" onClick={() => onTetapkan(top.subjectId, t.id, top.belumSiapJp)} disabled={isPending} className="text-[11px] font-semibold text-violet hover:underline disabled:opacity-50">{isPending && pendingKey === key ? "Menetapkan…" : `Tetapkan ${top.belumSiapJp} JP`}</button>
+        </div>;
+      })}
+    </div> : <p className="text-[11.5px] text-ink-500">Belum ada guru lain yang mengajar {top.subjectName} untuk diusulkan.</p>}
+    {error && <p className="text-[11.5px] text-rose">{error}</p>}
+    <Link href="/pembagian-mengajar" className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-violet hover:underline">Atau pilih guru manual di Pembagian Mengajar →</Link>
+  </div>;
+}
+
 export default function RecommendationFlow({
   classStatus,
   subjectNames,
@@ -135,7 +173,7 @@ export default function RecommendationFlow({
   classStatus: AiCopilotClassStatus;
   subjectNames: Record<string, string>;
   teacherNames: Record<string, string>;
-  onCandidatesSaved: () => void;
+  onCandidatesSaved: () => Promise<void>;
 }) {
   const [step, setStep] = useState<FlowStep>("finding");
   const [intent, setIntent] = useState<AiCopilotIntent>("complete_remaining_jp");
@@ -152,15 +190,29 @@ export default function RecommendationFlow({
   const [isPending, startTransition] = useTransition();
   const [kurangiPendingId, setKurangiPendingId] = useState<string | null>(null);
   const [kurangiError, setKurangiError] = useState<string | null>(null);
+  const [tetapkanPending, setTetapkanPending] = useState<string | null>(null);
+  const [tetapkanError, setTetapkanError] = useState<string | null>(null);
+
+  function tetapkanGuru(subjectId: string, guruId: string, jpPerMinggu: number) {
+    const key = `${subjectId}:${guruId}`;
+    setTetapkanError(null);
+    setTetapkanPending(key);
+    startTransition(async () => {
+      const result = await tetapkanGuruAction(classStatus.id, subjectId, guruId, jpPerMinggu);
+      if (!result.ok) { setTetapkanPending(null); setTetapkanError(result.error); return; }
+      await onCandidatesSaved(); // Read-Back — tunggu data resmi terbaca ulang sebelum melepas status pending.
+      setTetapkanPending(null);
+    });
+  }
 
   function kurangi(assignmentId: string) {
     setKurangiError(null);
     setKurangiPendingId(assignmentId);
     startTransition(async () => {
       const result = await kurangiJpAction(assignmentId);
+      if (!result.ok) { setKurangiPendingId(null); setKurangiError(result.error); return; }
+      await onCandidatesSaved();
       setKurangiPendingId(null);
-      if (!result.ok) { setKurangiError(result.error); return; }
-      onCandidatesSaved();
     });
   }
 
@@ -182,8 +234,25 @@ export default function RecommendationFlow({
     </div>;
   }
 
-  const totalKurang = deficits.reduce((s: number, d: { remainingJp: number }) => s + d.remainingJp, 0);
-  const topDeficit = deficits[0];
+  const totalKurang = deficits.reduce((s: number, d: { belumTerjadwalJp: number }) => s + d.belumTerjadwalJp, 0);
+  // §14 Fase 1/2 — Belum Siap (belum ada guru) dan Belum Terjadwal (sudah ada
+  // guru, tinggal dicari slot) BUKAN masalah yang sama dan BUKAN solusi yang
+  // sama. Planner (lihatSolusi) hanya bisa menjadwalkan yang sudah ada guru —
+  // memaksa tampil sebagai satu angka gabungan akan membuat "Solusi" diam-diam
+  // tidak pernah mencapai jumlah yang dijanjikan "Temuan", tanpa penjelasan.
+  const missingTeacher = deficits.filter((d) => d.belumSiapJp > 0);
+  const readyToSchedule = deficits.filter((d) => d.belumTerjadwalJp > 0);
+  const topDeficit = readyToSchedule[0];
+
+  // Kalau SEMUA kekurangan cuma soal guru belum ditentukan, planner tidak bisa
+  // berbuat apa-apa — jangan tampilkan thread Temuan->Solusi->Preview->Diterapkan
+  // yang kosong/tidak relevan. Cukup alert Tetapkan Guru (dan Excess kalau ada).
+  if (readyToSchedule.length === 0) {
+    return <div className="space-y-4">
+      {missingTeacher.length > 0 && <MissingTeacherAlert subjects={missingTeacher} onTetapkan={tetapkanGuru} isPending={tetapkanPending !== null} pendingKey={tetapkanPending} error={tetapkanError} />}
+      {excess.length > 0 && <ExcessAlert excess={excess} onKurangi={kurangi} isPending={isPending} pendingId={kurangiPendingId} error={kurangiError} />}
+    </div>;
+  }
 
   function lihatSolusi(chosenIntent: AiCopilotIntent) {
     setError(null);
@@ -197,7 +266,7 @@ export default function RecommendationFlow({
       // melanggar §36). Untuk 'lengkapi JP kurang' dengan >1 mapel kurang, alternatif
       // yang jujur adalah: fokus mapel dengan kekurangan terbesar dulu, secara
       // bertahap — bukan intent lain yang ternyata dipetakan ke planner yang sama.
-      const topAlt = deficits.length > 1 ? deficits.reduce((max, d) => (d.remainingJp > max.remainingJp ? d : max), deficits[0]) : null;
+      const topAlt = readyToSchedule.length > 1 ? readyToSchedule.reduce((max, d) => (d.belumTerjadwalJp > max.belumTerjadwalJp ? d : max), readyToSchedule[0]) : null;
       const [primaryResult, altResult] = await Promise.all([
         runAiCopilotIntentAction(chosenIntent, classStatus.id),
         chosenIntent === "complete_remaining_jp" && topAlt
@@ -217,12 +286,17 @@ export default function RecommendationFlow({
     startTransition(async () => {
       const result = await saveAiCandidatesAction(plan.result.candidates.map((c) => c.draft));
       if (!result.ok) { setError(result.error); return; }
+      // §60-63 Read-Back — tunggu data resmi terbaca ulang SEBELUM pindah ke
+      // step "done", supaya "Sudah diperbarui" bukan klaim dari respons tulis
+      // semata (insert sudah aman lewat .select().single(), tapi tetap
+      // dikonfirmasi ulang lewat context, konsisten dengan pola yang sama
+      // dipakai kurangi()/tetapkanGuru()).
+      await onCandidatesSaved();
       setSavedCount(result.data.savedCount);
       setSkippedCount(result.data.skippedCount);
       setSavedIds(result.data.savedIds);
       setRolledBack(false);
       setStep("done");
-      onCandidatesSaved();
     });
   }
 
@@ -243,9 +317,9 @@ export default function RecommendationFlow({
     startTransition(async () => {
       const result = await rollbackAiCandidatesAction(savedIds);
       if (!result.ok) { setError(result.error); return; }
+      await onCandidatesSaved(); // Read-Back — konsisten dengan terapkan()/kurangi()/tetapkanGuru().
       setRolledBack(true);
       setSavedIds([]);
-      onCandidatesSaved();
     });
   }
 
@@ -259,30 +333,33 @@ export default function RecommendationFlow({
   const sisaDeficit = deficits.filter((d) => !plan?.interpretedTargets?.some((t) => t.subjectId === d.subjectId));
 
   return <div className="space-y-4">
+    {missingTeacher.length > 0 && <MissingTeacherAlert subjects={missingTeacher} onTetapkan={tetapkanGuru} isPending={tetapkanPending !== null} pendingKey={tetapkanPending} error={tetapkanError} />}
     {excess.length > 0 && <ExcessAlert excess={excess} onKurangi={kurangi} isPending={isPending} pendingId={kurangiPendingId} error={kurangiError} />}
     <div className="space-y-0">
     {/* ── Tahap 1: Temuan (§08-10) ── */}
     <Stage status={stageStatus("finding")} title={STAGE_TITLE.finding} isLast={false} onReopen={step !== "finding" ? batal : undefined}>
       {stageStatus("finding") === "active" ? (
         <div className="sakala-stage-enter space-y-3">
-          <div className="flex items-start gap-2.5">
-            <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-violet" />
-            <div className="min-w-0">
-              <p className="text-[15px] font-semibold leading-5 text-ink-900"><span className="tabular-nums">{totalKurang}</span> JP belum terpenuhi</p>
-              <p className="mt-1 text-[12px] leading-5 text-ink-500">
-                Kelas {classStatus.label} baru memiliki {classStatus.scheduledJp} dari {classStatus.targetJp} JP.
-                {topDeficit && ` ${topDeficit.subjectName} kekurangan ${topDeficit.remainingJp} JP`}
-                {deficits.length > 1 && `, dan ${deficits.length - 1} mapel lain juga masih kurang.`}
-                {deficits.length === 1 && "."}
-              </p>
+          {readyToSchedule.length > 0 && <>
+            <div className="flex items-start gap-2.5">
+              <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-violet" />
+              <div className="min-w-0">
+                <p className="text-[15px] font-semibold leading-5 text-ink-900"><span className="tabular-nums">{totalKurang}</span> JP sudah ada guru, tinggal dijadwalkan</p>
+                <p className="mt-1 text-[12px] leading-5 text-ink-500">
+                  Kelas {classStatus.label} baru memiliki {classStatus.scheduledJp} dari {classStatus.targetJp} JP.
+                  {topDeficit && ` ${topDeficit.subjectName} kekurangan ${topDeficit.belumTerjadwalJp} JP di jadwal`}
+                  {readyToSchedule.length > 1 && `, dan ${readyToSchedule.length - 1} mapel lain juga masih kurang.`}
+                  {readyToSchedule.length === 1 && "."}
+                </p>
+              </div>
             </div>
-          </div>
-          {error && step === "finding" && <p className="rounded-lg bg-rose-50 px-3 py-2 text-[11.5px] text-rose">{error}</p>}
-          <div className="flex flex-wrap gap-2">
-            <Button variant="accent" onClick={() => lihatSolusi("complete_remaining_jp")} disabled={isPending} loading={isPending}>{isPending ? "Memeriksa solusi…" : "Lihat solusi"}</Button>
-            <Button variant="secondary" onClick={() => lihatSolusi("fill_empty_slots")} disabled={isPending}>Isi slot kosong</Button>
-            <Button variant="secondary" onClick={() => lihatSolusi("schedule_full_week")} disabled={isPending}>Susun semua mapel</Button>
-          </div>
+            {error && step === "finding" && <p className="rounded-lg bg-rose-50 px-3 py-2 text-[11.5px] text-rose">{error}</p>}
+            <div className="flex flex-wrap gap-2">
+              <Button variant="accent" onClick={() => lihatSolusi("complete_remaining_jp")} disabled={isPending} loading={isPending}>{isPending ? "Memeriksa solusi…" : "Lihat solusi"}</Button>
+              <Button variant="secondary" onClick={() => lihatSolusi("fill_empty_slots")} disabled={isPending}>Isi slot kosong</Button>
+              <Button variant="secondary" onClick={() => lihatSolusi("schedule_full_week")} disabled={isPending}>Susun semua mapel</Button>
+            </div>
+          </>}
           <CrossFeatureLinks />
         </div>
       ) : (
@@ -314,7 +391,7 @@ export default function RecommendationFlow({
           <button type="button" onClick={() => setVariant("primary")} className={`rounded-xl border p-3 text-left transition-colors ${variant === "primary" ? "border-violet/40 bg-violet-50" : "border-border bg-surface hover:border-violet/20"}`}>
             <p className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-violet">★ Disarankan</p>
             <p className="mt-1 text-[12px] font-semibold text-ink-900">Lengkapi semua mapel yang kurang</p>
-            <p className="mt-0.5 text-[11px] text-ink-500">{primaryPlan?.result.candidates.length ?? 0} slot · {deficits.length} mapel sekaligus</p>
+            <p className="mt-0.5 text-[11px] text-ink-500">{primaryPlan?.result.candidates.length ?? 0} slot · {readyToSchedule.length} mapel sekaligus</p>
           </button>
           <button type="button" onClick={() => setVariant("alt")} className={`rounded-xl border p-3 text-left transition-colors ${variant === "alt" ? "border-violet/40 bg-violet-50" : "border-border bg-surface hover:border-violet/20"}`}>
             <p className="text-[10px] font-bold uppercase tracking-wide text-ink-400">Alternatif</p>

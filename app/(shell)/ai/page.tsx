@@ -224,11 +224,14 @@ export default function AiPage() {
               classStatus={selectedClass}
               subjectNames={context?.subjectNames ?? {}}
               teacherNames={context?.teacherNames ?? {}}
-              onCandidatesSaved={() => {
-                startTransition(async () => {
-                  const result = await getAiCopilotContextAction();
-                  if (result.ok) setContext(result.data);
-                });
+              onCandidatesSaved={async () => {
+                // §60-63 Read-Back — RecommendationFlow menunggu ini selesai
+                // sebelum menampilkan status akhir, supaya "Sudah diperbarui"
+                // dikonfirmasi dari data resmi yang dibaca ulang, bukan cuma
+                // dipercaya dari respons tulis. startTransition() TIDAK bisa
+                // di-await (tidak mengembalikan promise), jadi harus langsung.
+                const result = await getAiCopilotContextAction();
+                if (result.ok) setContext(result.data);
               }}
             />
           </Card>
