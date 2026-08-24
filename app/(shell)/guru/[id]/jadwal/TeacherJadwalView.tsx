@@ -16,6 +16,7 @@ import { buildJadwalGrid, cellKey, type GridCell } from "@/lib/domain/jadwalGrid
 import { Card, EmptyState } from "@/components/ui/primitives";
 import Avatar from "@/components/ui/Avatar";
 import { teacherColor } from "@/lib/utils/teacherColor";
+import { mapelColor } from "@/lib/utils/mapelColor";
 
 // Bagian 9 — "Teacher-focused Schedule View", data sama dengan Jadwal Utama
 // (buildJadwalGrid dipakai persis sama, tanpa modifikasi) tapi presentasi
@@ -46,6 +47,10 @@ export default function TeacherJadwalView({
   const kelasMap = useMemo(() => new Map(kelasList.map((k) => [k.id, k])), [kelasList]);
   const mapelMap = useMemo(() => new Map(mapelList.map((m) => [m.id, m.nama])), [mapelList]);
   const ruanganMap = useMemo(() => new Map(ruanganList.map((r) => [r.id, r.nama])), [ruanganList]);
+  // Warna GRID per Mata Pelajaran (bukan per guru) — halaman ini menampilkan satu guru
+  // saja, jadi kalau grid dikunci ke warna guru, seluruh tabel jadi 1 warna monoton.
+  // Per-mapel tetap membantu guru itu sendiri scan pola jadwalnya.
+  const mapelColorMap = useMemo(() => new Map(mapelList.map((m) => [m.id, mapelColor(m.kode || m.id)])), [mapelList]);
 
   const tingkatOptions = useMemo(
     () => Array.from(new Set(kelasList.map((k) => k.tingkat))).sort(),
@@ -166,6 +171,7 @@ export default function TeacherJadwalView({
                       const a = cell.assignment;
                       const kelas = a ? kelasMap.get(a.classId) : null;
                       const emphasized = tingkatFilter === "semua" || kelas?.tingkat === tingkatFilter;
+                      const cellColor = a ? mapelColorMap.get(a.subjectId) : undefined;
 
                       return (
                         <td key={d} className="border-b border-border p-2 align-top">
@@ -174,13 +180,13 @@ export default function TeacherJadwalView({
                               cell.state === "conflict" ? "" : ""
                             } ${emphasized ? "border-l-[3px] shadow-soft" : "border-l-[3px] opacity-40"}`}
                             style={{
-                              backgroundColor: cell.state === "conflict" ? "#FEF2F2" : color.tint,
-                              borderLeftColor: cell.state === "conflict" ? "#DC2626" : color.accent,
+                              backgroundColor: cell.state === "conflict" ? "#FEF2F2" : cellColor?.tint,
+                              borderLeftColor: cell.state === "conflict" ? "#DC2626" : cellColor?.accent,
                             }}
                           >
                             <p
                               className={`break-words ${emphasized ? "font-semibold" : "font-medium"}`}
-                              style={{ color: cell.state === "conflict" ? "#991B1B" : color.text }}
+                              style={{ color: cell.state === "conflict" ? "#991B1B" : cellColor?.text }}
                             >
                               {a ? mapelMap.get(a.subjectId) ?? "Mapel" : ""}
                             </p>
