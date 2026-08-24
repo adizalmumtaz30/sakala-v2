@@ -192,6 +192,14 @@ export default function RecommendationFlow({
   const [kurangiError, setKurangiError] = useState<string | null>(null);
   const [tetapkanPending, setTetapkanPending] = useState<string | null>(null);
   const [tetapkanError, setTetapkanError] = useState<string | null>(null);
+  // §16/§38-39 Fase 3 — multi-select approval: operator boleh pilih sebagian
+  // perubahan, bukan cuma semua-atau-tidak. Key = `${requirementId}-${index}`
+  // (requirementId bisa berulang kalau 1 requirement butuh >1 slot).
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+
+  function candidateKey(c: { requirementId: string }, i: number) {
+    return `${c.requirementId}-${i}`;
+  }
 
   function tetapkanGuru(subjectId: string, guruId: string, jpPerMinggu: number) {
     const key = `${subjectId}:${guruId}`;
@@ -282,9 +290,11 @@ export default function RecommendationFlow({
 
   function terapkan() {
     if (!plan) return;
+    const selected = plan.result.candidates.filter((c, i) => selectedKeys.has(candidateKey(c, i)));
+    if (selected.length === 0) return;
     setError(null);
     startTransition(async () => {
-      const result = await saveAiCandidatesAction(plan.result.candidates.map((c) => c.draft));
+      const result = await saveAiCandidatesAction(selected.map((c) => c.draft));
       if (!result.ok) { setError(result.error); return; }
       // §60-63 Read-Back — tunggu data resmi terbaca ulang SEBELUM pindah ke
       // step "done", supaya "Sudah diperbarui" bukan klaim dari respons tulis
@@ -423,7 +433,7 @@ export default function RecommendationFlow({
         {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-[11.5px] text-rose">{error}</p>}
 
         <div className="flex gap-2">
-          <Button variant="accent" onClick={() => setStep("preview")} disabled={plan.result.candidates.length === 0}>Tinjau perubahan</Button>
+          <Button variant="accent" onClick={() => { setSelectedKeys(new Set(plan.result.candidates.map((c, i) => candidateKey(c, i)))); setStep("preview"); }} disabled={plan.result.candidates.length === 0}>Tinjau perubahan</Button>
           <Button variant="secondary" onClick={batal}>Batal</Button>
         </div>
       </div>}
@@ -433,33 +443,46 @@ export default function RecommendationFlow({
     <Stage status={stageStatus("preview")} title={STAGE_TITLE.preview} isLast={false} onReopen={step === "done" ? () => setStep("preview") : undefined}>
       {stageStatus("preview") === "upcoming" && <p className="text-[11.5px] text-ink-300">Menunggu tahap sebelumnya.</p>}
       {stageStatus("preview") === "done" && plan && <p className="text-[12px] text-ink-500"><span className="font-medium text-ink-700">{plan.result.candidates.length} perubahan</span> ditinjau</p>}
-      {stageStatus("preview") === "active" && plan && <div className="sakala-stage-enter space-y-3">
-        <p className="text-[14px] font-semibold text-ink-900">{plan.result.candidates.length} perubahan</p>
+      {stageStatus("preview") === "active" && plan && (() => {
+        const allKeys = plan.result.candidates.map((c, i) => candidateKey(c, i));
+        const selectedCandidates = plan.result.candidates.filter((c, i) => selectedKeys.has(candidateKey(c, i)));
+        const allSelected = selectedKeys.size === allKeys.length && allKeys.length > 0;
+        return <div className="sakala-stage-enter space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[14px] font-semibold text-ink-900">{selectedCandidates.length} dari {plan.result.candidates.length} perubahan dipilih</p>
+            <button type="button" onClick={() => setSelectedKeys(allSelected ? new Set() : new Set(allKeys))} className="text-[11px] font-semibold text-violet hover:underline">{allSelected ? "Kosongkan" : "Pilih semua"}</button>
+          </div>
 
-        <div className="max-h-64 space-y-1.5 overflow-y-auto">
-          {plan.result.candidates.map((c, i) => <div key={`${c.requirementId}-${i}`} className="flex items-center justify-between gap-3 rounded-lg bg-surface-muted px-3 py-2 text-[12px]">
-            <span className="min-w-0 truncate font-medium text-ink-800">{subjectNames[c.draft.subjectId] ?? c.draft.subjectId}</span>
-            <span className="shrink-0 text-ink-400">{c.draft.day} · JP {c.draft.periodStart}{c.draft.periodEnd !== c.draft.periodStart ? `–${c.draft.periodEnd}` : ""}</span>
-            <span className="shrink-0 truncate text-ink-500">{teacherNames[c.draft.teacherId] ?? c.draft.teacherId}</span>
-          </div>)}
-        </div>
+          <div className="max-h-64 space-y-1.5 overflow-y-auto">
+            {plan.result.candidates.map((c, i) => {
+              const key = candidateKey(c, i);
+              const checked = selectedKeys.has(key);
+              return <label key={key} className={`flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-[12px] transition-colors ${checked ? "bg-surface-muted" : "bg-surface-muted/40 opacity-60"}`}>
+                <input type="checkbox" checked={checked} onChange={() => setSelectedKeys((prev) => { const next = new Set(prev); if (checked) next.delete(key); else next.add(key); return next; })} className="h-3.5 w-3.5 shrink-0 accent-violet" />
+                <span className="min-w-0 flex-1 truncate font-medium text-ink-800">{subjectNames[c.draft.subjectId] ?? c.draft.subjectId}</span>
+                <span className="shrink-0 text-ink-400">{c.draft.day} · JP {c.draft.periodStart}{c.draft.periodEnd !== c.draft.periodStart ? `–${c.draft.periodEnd}` : ""}</span>
+                <span className="shrink-0 truncate text-ink-500">{teacherNames[c.draft.teacherId] ?? c.draft.teacherId}</span>
+              </label>;
+            })}
+          </div>
 
-        <div className="flex items-center justify-center gap-4 rounded-xl border border-border bg-surface-muted/60 px-4 py-3.5">
-          <span className="text-[15px] font-medium tabular-nums text-ink-400">{classStatus.scheduledJp} / {classStatus.targetJp}</span>
-          <ArrowRight size={14} className="shrink-0 text-violet" />
-          <span className="flex items-baseline gap-1 text-[26px] font-semibold leading-none tabular-nums text-ink-900">{classStatus.scheduledJp + plan.result.candidates.length}<span className="text-[13px] font-medium text-ink-400">/{classStatus.targetJp} JP</span></span>
-          {classStatus.scheduledJp + plan.result.candidates.length >= classStatus.targetJp && <CheckCircle2 size={16} className="text-emerald" />}
-        </div>
+          <div className="flex items-center justify-center gap-4 rounded-xl border border-border bg-surface-muted/60 px-4 py-3.5">
+            <span className="text-[15px] font-medium tabular-nums text-ink-400">{classStatus.scheduledJp} / {classStatus.targetJp}</span>
+            <ArrowRight size={14} className="shrink-0 text-violet" />
+            <span className="flex items-baseline gap-1 text-[26px] font-semibold leading-none tabular-nums text-ink-900">{classStatus.scheduledJp + selectedCandidates.length}<span className="text-[13px] font-medium text-ink-400">/{classStatus.targetJp} JP</span></span>
+            {classStatus.scheduledJp + selectedCandidates.length >= classStatus.targetJp && <CheckCircle2 size={16} className="text-emerald" />}
+          </div>
 
-        {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-[11.5px] text-rose">{error}</p>}
-        <p className="text-[11px] leading-5 text-ink-400">Belum ada perubahan yang diterapkan. Menekan tombol di bawah akan menyimpan sebagai <em>candidate</em> — jadwal committed baru berubah setelah ditinjau dan diterapkan eksplisit di Jadwal Cerdas.</p>
+          {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-[11.5px] text-rose">{error}</p>}
+          <p className="text-[11px] leading-5 text-ink-400">Belum ada perubahan yang diterapkan. Menekan tombol di bawah akan menyimpan yang dipilih sebagai <em>candidate</em> — jadwal committed baru berubah setelah ditinjau dan diterapkan eksplisit di Jadwal Cerdas.</p>
 
-        <div className="flex flex-wrap gap-2">
-          <Button variant="accent" onClick={terapkan} disabled={isPending} loading={isPending}><CheckCircle2 className="mr-1.5 h-4 w-4" />{isPending ? "Menerapkan…" : `Terapkan ${plan.result.candidates.length} perubahan`}</Button>
-          <Button variant="secondary" onClick={() => setStep("solution")} disabled={isPending}>Kembali</Button>
-          <Button variant="ghost" onClick={batal} disabled={isPending}>Batal</Button>
-        </div>
-      </div>}
+          <div className="flex flex-wrap gap-2">
+            <Button variant="accent" onClick={terapkan} disabled={isPending || selectedCandidates.length === 0} loading={isPending}><CheckCircle2 className="mr-1.5 h-4 w-4" />{isPending ? "Menerapkan…" : `Terapkan ${selectedCandidates.length} perubahan`}</Button>
+            <Button variant="secondary" onClick={() => setStep("solution")} disabled={isPending}>Kembali</Button>
+            <Button variant="ghost" onClick={batal} disabled={isPending}>Batal</Button>
+          </div>
+        </div>;
+      })()}
     </Stage>
 
     {/* ── Tahap 4: Diterapkan (§20-22) ── */}
