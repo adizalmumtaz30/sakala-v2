@@ -11,7 +11,6 @@ import { listScheduleAssignments } from "@/lib/application/scheduleAssignment.us
 import { getSchoolProfile } from "@/lib/application/schoolProfile.usecases";
 import JadwalWorkspace from "./JadwalWorkspace";
 import JadwalPointerDrag from "@/components/jadwal/JadwalPointerDrag";
-import ScheduleExportPanel from "@/components/jadwal/ScheduleExportPanel";
 import { ErrorState, EmptyState } from "@/components/ui/primitives";
 
 export default async function JadwalPage() {
@@ -43,8 +42,6 @@ export default async function JadwalPage() {
     const slotTemplatesByModel: Record<string, Awaited<ReturnType<typeof listSlotTemplate>>> = {};
     scheduleModels.forEach((m, i) => { slotTemplatesByModel[m.id] = slotTemplateLists[i]; });
 
-    const activeModel = scheduleModels.find((m) => m.status === "aktif");
-    const activeDays = activeModel?.hariAktif ?? [];
     const contextLabel = `${activeContext.tahunPelajaran} · ${activeContext.semester === "ganjil" ? "Ganjil" : "Genap"}`;
 
     return (
@@ -61,19 +58,9 @@ export default async function JadwalPage() {
           mapelList={mapelList}
           ruanganList={ruanganList}
           assignments={allAssignments}
+          schoolName={schoolProfile?.namaSekolah}
+          contextLabel={contextLabel}
         />
-        <div className="mx-auto max-w-6xl px-4 pb-12">
-          <ScheduleExportPanel
-            assignments={allAssignments}
-            guruList={guruList}
-            kelasList={kelasList}
-            mapelList={mapelList}
-            jamPelajaranList={jamPelajaranList}
-            activeDays={activeDays}
-            schoolName={schoolProfile?.namaSekolah}
-            contextLabel={contextLabel}
-          />
-        </div>
       </div>
     );
   } catch {

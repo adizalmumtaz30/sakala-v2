@@ -9,7 +9,7 @@ export default function ScheduleCard({
   subjectLabel,
   entityLabel,
   roomLabel,
-  teacherColor,
+  cardColor,
   conflict,
   onClick,
   onDetail,
@@ -25,7 +25,7 @@ export default function ScheduleCard({
   subjectLabel?: string;
   entityLabel?: string;
   roomLabel?: string;
-  teacherColor?: { tint: string; accent: string; text: string };
+  cardColor?: { tint: string; accent: string; text: string };
   conflict?: boolean;
   onClick: () => void;
   onDetail: () => void;
@@ -122,13 +122,13 @@ export default function ScheduleCard({
         className={`group relative flex min-h-16 w-full touch-none select-none flex-col justify-center gap-0.5 rounded-xl border px-2 py-1.5 pr-8 text-left text-[11.5px] shadow-sm transition duration-150 hover:-translate-y-0.5 hover:shadow-md ${
           conflict
             ? "border-rose bg-rose-50 hover:bg-rose-50/70"
-            : teacherColor
+            : cardColor
               ? "hover:brightness-95"
               : "border-brand-600/20 bg-brand-50 hover:bg-brand-50/70"
         }`}
         style={
-          !conflict && teacherColor
-            ? { backgroundColor: teacherColor.tint, borderColor: `${teacherColor.accent}33`, borderLeft: `3px solid ${teacherColor.accent}` }
+          !conflict && cardColor
+            ? { backgroundColor: cardColor.tint, borderColor: `${cardColor.accent}33`, borderLeft: `3px solid ${cardColor.accent}` }
             : undefined
         }
         aria-label={`Jadwal ${subjectLabel ?? ""}. Tekan dan geser untuk memindahkan.`}
@@ -137,7 +137,7 @@ export default function ScheduleCard({
           <GripVertical size={13} />
         </span>
         <span className="break-words font-semibold leading-snug text-ink-900">{subjectLabel ?? "-"}</span>
-        <span className="break-words leading-snug" style={!conflict && teacherColor ? { color: teacherColor.text } : undefined}>
+        <span className="break-words leading-snug text-ink-600">
           {entityLabel ?? "-"}
         </span>
         {roomLabel && <span className="break-words leading-snug text-ink-400">{roomLabel}</span>}

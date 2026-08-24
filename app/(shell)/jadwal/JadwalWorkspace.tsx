@@ -17,12 +17,13 @@ import { formatJenisSlot } from "@/lib/domain/slotTemplate";
 import type { ScheduleAssignment, ScheduleAssignmentDraft } from "@/lib/domain/scheduleAssignment";
 import { buildJadwalGrid, isEligibleForAdd, cellKey, type GridCell, type JadwalViewBy, type JadwalRangeMode } from "@/lib/domain/jadwalGrid";
 import { checkRealtimeOverlap, CONFLICT_TYPE_LABEL, type ScheduleConflict } from "@/lib/domain/conflict";
-import { teacherColor } from "@/lib/utils/teacherColor";
+import { mapelColor } from "@/lib/utils/mapelColor";
 import { addAssignmentAction, moveAssignmentAction, deleteAssignmentAction } from "./actions";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Modal from "@/components/ui/Modal";
 import { Badge, EmptyState } from "@/components/ui/primitives";
+import DataJadwalMenu from "@/components/jadwal/DataJadwalMenu";
 
 const ACTIVITY_OPTIONS: JenisSlot[] = ["belajar_mengajar", "upacara", "religi", "istirahat", "libur", "custom"];
 
@@ -62,6 +63,8 @@ export default function JadwalWorkspace({
   mapelList,
   ruanganList,
   assignments,
+  schoolName,
+  contextLabel,
 }: {
   activeContext: AcademicContext | null;
   scheduleModels: ScheduleModel[];
@@ -72,6 +75,8 @@ export default function JadwalWorkspace({
   mapelList: MataPelajaran[];
   ruanganList: Ruangan[];
   assignments: ScheduleAssignment[];
+  schoolName?: string;
+  contextLabel: string;
 }) {
   // PENTING (Rules of Hooks): guard early-return TIDAK BOLEH ditaruh sebelum hook
   // apa pun — kalau activeContext null di satu render lalu terisi di render
@@ -87,11 +92,14 @@ export default function JadwalWorkspace({
   const [rangeMode, setRangeMode] = useState<JadwalRangeMode>("mingguan");
 
   const guruMap = useMemo(() => new Map(guruList.map((g) => [g.id, g.namaGuru])), [guruList]);
-  // Identitas Warna Guru (Bagian 10) — di-hash dari kodeGuru (stabil, bukan
-  // dari nama yang bisa diedit), dipakai konsisten di kotak Jadwal & Data Guru.
-  const guruColorMap = useMemo(
-    () => new Map(guruList.map((g) => [g.id, teacherColor(g.kodeGuru || g.id)])),
-    [guruList]
+  // Identitas Warna Mata Pelajaran (menggantikan warna-per-guru) — di-hash dari
+  // kode mapel (stabil, bukan nama yang bisa diedit). Dipilih mapel bukan guru
+  // supaya warna tetap informatif di SEMUA mode "Lihat per" (Kelas/Guru/Ruangan):
+  // kalau dikunci ke guru, begitu filter "Lihat per: Guru" ke 1 guru, semua
+  // kartu jadi 1 warna — percuma. Dipakai konsisten di grid Jadwal & Data Guru.
+  const mapelColorMap = useMemo(
+    () => new Map(mapelList.map((m) => [m.id, mapelColor(m.kode || m.id)])),
+    [mapelList]
   );
   const kelasMap = useMemo(() => new Map(kelasList.map((k) => [k.id, `${k.tingkat} ${k.namaRombel}`])), [kelasList]);
   const mapelMap = useMemo(() => new Map(mapelList.map((m) => [m.id, m.nama])), [mapelList]);
@@ -543,9 +551,24 @@ export default function JadwalWorkspace({
           </div>
         )}
 
-        {selectedModel && (
-          <span className="ml-auto text-[11.5px] text-ink-400">Mode ruangan: {formatModeRuangan(selectedModel.modeRuangan)}</span>
-        )}
+        <div className="ml-auto flex items-center gap-3">
+          <DataJadwalMenu
+            assignments={assignments}
+            guruList={guruList}
+            kelasList={kelasList}
+            mapelList={mapelList}
+            ruanganList={ruanganList}
+            jamPelajaranList={jamPelajaranList}
+            activeDays={activeDays}
+            academicContextId={activeContext?.id ?? ""}
+            scheduleModelId={selectedModelId}
+            contextLabel={contextLabel}
+            schoolName={schoolName}
+          />
+          {selectedModel && (
+            <span className="text-[11.5px] text-ink-400">Mode ruangan: {formatModeRuangan(selectedModel.modeRuangan)}</span>
+          )}
+        </div>
       </div>
 
       {activeEntityId === "" ? (
@@ -595,7 +618,7 @@ export default function JadwalWorkspace({
                             }
                             mapelLabel={cell.assignment ? mapelMap.get(cell.assignment.subjectId) : undefined}
                             ruanganLabel={cell.assignment?.roomId ? ruanganMap.get(cell.assignment.roomId) : undefined}
-                            teacherColor={cell.assignment ? guruColorMap.get(cell.assignment.teacherId) : undefined}
+                            cardColor={cell.assignment ? mapelColorMap.get(cell.assignment.subjectId) : undefined}
                           />
                         </td>
                       );
@@ -893,14 +916,14 @@ function JadwalCell({
   entityLabel,
   mapelLabel,
   ruanganLabel,
-  teacherColor,
+  cardColor,
 }: {
   cell: GridCell;
   onClick: () => void;
   entityLabel?: string;
   mapelLabel?: string;
   ruanganLabel?: string;
-  teacherColor?: { tint: string; accent: string; text: string };
+  cardColor?: { tint: string; accent: string; text: string };
 }) {
   if (cell.state === "empty") {
     if (!cell.jamPelajaran) {
@@ -931,11 +954,11 @@ function JadwalCell({
 
   const isConflict = cell.state === "conflict";
 
-  // Identitas Warna Guru (Bagian 10): tint lembut + accent strip kiri per guru,
-  // konsisten dengan Data Guru. Blocking conflict tetap prioritas visual merah
-  // (readability atas identitas warna — Bagian 10.6) sehingga tidak tertutupi.
-  const style = !isConflict && teacherColor
-    ? { backgroundColor: teacherColor.tint, borderColor: `${teacherColor.accent}33`, borderLeft: `3px solid ${teacherColor.accent}` }
+  // Identitas Warna Mata Pelajaran: tint lembut + accent strip kiri per mapel,
+  // konsisten dengan Data Guru — tetap informatif di semua mode "Lihat per".
+  // Blocking conflict tetap prioritas visual merah (readability) sehingga tidak tertutupi.
+  const style = !isConflict && cardColor
+    ? { backgroundColor: cardColor.tint, borderColor: `${cardColor.accent}33`, borderLeft: `3px solid ${cardColor.accent}` }
     : undefined;
 
   return (
@@ -945,15 +968,14 @@ function JadwalCell({
       className={`flex min-h-16 w-full flex-col justify-center gap-0.5 rounded-xl border px-2 py-1.5 text-left text-[11.5px] transition-colors ${
         isConflict
           ? "border-rose bg-rose-50 hover:bg-rose-50/70"
-          : teacherColor
+          : cardColor
             ? "hover:brightness-95"
             : "border-brand-600/20 bg-brand-50 hover:bg-brand-50/70"
       }`}
     >
       <span className="break-words font-semibold leading-snug text-ink-900">{mapelLabel ?? "-"}</span>
       <span
-        className="break-words leading-snug"
-        style={!isConflict && teacherColor ? { color: teacherColor.text } : undefined}
+        className="break-words leading-snug text-ink-600"
       >
         {entityLabel ?? "-"}
       </span>
