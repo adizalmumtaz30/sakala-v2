@@ -431,11 +431,40 @@ export async function adoptCurriculumItemsAction(input: {
       target_jp: Math.round(Number(row.school_target_jp)),
     }));
 
+  // Baca nilai LAMA sebelum menulis — supaya audit trail punya before/after
+  // yang nyata, bukan cuma jumlah baris (kontrak: evidence harus konkret).
+  let beforeMap = new Map<string, number>();
+  if (targetRows.length) {
+    const { data: beforeRows } = await supabase
+      .from("target_jp")
+      .select("kelas_id,mata_pelajaran_id,target_jp")
+      .eq("academic_context_id", input.academicContextId)
+      .in("kelas_id", input.classIds);
+    beforeMap = new Map((beforeRows ?? []).map((r) => [`${r.kelas_id}:${r.mata_pelajaran_id}`, r.target_jp]));
+  }
+
   if (targetRows.length) {
     const { error: targetError } = await supabase.from("target_jp").upsert(targetRows, {
       onConflict: "academic_context_id,kelas_id,mata_pelajaran_id",
     });
     if (targetError) return { ok: false, error: targetError.message };
+
+    // SAKALA MASTER RULE (Read-Back): target_jp adalah authority resmi yang
+    // dipakai di seluruh app (halaman Target JP, SAKALA AI, Analitik) — tidak
+    // cukup cuma cek upsert() tidak error. Baca ulang baris yang baru saja
+    // ditulis dan cocokkan nilainya persis, sebelum mengklaim berhasil.
+    const { data: verifyRows, error: verifyError } = await supabase
+      .from("target_jp")
+      .select("kelas_id,mata_pelajaran_id,target_jp")
+      .eq("academic_context_id", input.academicContextId)
+      .in("kelas_id", input.classIds);
+    if (verifyError) return { ok: false, error: `Commit tidak dapat dipastikan tersimpan: ${verifyError.message}` };
+
+    const verifyMap = new Map((verifyRows ?? []).map((r) => [`${r.kelas_id}:${r.mata_pelajaran_id}`, r.target_jp]));
+    const mismatched = targetRows.filter((t) => verifyMap.get(`${t.kelas_id}:${t.mata_pelajaran_id}`) !== t.target_jp);
+    if (mismatched.length > 0) {
+      return { ok: false, error: `Commit belum bisa dipastikan tersimpan dengan benar untuk ${mismatched.length} kombinasi Kelas+Mapel. Data resmi belum mencerminkan perubahan ini — coba lagi sebelum melanjutkan.` };
+    }
   }
 
   // GENERATE-KURIKULUM-MASTER-UX-FLOW poin 17 (Audit Trail) — commit adalah
@@ -448,8 +477,8 @@ export async function adoptCurriculumItemsAction(input: {
     entityType: "kurikulum",
     entityId: null,
     entityLabel: classes.map((c) => `${c.tingkat} ${c.nama_rombel}`).join(", "),
-    before: null,
-    after: { adoptedCount: rows.length, itemIds: selectedIds, classIds: input.classIds },
+    before: { targetJp: Object.fromEntries(beforeMap) },
+    after: { adoptedCount: rows.length, itemIds: selectedIds, classIds: input.classIds, targetJp: Object.fromEntries(targetRows.map((t) => [`${t.kelas_id}:${t.mata_pelajaran_id}`, t.target_jp])) },
     source: "manual",
     reason: null,
   });
