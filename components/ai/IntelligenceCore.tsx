@@ -18,7 +18,11 @@ export function IntelligenceCore({ state = "idle", size = "md" }: { state?: Inte
   const found = state === "found";
 
   return (
-    <span aria-hidden="true" className={`sakala-intelligence-core sakala-intelligence-core--${state}`} style={{ width: s.box, height: s.box }}>
+    <span
+      aria-hidden="true"
+      className={`sakala-intelligence-core sakala-intelligence-core--${state}`}
+      style={{ width: s.box, height: s.box }}
+    >
       <svg viewBox="0 0 48 48" width="100%" height="100%" fill="none">
         <g className="sakala-core-orbit sakala-core-orbit--a">
           <ellipse cx="24" cy="24" rx="15.5" ry="8.5" transform="rotate(-25 24 24)" stroke="currentColor" strokeWidth={s.stroke} opacity={active || found ? 0.78 : 0.46} />
@@ -36,7 +40,7 @@ export function IntelligenceCore({ state = "idle", size = "md" }: { state?: Inte
         {found && <circle cx="24" cy="24" r={s.core + 3.5} stroke="currentColor" strokeWidth={0.8} opacity="0.16" className="sakala-core-found-ring" />}
       </svg>
       <style jsx>{`
-        .sakala-intelligence-core { display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto; color:rgb(124 58 237); }
+        .sakala-intelligence-core { display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto; color:var(--color-violet); }
         .sakala-core-orbit { transform-origin:24px 24px; transform-box:fill-box; }
         .sakala-intelligence-core--analyzing .sakala-core-orbit--a { animation:sakala-orbit-a 4.8s linear infinite; }
         .sakala-intelligence-core--analyzing .sakala-core-orbit--b { animation:sakala-orbit-b 6.4s linear infinite reverse; }
@@ -58,13 +62,17 @@ export function IntelligencePerimeter({ active, children }: { active: boolean; c
   return (
     <div className={`relative ${active ? "sakala-perimeter sakala-perimeter--active" : ""}`}>
       <div className="relative z-10">{children}</div>
-      {active && <span aria-hidden="true" className="sakala-perimeter-trace" />}
+      {active && (
+        <svg aria-hidden="true" className="sakala-perimeter-trace" viewBox="0 0 100 100" preserveAspectRatio="none">
+          <rect x="0.6" y="0.6" width="98.8" height="98.8" rx="2.6" fill="none" pathLength="1000" />
+        </svg>
+      )}
       <style jsx>{`
         .sakala-perimeter { isolation:isolate; }
-        .sakala-perimeter-trace { position:absolute; inset:-1px; border-radius:inherit; pointer-events:none; overflow:hidden; opacity:.55; }
-        .sakala-perimeter-trace::after { content:""; position:absolute; width:22%; height:1px; left:-24%; top:0; background:linear-gradient(90deg,transparent,rgba(124,58,237,.36),transparent); box-shadow:0 0 12px rgba(124,58,237,.12); animation:sakala-perimeter-trace 5.2s linear infinite; }
-        @keyframes sakala-perimeter-trace { 0% { transform:translateX(0) translateY(0); } 24% { transform:translateX(560%) translateY(0); } 25% { transform:translateX(560%) translateY(100%); } 49% { transform:translateX(560%) translateY(100%); } 50% { transform:translateX(0) translateY(100%); } 74% { transform:translateX(0) translateY(100%); } 75% { transform:translateX(0) translateY(0); } 100% { transform:translateX(0) translateY(0); } }
-        @media (prefers-reduced-motion: reduce) { .sakala-perimeter-trace::after { animation:none; left:0; width:100%; opacity:.25; } }
+        .sakala-perimeter-trace { position:absolute; inset:-1px; width:calc(100% + 2px); height:calc(100% + 2px); pointer-events:none; overflow:visible; z-index:20; opacity:.55; }
+        .sakala-perimeter-trace rect { stroke:var(--color-violet); stroke-width:1.1; stroke-linecap:round; stroke-dasharray:90 910; stroke-dashoffset:1000; fill:none; opacity:.42; animation:sakala-perimeter-trace 5.2s linear infinite; vector-effect:non-scaling-stroke; }
+        @keyframes sakala-perimeter-trace { to { stroke-dashoffset:0; } }
+        @media (prefers-reduced-motion: reduce) { .sakala-perimeter-trace rect { animation:none; stroke-dasharray:260 740; stroke-dashoffset:0; opacity:.24; } }
       `}</style>
     </div>
   );
