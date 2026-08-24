@@ -7,7 +7,7 @@ import * as scheduleAssignmentUseCases from "@/lib/application/scheduleAssignmen
 import { listAcademicContexts } from "@/lib/application/academicContext.usecases";
 import { listKelas } from "@/lib/application/kelas.usecases";
 import { listMataPelajaran } from "@/lib/application/mata-pelajaran.usecases";
-import { listPembagianMengajar } from "@/lib/application/pembagianMengajar.usecases";
+import { listPembagianMengajar, createPembagianMengajar } from "@/lib/application/pembagianMengajar.usecases";
 import { getTargetJpView } from "@/lib/application/targetJp.usecases";
 import { listGuru } from "@/lib/application/guru.usecases";
 import { getSchoolProfile } from "@/lib/application/schoolProfile.usecases";
@@ -29,7 +29,12 @@ export interface AiCopilotClassStatus {
   remainingJp: number;
   /** JP yang belum punya guru sama sekali (authority: target_jp resmi). AI wajib membedakan ini dari "sudah punya guru tapi belum terjadwal". */
   belumSiapJp: number;
-  subjectDeficits: Array<{ subjectId: string; subjectName: string; targetJp: number; scheduledJp: number; remainingJp: number; belumSiapJp: number }>;
+  /** JP yang SUDAH punya guru (Pembagian Mengajar aktif) tapi belum masuk Jadwal.
+   * Dipisah dari belumSiapJp karena rute perbaikannya beda: ini ke Jadwal
+   * (planner bisa langsung cari slot), belumSiapJp harus ke Pembagian Mengajar
+   * dulu (planner TIDAK BISA menjadwalkan mapel tanpa guru). */
+  belumTerjadwalJp: number;
+  subjectDeficits: Array<{ subjectId: string; subjectName: string; targetJp: number; scheduledJp: number; remainingJp: number; belumSiapJp: number; belumTerjadwalJp: number; suggestedTeachers: Array<{ id: string; name: string }> }>;
   /** JP yang terjadwal MELEBIHI target resmi — sebelumnya tidak pernah terlihat
    * (source data lama membungkam kelebihan lewat Math.min). AI wajib melaporkan
    * ini, bukan diam-diam menganggap kelas 'sudah sesuai' padahal kelebihan. */
@@ -69,13 +74,26 @@ async function getActiveContext() {
 export async function getAiCopilotContextAction(): Promise<AiActionResult<AiCopilotContext>> {
   try {
     const { supabase, active } = await getActiveContext();
-    const [kelas, mapel, schoolProfile, guru, targetJpView] = await Promise.all([
+    const [kelas, mapel, schoolProfile, guru, targetJpView, pembagianSemua] = await Promise.all([
       listKelas(supabase),
       listMataPelajaran(supabase),
       getSchoolProfile(supabase),
       listGuru(supabase),
       getTargetJpView(supabase, active.id),
+      listPembagianMengajar(supabase, active.id),
     ]);
+
+    // §14/Fase 2 — untuk mapel yang belum punya guru (belumSiapJp), usulkan guru
+    // yang SUDAH mengajar mapel yang sama di kelas lain (bukan tebakan buta).
+    // Kalau tidak ada satu pun, biarkan kosong — jujur, bukan mengarang usulan.
+    const teachersBySubject = new Map<string, Map<string, string>>();
+    for (const p of pembagianSemua) {
+      if (p.status !== "aktif") continue;
+      const m = teachersBySubject.get(p.mataPelajaranId) ?? new Map<string, string>();
+      const g = guru.find((x) => x.id === p.guruId);
+      if (g) m.set(g.id, g.namaGuru);
+      teachersBySubject.set(p.mataPelajaranId, m);
+    }
 
     const rowsByKelas = new Map<string, typeof targetJpView.rows>();
     for (const row of targetJpView.rows) {
@@ -98,6 +116,8 @@ export async function getAiCopilotContextAction(): Promise<AiActionResult<AiCopi
           scheduledJp: r.terjadwalJp,
           remainingJp: r.belumSiapJp + r.belumTerjadwalJp,
           belumSiapJp: r.belumSiapJp,
+          belumTerjadwalJp: r.belumTerjadwalJp,
+          suggestedTeachers: r.belumSiapJp > 0 ? [...(teachersBySubject.get(r.mataPelajaranId) ?? new Map())].map(([id, name]) => ({ id, name })) : [],
         }))
         .filter((x) => x.remainingJp > 0)
         .sort((a, b) => b.remainingJp - a.remainingJp);
@@ -120,6 +140,7 @@ export async function getAiCopilotContextAction(): Promise<AiActionResult<AiCopi
       const targetJp = rows.reduce((sum, r) => sum + r.targetJp, 0);
       const scheduledJp = rows.reduce((sum, r) => sum + r.terjadwalJp, 0);
       const belumSiapJp = rows.reduce((sum, r) => sum + r.belumSiapJp, 0);
+      const belumTerjadwalJp = rows.reduce((sum, r) => sum + r.belumTerjadwalJp, 0);
       const excessJp = rows.reduce((sum, r) => sum + r.scheduledExcessJp, 0);
 
       return {
@@ -129,6 +150,7 @@ export async function getAiCopilotContextAction(): Promise<AiActionResult<AiCopi
         scheduledJp,
         remainingJp: Math.max(0, targetJp - scheduledJp),
         belumSiapJp,
+        belumTerjadwalJp,
         subjectDeficits,
         excessJp,
         subjectExcess,
@@ -229,6 +251,21 @@ export async function kurangiJpAction(assignmentId: string): Promise<AiActionRes
     return { ok: true, data: result };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Gagal mengurangi JP." };
+  }
+}
+
+// §14 Action Type baru "Tetapkan Guru" — rute Fase 2. Ini BEDA dari Tambah/Kurangi
+// JP: tujuannya Pembagian Mengajar, bukan Jadwal, karena planner TIDAK BISA
+// menjadwalkan mapel yang belum punya guru sama sekali. AI mengusulkan (dari
+// suggestedTeachers), operator yang menyetujui secara eksplisit — bukan
+// auto-assign. source "ai" supaya audit trail mencatat asal tindakan ini.
+export async function tetapkanGuruAction(kelasId: string, mataPelajaranId: string, guruId: string, jpPerMinggu: number): Promise<AiActionResult<null>> {
+  try {
+    const { supabase, active } = await getActiveContext();
+    await createPembagianMengajar(supabase, { academicContextId: active.id, guruId, mataPelajaranId, kelasId, jpPerMinggu, status: "aktif" }, "ai");
+    return { ok: true, data: null };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Gagal menetapkan guru." };
   }
 }
 
