@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getActiveAcademicContext } from "@/lib/application/academicContext.usecases";
 import { buildControlledTemplateWorkbook, type ControlledTemplateColumn } from "@/lib/import/controlled-template";
 import { bufferToBodyInit } from "@/lib/utils/response";
+import { recordAuditEvent } from "@/lib/application/auditLog.usecases";
 
 const columns: ControlledTemplateColumn[] = [
   { key: "AcademicContext", required: true, format: "Pilih/ikuti Academic Context SAKALA", example: "2026/2027 · Ganjil" },
@@ -139,7 +140,53 @@ export async function PUT(request: Request) {
     const results = await validate(rows); const invalid = results.filter((r: any) => r.status !== "valid");
     if (invalid.length) return NextResponse.json({ error: `Import diblokir: ${invalid.length} baris tidak valid.`, results: invalid }, { status: 400 });
     const supabase = await createClient(); const payload = results.map((r: any) => r.data);
+
+    // SAKALA MASTER RULE (Authority Matrix): jalur ini menulis LANGSUNG ke
+    // target_jp — authority resmi yang juga ditulis Generate Kurikulum →
+    // Commit — tanpa lewat rantai verifikasi sumber (curriculum_source/
+    // version/item). Ini override manual yang sah (operator boleh koreksi
+    // cepat satu angka), tapi WAJIB tercatat di audit trail dengan
+    // before/after nyata dan WAJIB dibaca ulang sebelum klaim berhasil —
+    // sebelumnya baik audit trail maupun read-back sama sekali tidak ada.
+    const keys = payload.map((p: { academic_context_id: string; kelas_id: string; mata_pelajaran_id: string }) => `${p.academic_context_id}:${p.kelas_id}:${p.mata_pelajaran_id}`);
+    const contextIds = [...new Set(payload.map((p: { academic_context_id: string }) => p.academic_context_id))];
+    const { data: beforeRows } = await supabase
+      .from("target_jp")
+      .select("academic_context_id,kelas_id,mata_pelajaran_id,target_jp")
+      .in("academic_context_id", contextIds);
+    const beforeMap = new Map((beforeRows ?? []).map((r) => [`${r.academic_context_id}:${r.kelas_id}:${r.mata_pelajaran_id}`, r.target_jp]));
+
     const { error } = await supabase.from("target_jp").upsert(payload, { onConflict: "academic_context_id,kelas_id,mata_pelajaran_id" });
-    if (error) throw new Error(error.message); return NextResponse.json({ upserted: payload.length });
+    if (error) throw new Error(error.message);
+
+    // Read-back: pastikan nilai benar-benar tersimpan sesuai yang dikirim.
+    const { data: afterRows, error: verifyError } = await supabase
+      .from("target_jp")
+      .select("academic_context_id,kelas_id,mata_pelajaran_id,target_jp")
+      .in("academic_context_id", contextIds);
+    if (verifyError) return NextResponse.json({ error: `Import tidak dapat dipastikan tersimpan: ${verifyError.message}` }, { status: 500 });
+    const afterMap = new Map((afterRows ?? []).map((r) => [`${r.academic_context_id}:${r.kelas_id}:${r.mata_pelajaran_id}`, r.target_jp]));
+    const unconfirmed = keys.filter((k: string) => afterMap.get(k) !== payload.find((p: { academic_context_id: string; kelas_id: string; mata_pelajaran_id: string; target_jp: number }) => `${p.academic_context_id}:${p.kelas_id}:${p.mata_pelajaran_id}` === k)?.target_jp);
+    if (unconfirmed.length > 0) {
+      return NextResponse.json({ error: `Import belum bisa dipastikan tersimpan untuk ${unconfirmed.length} kombinasi. Data resmi belum mencerminkan perubahan ini — coba lagi.` }, { status: 500 });
+    }
+
+    for (const p of payload as { academic_context_id: string; kelas_id: string; mata_pelajaran_id: string; target_jp: number }[]) {
+      const k = `${p.academic_context_id}:${p.kelas_id}:${p.mata_pelajaran_id}`;
+      await recordAuditEvent({
+        supabase,
+        academicContextId: p.academic_context_id,
+        action: "edit",
+        entityType: "target_jp",
+        entityId: null,
+        entityLabel: null,
+        before: { targetJp: beforeMap.get(k) ?? null },
+        after: { targetJp: p.target_jp },
+        source: "import",
+        reason: "Import/edit manual Target JP (bypass rantai verifikasi Generate Kurikulum)",
+      });
+    }
+
+    return NextResponse.json({ upserted: payload.length });
   } catch (e) { return NextResponse.json({ error: e instanceof Error ? e.message : "Import gagal." }, { status: 500 }); }
 }
