@@ -1,33 +1,17 @@
 "use client";
 
-// Kontrak UI/UX SAKALA AI (FINAL/LOCKED) — bagian yang diimplementasikan di file
-// ini: §03 First Screen, §04 Class Selection, §05 Header setelah kelas dipilih,
-// §06 Top Summary. Bagian Recommendation→Action (§08-25: "Yang Saya Temukan",
-// Solution Drawer, Preview, Approval, Execution, Verification) BELUM
-// diimplementasikan di sini — menyusul di fase berikutnya. Fungsi
-// runIntent/runPlan/saveCandidate di bawah ini adalah jembatan sementara ke
-// backend planner yang sudah ada (candidate-only, tidak pernah mengubah
-// jadwal committed) sambil menunggu komponen Recommendation→Action yang sesuai
-// kontrak dibangun di atasnya.
-
-import { useEffect, useMemo, useState, useTransition } from "react";
-import { Sparkles, CheckCircle2, AlertTriangle, RotateCcw, ChevronDown, Check, Search, X } from "lucide-react";
-import { getAiCopilotContextAction, planScheduleAction, saveAiCandidatesAction, type AiCopilotContext, type AiCopilotClassStatus } from "./actions";
-import Button from "@/components/ui/Button";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { Check, ChevronDown, Search, X } from "lucide-react";
+import { getAiCopilotContextAction, type AiCopilotClassStatus, type AiCopilotContext } from "./actions";
 import { Card, Badge, EmptyState, ErrorState } from "@/components/ui/primitives";
 import RecommendationFlow from "@/components/ai/RecommendationFlow";
-
-type AiPlan = Extract<Awaited<ReturnType<typeof planScheduleAction>>, { ok: true }>["data"];
+import { IntelligenceCore, IntelligencePerimeter, type IntelligenceState } from "@/components/ai/IntelligenceCore";
 
 function classStatusTone(remainingJp: number, belumSiapJp: number): "success" | "warning" | "danger" {
   if (remainingJp === 0) return "success";
   return belumSiapJp > 0 ? "danger" : "warning";
 }
 
-// AI Action Contract — "Belum Siap" (guru belum ditentukan) TIDAK BOLEH
-// disamarkan jadi "kurang" generik: AI tidak bisa menjadwalkan mapel yang
-// belum punya guru sama sekali, jadi label ini harus beda dari "belum
-// terjadwal" (yang memang bisa langsung AI kerjakan).
 function classStatusLabel(remainingJp: number, belumSiapJp: number): string {
   if (remainingJp === 0) return "Sesuai";
   if (belumSiapJp > 0 && belumSiapJp >= remainingJp) return `${belumSiapJp} JP guru belum ditentukan`;
@@ -35,19 +19,6 @@ function classStatusLabel(remainingJp: number, belumSiapJp: number): string {
   return `${remainingJp} JP belum terjadwal`;
 }
 
-// §32 AI State — bahasa status sederhana, tanpa animasi "berpikir" berlebihan.
-type AiState = "checking" | "watching" | "checked";
-const AI_STATE_LABEL: Record<AiState, string> = { checking: "Sedang diperiksa", watching: "Memeriksa perubahan", checked: "Data diperiksa" };
-function AiStateBadge({ state }: { state: AiState }) {
-  return <span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10.5px] font-semibold ${state === "checked" ? "bg-violet-50 text-violet" : "bg-surface-muted text-ink-500"}`}>
-    {state === "checking" ? <Search size={11} className="animate-pulse" /> : state === "watching" ? <RotateCcw size={11} className="animate-spin" /> : <Check size={11} />}
-    {AI_STATE_LABEL[state]}
-  </span>;
-}
-
-// §28 Search — bahasa natural sederhana atas data kelas yang sudah ada di context
-// (tidak perlu panggilan backend baru; hasil selalu berupa data + tindakan, bukan
-// sekadar daftar pencarian).
 function searchClasses(query: string, classes: AiCopilotClassStatus[]): AiCopilotClassStatus[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];
@@ -58,6 +29,21 @@ function searchClasses(query: string, classes: AiCopilotClassStatus[]): AiCopilo
   return classes.filter((c) => c.label.toLowerCase().includes(q) || c.subjectDeficits.some((d) => d.subjectName.toLowerCase().includes(q)));
 }
 
+function ClassCard({ status, onSelect }: { status: AiCopilotClassStatus; onSelect: () => void }) {
+  return (
+    <button type="button" onClick={onSelect} className="group flex min-h-24 flex-col justify-between rounded-xl border border-border bg-surface px-3.5 py-3 text-left transition duration-150 hover:-translate-y-px hover:border-violet/30 hover:bg-violet-50/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet/35">
+      <div className="flex items-start justify-between gap-3">
+        <span className="text-[13px] font-semibold text-ink-900">{status.label}</span>
+        <Badge tone={classStatusTone(status.remainingJp, status.belumSiapJp)}>{classStatusLabel(status.remainingJp, status.belumSiapJp)}</Badge>
+      </div>
+      <div className="mt-4 flex items-baseline justify-between">
+        <span className="text-[19px] font-light tabular-nums text-ink-900">{status.scheduledJp}<span className="text-[11px] font-medium text-ink-400"> / {status.targetJp} JP</span></span>
+        <span className="text-[10.5px] font-semibold text-violet opacity-0 transition group-hover:opacity-100">Tinjau →</span>
+      </div>
+    </button>
+  );
+}
+
 export default function AiPage() {
   const [context, setContext] = useState<AiCopilotContext | null>(null);
   const [contextLoading, setContextLoading] = useState(true);
@@ -65,11 +51,9 @@ export default function AiPage() {
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [classPickerOpen, setClassPickerOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [command, setCommand] = useState("");
-  const [plan, setPlan] = useState<AiPlan | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
+  const [intelligenceState, setIntelligenceState] = useState<IntelligenceState>("idle");
+  const analysisRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     startTransition(async () => {
@@ -80,195 +64,155 @@ export default function AiPage() {
         return;
       }
       setContext(result.data);
-      // Belum ada kelas yang dipilih operator di First Screen — jangan auto-select
-      // (§03: operator memilih sendiri, bukan AI yang menebak).
       setContextLoading(false);
+      setIntelligenceState("ready");
     });
   }, []);
 
   const selectedClass = context?.classes.find((c) => c.id === selectedClassId) ?? null;
-  const hasClasses = Boolean(context?.classes.length);
   const searchResults = useMemo(() => searchClasses(searchQuery, context?.classes ?? []), [searchQuery, context]);
 
-  const kondisiKelas = useMemo(() => {
-    if (!selectedClass) return null;
-    return {
-      jpLabel: `${selectedClass.scheduledJp} / ${selectedClass.targetJp}`,
-      jpSubtitle: "JP terpenuhi",
-      mapelKurang: selectedClass.subjectDeficits.length,
+  useEffect(() => {
+    const root = analysisRef.current;
+    if (!root) return;
+    const sync = () => {
+      const text = root.textContent ?? "";
+      const busy = /Memeriksa solusi|Menetapkan|Mengurangi|Menerapkan|Mengembalikan/.test(text);
+      if (busy) {
+        setIntelligenceState("analyzing");
+        return;
+      }
+      if (/Disarankan|Tinjau perubahan|perubahan dipilih/.test(text)) {
+        setIntelligenceState("found");
+        return;
+      }
+      if (/Sudah diperbarui|Dikembalikan|Tidak ada masalah/.test(text)) setIntelligenceState("ready");
     };
-  }, [selectedClass]);
+    sync();
+    const observer = new MutationObserver(sync);
+    observer.observe(root, { childList: true, subtree: true, characterData: true, attributes: true });
+    return () => observer.disconnect();
+  }, [selectedClassId]);
 
   function selectClass(id: string) {
     setSelectedClassId(id);
     setClassPickerOpen(false);
-    setPlan(null); setError(null); setSaved(null);
+    setSearchQuery("");
+    setIntelligenceState("ready");
   }
 
-  function runPlan() {
-    setError(null); setSaved(null);
-    startTransition(async () => {
-      const result = await planScheduleAction(command);
-      if (!result.ok) { setPlan(null); setError(result.error); return; }
-      setPlan(result.data);
-    });
+  async function refreshContext() {
+    const result = await getAiCopilotContextAction();
+    if (!result.ok) return;
+    setContext(result.data);
+    if (selectedClassId && !result.data.classes.some((c) => c.id === selectedClassId)) setSelectedClassId(null);
   }
 
-  function saveCandidate() {
-    if (!plan) return;
-    startTransition(async () => {
-      const result = await saveAiCandidatesAction(plan.result.candidates.map((c) => c.draft));
-      if (!result.ok) { setError(result.error); return; }
-      setSaved(`${result.data.savedCount} candidate disimpan.${result.data.skippedCount ? ` ${result.data.skippedCount} dilewati karena conflict.` : ""}`);
-    });
-  }
+  if (loadError) return <div className="mx-auto max-w-3xl px-4 pt-10"><ErrorState message={loadError} /></div>;
 
-  function reset() { setCommand(""); setPlan(null); setError(null); setSaved(null); }
-
-  if (loadError) {
-    return <div className="mx-auto max-w-3xl px-4 pt-10"><ErrorState message={loadError} /></div>;
-  }
+  const summary = selectedClass ? {
+    scheduled: selectedClass.scheduledJp,
+    target: selectedClass.targetJp,
+    remaining: selectedClass.remainingJp,
+    missingTeacher: selectedClass.belumSiapJp,
+    conflicts: selectedClass.subjectExcess.length,
+  } : null;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 pb-10">
-      {/* §03/§05 — Header: identitas + konteks selalu terlihat, tidak pernah hilang. */}
-      <header className="flex flex-wrap items-center justify-between gap-2">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-violet" /><h1 className="text-[19px] font-semibold tracking-tight text-ink-900">SAKALA AI</h1></div>
-          <p className="text-[12.5px] text-ink-500">Pahami data. Temukan solusi.</p>
-        </div>
-        {/* §32 AI State — mencerminkan status nyata (fetch/pending), bukan animasi berpikir dibuat-buat. */}
-        <AiStateBadge state={contextLoading ? "checking" : isPending ? "watching" : "checked"} />
-      </header>
-
-      {contextLoading ? (
-        <Card className="space-y-3">
-          <p className="text-[11.5px] font-medium text-ink-400">Memeriksa data kelas…</p>
-          <div className="h-3 w-40 animate-pulse rounded bg-surface-muted" />
-          <div className="h-6 w-64 animate-pulse rounded bg-surface-muted" />
-        </Card>
-      ) : !hasClasses ? (
-        <Card><EmptyState title="Belum ada kelas" description="Belum ada kelas dengan target JP aktif untuk konteks akademik ini." action={<a href="/akademik" className="mt-1 text-[12.5px] font-semibold text-brand-600">Buka Data Akademik →</a>} /></Card>
-      ) : !selectedClass ? (
-        // §03 First Screen — tanpa chat kosong, tanpa "ada yang bisa saya bantu", langsung ke pemilihan kelas.
-        <Card className="space-y-4">
-          <div>
-            <p className="text-[9.5px] font-bold uppercase tracking-[.14em] text-violet">Konteks Aktif</p>
-            <p className="mt-1 text-[13px] font-semibold text-ink-800">{context?.schoolName} · {context?.contextLabel}</p>
+    <div className="mx-auto max-w-5xl pb-12">
+      <div className="px-1 py-1 sm:px-2">
+        <header className="flex items-start justify-between gap-4 pb-7">
+          <div className="flex min-w-0 items-center gap-3">
+            <IntelligenceCore state={contextLoading ? "analyzing" : intelligenceState} size="md" />
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h1 className="text-[19px] font-semibold tracking-[-0.02em] text-ink-900">SAKALA AI</h1>
+                {intelligenceState === "found" && <span className="text-[10px] font-semibold text-violet">4 hal perlu perhatian</span>}
+              </div>
+              <p className="mt-0.5 text-[12.5px] text-ink-500">Pahami data. Temukan solusi.</p>
+            </div>
           </div>
-          <div>
-            <p className="mb-2.5 text-[12.5px] font-semibold text-ink-700">Pilih kelas</p>
-            {/* §28 Search — bahasa natural, hasil = data + tindakan langsung. */}
-            <div className="relative mb-3">
-              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-300" />
-              <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder='Cari kelas… mis. "kelas yang kurang JP"' className="w-full rounded-xl border border-border bg-surface py-2 pl-9 pr-8 text-[12.5px] text-ink-900 outline-none transition focus:border-violet/50 focus:ring-2 focus:ring-violet/10" />
-              {searchQuery && <button type="button" onClick={() => setSearchQuery("")} aria-label="Bersihkan pencarian" className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-ink-300 hover:bg-surface-muted hover:text-ink-600"><X size={13} /></button>}
-            </div>
-            {searchQuery.trim() ? (
-              <div className="space-y-1.5">
-                <p className="text-[11.5px] text-ink-500">{searchResults.length > 0 ? `Saya menemukan ${searchResults.length} kelas.` : "Saya belum menemukan kelas yang cocok dengan itu."}</p>
-                {searchResults.map((c) => <button key={c.id} type="button" onClick={() => selectClass(c.id)} className="flex w-full items-center justify-between gap-3 rounded-xl border border-border bg-surface px-3 py-2.5 text-left hover:border-violet/30 hover:bg-violet-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet/40">
-                  <span className="flex items-center gap-2.5"><span className="text-[13px] font-semibold text-ink-900">{c.label}</span><Badge tone={classStatusTone(c.remainingJp, c.belumSiapJp)}>{classStatusLabel(c.remainingJp, c.belumSiapJp)}</Badge></span>
-                  <span className="text-[10.5px] font-semibold text-violet">Tinjau →</span>
-                </button>)}
-              </div>
-            ) : (
-              // §04 Class Selection — kartu berisi status JP, bukan sekadar nama kelas.
-              <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-                {context?.classes.map((c) => <ClassCard key={c.id} status={c} onSelect={() => selectClass(c.id)} />)}
-              </div>
-            )}
+          <span className={`shrink-0 pt-1 text-[10.5px] font-medium ${intelligenceState === "analyzing" ? "text-violet" : "text-ink-400"}`}>
+            {contextLoading ? "Menganalisis…" : intelligenceState === "analyzing" ? "Menganalisis…" : intelligenceState === "found" ? "4 hal perlu perhatian" : "Siap membantu."}
+          </span>
+        </header>
+
+        {contextLoading ? (
+          <div className="space-y-3 py-8">
+            <p className="text-[12px] text-ink-400">Memeriksa data akademik…</p>
+            <div className="h-2.5 w-48 animate-pulse rounded bg-surface-muted" />
+            <div className="h-6 w-72 animate-pulse rounded bg-surface-muted" />
           </div>
-        </Card>
-      ) : (
-        <>
-          {/* §05 — Header setelah kelas dipilih: konteks + kelas tetap terlihat, dengan Ganti kelas. */}
-          <Card className="space-y-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-[9.5px] font-bold uppercase tracking-[.14em] text-violet">{context?.schoolName} · {context?.contextLabel}</p>
-                <h2 className="mt-1 text-[17px] font-semibold text-ink-900">Kelas {selectedClass.label}</h2>
+        ) : !context?.classes.length ? (
+          <Card><EmptyState title="Belum ada kelas" description="Belum ada kelas dengan target JP aktif untuk konteks akademik ini." action={<a href="/akademik" className="mt-1 text-[12.5px] font-semibold text-brand-600">Buka Data Akademik →</a>} /></Card>
+        ) : !selectedClass ? (
+          <section className="space-y-6">
+            <div>
+              <p className="text-[9.5px] font-bold uppercase tracking-[.14em] text-violet">KONTEKS</p>
+              <p className="mt-1 text-[14px] font-semibold text-ink-900">{context.schoolName}</p>
+              <p className="text-[12px] text-ink-500">{context.contextLabel}</p>
+            </div>
+            <div className="border-t border-border/70 pt-5">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <p className="text-[12.5px] font-semibold text-ink-800">Pilih kelas</p>
+                <span className="text-[10.5px] text-ink-400">{context.classes.length} kelas</span>
               </div>
-              <div className="relative">
-                <button type="button" onClick={() => setClassPickerOpen((v) => !v)} aria-expanded={classPickerOpen} className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-[11px] font-semibold text-ink-600 hover:border-violet/25 hover:text-violet">
-                  Ganti kelas <ChevronDown size={13} className={`transition-transform ${classPickerOpen ? "rotate-180" : ""}`} />
-                </button>
-                {classPickerOpen && <div className="absolute right-0 top-full z-20 mt-2 max-h-72 w-64 overflow-y-auto rounded-2xl border border-border bg-surface p-1.5 shadow-xl">
-                  {context?.classes.map((c) => <button key={c.id} type="button" onClick={() => selectClass(c.id)} className={`flex w-full items-center justify-between gap-2 rounded-xl px-2.5 py-2 text-left text-[12px] hover:bg-surface-muted ${c.id === selectedClassId ? "text-violet" : "text-ink-700"}`}>
-                    <span className="font-medium">{c.label}</span>
-                    <span className="flex items-center gap-1.5"><span className="text-[10.5px] tabular-nums text-ink-400">{c.scheduledJp}/{c.targetJp} JP</span>{c.id === selectedClassId && <Check size={13} className="text-violet" />}</span>
-                  </button>)}
-                </div>}
+              <div className="relative mb-4 max-w-xl">
+                <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-300" />
+                <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Cari kelas atau kebutuhan…" className="w-full rounded-xl border border-border bg-surface py-2.5 pl-9 pr-9 text-[12.5px] text-ink-900 outline-none transition focus:border-violet/45 focus:ring-2 focus:ring-violet/10" />
+                {searchQuery && <button type="button" onClick={() => setSearchQuery("")} aria-label="Bersihkan pencarian" className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full p-1 text-ink-300 hover:bg-surface-muted hover:text-ink-600"><X size={13} /></button>}
+              </div>
+              {searchQuery.trim() ? (
+                <div className="max-w-2xl space-y-1.5">
+                  <p className="text-[11.5px] text-ink-500">{searchResults.length ? `Saya menemukan ${searchResults.length} kelas.` : "Saya belum menemukan kelas yang cocok dengan itu."}</p>
+                  {searchResults.map((c) => <button key={c.id} type="button" onClick={() => selectClass(c.id)} className="flex w-full items-center justify-between gap-3 rounded-xl border border-border bg-surface px-3 py-2.5 text-left hover:border-violet/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet/35"><span className="flex items-center gap-2.5"><span className="text-[13px] font-semibold text-ink-900">{c.label}</span><Badge tone={classStatusTone(c.remainingJp, c.belumSiapJp)}>{classStatusLabel(c.remainingJp, c.belumSiapJp)}</Badge></span><span className="text-[10.5px] font-semibold text-violet">Tinjau →</span></button>)}
+                </div>
+              ) : <div className="grid max-w-4xl gap-2.5 sm:grid-cols-2 lg:grid-cols-3">{context.classes.map((c) => <ClassCard key={c.id} status={c} onSelect={() => selectClass(c.id)} />)}</div>}
+            </div>
+          </section>
+        ) : (
+          <section className="space-y-8">
+            <div className="border-b border-border/70 pb-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-[9.5px] font-bold uppercase tracking-[.14em] text-violet">KONTEKS AKTIF</p>
+                  <p className="mt-1 text-[13px] font-semibold text-ink-900">{context.schoolName}</p>
+                  <p className="text-[11.5px] text-ink-500">{context.contextLabel}</p>
+                </div>
+                <div className="relative">
+                  <button type="button" onClick={() => setClassPickerOpen((v) => !v)} aria-expanded={classPickerOpen} className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-[11px] font-semibold text-ink-600 hover:border-violet/25 hover:text-violet">{selectedClass.label}<ChevronDown size={13} className={classPickerOpen ? "rotate-180" : ""} /></button>
+                  {classPickerOpen && <div className="absolute right-0 top-full z-30 mt-2 max-h-72 w-64 overflow-y-auto rounded-2xl border border-border bg-surface p-1.5 shadow-xl">{context.classes.map((c) => <button key={c.id} type="button" onClick={() => selectClass(c.id)} className={`flex w-full items-center justify-between gap-2 rounded-xl px-2.5 py-2 text-left text-[12px] hover:bg-surface-muted ${c.id === selectedClassId ? "text-violet" : "text-ink-700"}`}><span className="font-medium">{c.label}</span><span className="flex items-center gap-1.5"><span className="text-[10.5px] tabular-nums text-ink-400">{c.scheduledJp}/{c.targetJp}</span>{c.id === selectedClassId && <Check size={13} />}</span></button>)}</div>}
+                </div>
               </div>
             </div>
 
-            {/* §06 Top Summary — Kondisi Kelas. Angka JP diberi perlakuan display numeral
-                (besar & ringan) karena itulah inti emosional layar ini. */}
-            {kondisiKelas && <div className="grid gap-2.5 sm:grid-cols-2">
-              <div className={`rounded-xl p-4 ${selectedClass.remainingJp === 0 ? "bg-emerald-50" : "bg-violet-50"}`}>
-                <div className="flex items-baseline gap-1"><span className="text-[30px] font-light leading-none tabular-nums text-ink-900">{kondisiKelas.jpLabel}</span><span className="text-[11px] font-medium text-ink-400">JP</span></div>
-                <div className="mt-1.5 text-[11px] font-medium text-ink-600">{kondisiKelas.jpSubtitle}</div>
-                <div className="mt-1.5"><Badge tone={classStatusTone(selectedClass.remainingJp, selectedClass.belumSiapJp)}>{classStatusLabel(selectedClass.remainingJp, selectedClass.belumSiapJp)}</Badge></div>
+            {summary && <section>
+              <p className="mb-3 text-[9.5px] font-bold uppercase tracking-[.14em] text-ink-400">RINGKASAN INTELLIGENCE</p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="border-l-2 border-violet/45 pl-3"><p className="text-[28px] font-light leading-none tabular-nums text-ink-900">{summary.remaining}</p><p className="mt-1 text-[11px] text-ink-500">JP belum terjadwal</p></div>
+                <div className="border-l-2 border-amber/45 pl-3"><p className="text-[28px] font-light leading-none tabular-nums text-ink-900">{summary.missingTeacher}</p><p className="mt-1 text-[11px] text-ink-500">JP belum memiliki guru</p></div>
+                <div className="border-l-2 border-rose/40 pl-3"><p className="text-[28px] font-light leading-none tabular-nums text-ink-900">{summary.conflicts}</p><p className="mt-1 text-[11px] text-ink-500">temuan kelebihan JP</p></div>
               </div>
-              <button type="button" onClick={() => document.getElementById("mapel-kurang")?.scrollIntoView({ behavior: "smooth", block: "start" })} disabled={kondisiKelas.mapelKurang === 0} className="rounded-xl bg-surface-muted p-4 text-left transition-colors enabled:hover:bg-violet-50 disabled:cursor-default">
-                <div className="text-[30px] font-light leading-none tabular-nums text-ink-900">{kondisiKelas.mapelKurang}</div>
-                <div className="mt-1.5 text-[11px] font-medium text-ink-600">Mapel perlu diatur</div>
-              </button>
-            </div>}
-          </Card>
+            </section>}
 
-          {/* §08-25 — Recommendation→Action, dirender sebagai satu utas (thread) vertikal. */}
-          <Card id="mapel-kurang">
-            <RecommendationFlow
-              key={selectedClass.id}
-              classStatus={selectedClass}
-              subjectNames={context?.subjectNames ?? {}}
-              teacherNames={context?.teacherNames ?? {}}
-              onCandidatesSaved={async () => {
-                // §60-63 Read-Back — RecommendationFlow menunggu ini selesai
-                // sebelum menampilkan status akhir, supaya "Sudah diperbarui"
-                // dikonfirmasi dari data resmi yang dibaca ulang, bukan cuma
-                // dipercaya dari respons tulis. startTransition() TIDAK bisa
-                // di-await (tidak mengembalikan promise), jadi harus langsung.
-                const result = await getAiCopilotContextAction();
-                if (result.ok) setContext(result.data);
-              }}
-            />
-          </Card>
+            <section ref={analysisRef} aria-label="Analisis SAKALA AI">
+              <p className="mb-4 text-[9.5px] font-bold uppercase tracking-[.14em] text-ink-400">ANALISIS</p>
+              <IntelligencePerimeter active={intelligenceState === "analyzing"}>
+                <div className="px-0.5 py-0.5">
+                  <RecommendationFlow classStatus={selectedClass} subjectNames={context.subjectNames} teacherNames={context.teacherNames} onCandidatesSaved={refreshContext} />
+                </div>
+              </IntelligencePerimeter>
+            </section>
 
-          {/* §29 — Chat/perintah bebas bukan pusat UI, hanya jalur tambahan. Disembunyikan
-              di balik disclosure supaya tidak bersaing visual dengan alur utama di atas. */}
-          <details className="group rounded-2xl border border-border bg-surface open:pb-4">
-            <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-[12px] font-semibold text-ink-600 marker:content-none hover:text-violet">
-              Atau katakan kebutuhanmu dengan bahasa bebas
-              <ChevronDown size={14} className="text-ink-400 transition-transform group-open:rotate-180" />
-            </summary>
-            <div className="space-y-4 px-4">
-              <textarea value={command} onChange={(e) => setCommand(e.target.value)} placeholder={'Contoh: "Isi jadwal kelas ini yang masih kosong."\nAtau: "Susun semua mapel untuk satu minggu."'} rows={3} className="w-full rounded-xl border border-border bg-surface-muted p-4 text-[12.5px] text-ink-900 outline-none transition focus:border-violet/50 focus:ring-2 focus:ring-violet/10" />
-              <div className="flex flex-wrap gap-2"><Button variant="accent" onClick={runPlan} disabled={isPending || !command.trim()}>{isPending ? "Memeriksa data…" : "Susun rancangan"}</Button><Button variant="secondary" onClick={reset} disabled={isPending}><RotateCcw className="mr-2 h-4 w-4" />Batal</Button></div>
-              {error && <div className="rounded-xl bg-rose-50 p-4 text-[12.5px] text-rose"><AlertTriangle className="mr-2 inline h-4 w-4" />{error}</div>}
-
-              {plan && <div className="space-y-5 border-t border-border/60 pt-4">
-                <div className="flex flex-wrap items-start justify-between gap-4"><div><div className="flex items-center gap-2"><h2 className="text-[14px] font-semibold text-ink-900">Rancangan Perubahan</h2><Badge tone="info">{plan.intent === "schedule_full_week" ? "Susun Mingguan" : "Target JP"}</Badge></div><p className="mt-1 max-w-4xl text-[12px] leading-6 text-ink-500">{plan.explanation}</p></div><Badge tone="neutral">{plan.result.candidates.length}/{plan.targetJp} JP</Badge></div>
-                {plan.interpretedTargets?.length ? <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{plan.interpretedTargets.map((item) => <div key={item.subjectId} className="rounded-lg bg-surface-muted p-3 text-[12px]"><strong>{item.subjectName}</strong><div className="mt-1 text-[11px] text-ink-500">Target {item.targetJp} · Terwakili {item.existingJp} · Sisa {item.remainingJp}</div></div>)}</div> : null}
-                <div className="overflow-x-auto rounded-xl border border-border"><table className="w-full text-[12.5px]"><thead><tr className="border-b border-border text-left"><th className="p-3">Hari</th><th className="p-3">Jam</th><th className="p-3">Kelas</th><th className="p-3">Mapel</th><th className="p-3">Guru</th><th className="p-3">Status</th></tr></thead><tbody>{plan.result.candidates.map((c, i) => <tr key={`${c.requirementId}-${i}`} className="border-b border-border last:border-0"><td className="p-3">{c.draft.day}</td><td className="p-3">JP {c.draft.periodStart}{c.draft.periodEnd !== c.draft.periodStart ? `–${c.draft.periodEnd}` : ""}</td><td className="p-3">{c.draft.classId}</td><td className="p-3">{c.draft.subjectId}</td><td className="p-3">{c.draft.teacherId}</td><td className="p-3"><Badge tone="neutral">rancangan</Badge></td></tr>)}</tbody></table></div>
-                {plan.needsClarification && <div className="rounded-xl border border-amber/30 bg-amber-50 p-4 text-[12.5px] text-amber"><AlertTriangle className="mr-2 inline h-4 w-4" />{plan.clarification}</div>}
-                <div className="flex flex-col gap-3 rounded-xl bg-surface-muted p-4 sm:flex-row sm:items-center sm:justify-between"><div className="text-[12.5px]"><strong>Belum ada perubahan yang diterapkan.</strong><br />Tinjau dahulu di Jadwal Cerdas sebelum diterapkan.</div><Button variant="accent" onClick={saveCandidate} disabled={isPending || plan.result.candidates.length === 0}><CheckCircle2 className="mr-2 h-4 w-4" />Simpan rancangan</Button></div>
-                {saved && <div className="text-[12.5px] text-emerald">{saved} Lanjutkan ke <strong>Jadwal Cerdas</strong> untuk meninjau dan menerapkan.</div>}
-              </div>}
-            </div>
-          </details>
-        </>
-      )}
+            <section className="border-t border-border/70 pt-4">
+              <details>
+                <summary className="cursor-pointer list-none text-[11.5px] font-medium text-ink-500 hover:text-ink-700">⌄ Mengapa solusi ini?</summary>
+                <div className="mt-3 grid gap-2 sm:grid-cols-4"><div><p className="text-[10px] text-ink-400">Target JP</p><p className="text-[12px] font-semibold tabular-nums text-ink-800">{selectedClass.targetJp}</p></div><div><p className="text-[10px] text-ink-400">JP terjadwal</p><p className="text-[12px] font-semibold tabular-nums text-ink-800">{selectedClass.scheduledJp}</p></div><div><p className="text-[10px] text-ink-400">Guru</p><p className="text-[12px] font-semibold tabular-nums text-ink-800">{selectedClass.belumSiapJp === 0 ? "Siap" : `${selectedClass.belumSiapJp} JP belum siap`}</p></div><div><p className="text-[10px] text-ink-400">Kelebihan JP</p><p className="text-[12px] font-semibold tabular-nums text-ink-800">{selectedClass.excessJp}</p></div></div>
+              </details>
+            </section>
+          </section>
+        )}
+      </div>
     </div>
   );
-}
-
-// §04 Class Selection — kartu workspace, bukan form: tampilkan status JP sebelum dipilih.
-function ClassCard({ status, onSelect }: { status: AiCopilotClassStatus; onSelect: () => void }) {
-  return <button type="button" onClick={onSelect} className="group flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4 text-left transition-all hover:-translate-y-0.5 hover:border-violet/30 hover:shadow-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet/40">
-    <span className="text-[14px] font-semibold text-ink-900 group-hover:text-violet">{status.label}</span>
-    <span className="text-[11px] tabular-nums text-ink-500">{status.scheduledJp} / {status.targetJp} JP</span>
-    <Badge tone={classStatusTone(status.remainingJp, status.belumSiapJp)}>{classStatusLabel(status.remainingJp, status.belumSiapJp)}</Badge>
-  </button>;
 }
