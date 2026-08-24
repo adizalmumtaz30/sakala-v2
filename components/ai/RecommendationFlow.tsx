@@ -134,7 +134,7 @@ function MissingTeacherAlert({ subjects, onTetapkan, isPending, pendingKey, erro
   error: string | null;
 }) {
   const top = subjects[0];
-  return <div className="sakala-stage-enter space-y-3 rounded-xl border border-violet/25 bg-violet-50/50 p-4">
+  return <div className="sakala-stage-enter space-y-3 rounded-xl border border-border bg-surface-muted/60 p-4">
     <div className="flex items-start gap-2.5">
       <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-violet" />
       <div className="min-w-0">
@@ -412,13 +412,37 @@ export default function RecommendationFlow({
 
         <p className="text-[12px] leading-5 text-ink-500">{plan.explanation}</p>
 
-        {targets.length > 0 && <div className="space-y-1.5">
-          <p className="text-[10px] font-bold uppercase tracking-[.1em] text-ink-400">✦ Disarankan</p>
-          {targets.map((t) => <div key={t.subjectId} className="flex items-center justify-between gap-3 rounded-lg bg-surface-muted px-3 py-2">
-            <span className="text-[12.5px] font-medium text-ink-800">{t.subjectName}</span>
-            <span className="text-[12px] font-semibold tabular-nums text-violet">+{t.remainingJp} JP</span>
-          </div>)}
-        </div>}
+        {/* §18 — Solution Card sebagai hero component: bukan row database, tapi
+            hasil intelligence yang terasa "sudah diperiksa". Checkmark di sini
+            BUKAN dekorasi — solver (solveWeeklySchedule) memang CSP-based yang
+            mempertimbangkan existing assignment saat generate (guru tersedia,
+            tidak bentrok), dan hanya balikin batch candidate lengkap kalau JP
+            targetnya tercapai penuh ("Exact-JP invariant") — jadi klaimnya jujur. */}
+        {plan.result.candidates.length > 0 && (() => {
+          const hero = plan.result.candidates[0];
+          const rest = plan.result.candidates.slice(1);
+          return <div className="space-y-1.5">
+            <p className="text-[10px] font-bold uppercase tracking-[.1em] text-ink-400">Solusi yang disarankan</p>
+            <div className="rounded-xl border border-violet/25 bg-surface p-3.5">
+              <p className="text-[13.5px] font-semibold text-ink-900">{subjectNames[hero.draft.subjectId] ?? hero.draft.subjectId}</p>
+              <p className="text-[11.5px] text-ink-500">{classStatus.label}</p>
+              <p className="mt-2 text-[12px] text-ink-700">{hero.draft.day.charAt(0).toUpperCase() + hero.draft.day.slice(1)} · JP {hero.draft.periodStart}{hero.draft.periodEnd !== hero.draft.periodStart ? `–${hero.draft.periodEnd}` : ""}</p>
+              <p className="text-[12px] text-ink-500">{teacherNames[hero.draft.teacherId] ?? hero.draft.teacherId}</p>
+              <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1 border-t border-border/60 pt-2.5 text-[10.5px] text-emerald">
+                <span className="flex items-center gap-1"><CheckCircle2 size={11} />Guru tersedia</span>
+                <span className="flex items-center gap-1"><CheckCircle2 size={11} />Tidak bentrok</span>
+                <span className="flex items-center gap-1"><CheckCircle2 size={11} />Sesuai target JP</span>
+              </div>
+            </div>
+            {rest.length > 0 && <div className="space-y-1">
+              {rest.slice(0, 4).map((c, i) => <div key={`${c.requirementId}-${i}`} className="flex items-center justify-between gap-3 rounded-lg bg-surface-muted px-3 py-1.5 text-[11.5px]">
+                <span className="min-w-0 truncate text-ink-700">{subjectNames[c.draft.subjectId] ?? c.draft.subjectId}</span>
+                <span className="shrink-0 text-ink-400">{c.draft.day} · JP {c.draft.periodStart}</span>
+              </div>)}
+              {rest.length > 4 && <p className="px-1 text-[10.5px] text-ink-400">+{rest.length - 4} slot lain di langkah Preview.</p>}
+            </div>}
+          </div>;
+        })()}
 
         {/* Display numeral — angka JP adalah inti emosional fitur ini. */}
         <div className="flex items-center justify-center gap-4 rounded-xl border border-border bg-surface-muted/60 px-4 py-3.5">
