@@ -8,6 +8,8 @@ import { isFixedSlot } from "@/lib/domain/slotTemplate";
 import type { ScheduleAssignment, ScheduleAssignmentDraft } from "@/lib/domain/scheduleAssignment";
 import { validateScheduleAssignmentDraft } from "@/lib/domain/scheduleAssignment";
 import type { GenerationRequirement, RequirementGenerationOutcome } from "@/lib/domain/candidateGeneration";
+import { recordAuditEvent } from "@/lib/application/auditLog.usecases";
+import type { AuditSource } from "@/lib/domain/auditLog";
 import { validateGenerationRequirement } from "@/lib/domain/candidateGeneration";
 import { validateAssignmentCandidate } from "@/lib/application/conflictEngine";
 import type { ScheduleConflict } from "@/lib/domain/conflict";
@@ -152,7 +154,9 @@ export async function generateCandidatePreview(
 /** Save is still an explicit transition. Blocking conflicts are never written. */
 export async function saveGeneratedCandidates(
   supabase: SupabaseClient,
-  drafts: ScheduleAssignmentDraft[]
+  drafts: ScheduleAssignmentDraft[],
+  source: AuditSource = "manual",
+  reason?: string | null
 ): Promise<{ saved: ScheduleAssignment[]; skipped: { draft: ScheduleAssignmentDraft; conflicts: ScheduleConflict[] }[] }> {
   const saved: ScheduleAssignment[] = [];
   const skipped: { draft: ScheduleAssignmentDraft; conflicts: ScheduleConflict[] }[] = [];
@@ -163,7 +167,22 @@ export async function saveGeneratedCandidates(
       skipped.push({ draft, conflicts: blocking });
       continue;
     }
-    saved.push(await scheduleAssignmentRepository.create(supabase, draft));
+    const created = await scheduleAssignmentRepository.create(supabase, draft);
+    // Sebelumnya TIDAK ADA audit trail sama sekali untuk penyimpanan candidate
+    // (baik dari Jadwal Cerdas manual maupun SAKALA AI) — celah nyata untuk
+    // fitur yang seharusnya "setiap perubahan data harus terlacak" (§46/§47).
+    await recordAuditEvent({
+      supabase,
+      academicContextId: created.academicContextId,
+      action: "create",
+      entityType: "schedule_assignment",
+      entityId: created.id,
+      entityLabel: null,
+      after: created,
+      source,
+      reason: reason ?? null,
+    });
+    saved.push(created);
   }
   return { saved, skipped };
 }

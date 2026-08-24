@@ -76,7 +76,8 @@ async function assertNoDuplicateCombination(
 export async function createPembagianMengajar(
   supabase: SupabaseClient,
   draft: PembagianMengajarDraft,
-  source: AuditSource = "manual"
+  source: AuditSource = "manual",
+  reason?: string | null
 ): Promise<PembagianMengajar> {
   validatePembagianMengajarDraft(draft);
   await assertNoDuplicateCombination(supabase, draft);
@@ -90,6 +91,7 @@ export async function createPembagianMengajar(
     entityLabel: null,
     after: item,
     source,
+    reason: reason ?? null,
   });
   return item;
 }

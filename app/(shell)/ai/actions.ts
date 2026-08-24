@@ -12,6 +12,7 @@ import { getTargetJpView } from "@/lib/application/targetJp.usecases";
 import { listGuru } from "@/lib/application/guru.usecases";
 import { getSchoolProfile } from "@/lib/application/schoolProfile.usecases";
 import { formatContextLabel } from "@/lib/domain/academicContext";
+import { buildAiAction, summarizeAiAction } from "@/lib/domain/aiAction";
 
 export type AiActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -225,8 +226,24 @@ export async function runAiCopilotIntentAction(
 export async function saveAiCandidatesAction(
   drafts: Parameters<typeof saveCandidatesAction>[0]
 ): Promise<AiActionResult<{ savedCount: number; skippedCount: number; savedIds: string[] }>> {
-  const result = await saveCandidatesAction(drafts);
-  return result;
+  // §46/§47 AI Action Contract — bungkus jadi AiAction eksplisit sebelum
+  // eksekusi, supaya audit trail mencatat ini benar dari SAKALA AI (source
+  // "ai"), bukan "manual" seperti penyimpanan candidate biasa dari Jadwal
+  // Cerdas, dan kolom `reason` terisi alasan yang bisa dibaca manusia.
+  const first = drafts[0];
+  const reason = first
+    ? summarizeAiAction(buildAiAction({
+        actionType: "tambah_jp",
+        destination: "jadwal",
+        targetEntity: { classId: first.classId, subjectId: first.subjectId, teacherId: first.teacherId },
+        currentValue: null,
+        proposedValue: { jumlahSlot: drafts.length },
+        reason: `Menyimpan ${drafts.length} slot jadwal candidate hasil rekomendasi SAKALA AI.`,
+        evidence: ["Target JP", "Pembagian Mengajar", "Jadwal committed"],
+        risk: "rendah",
+      }))
+    : null;
+  return saveCandidatesAction(drafts, "ai", reason);
 }
 
 // §14 Action Type "Kurangi" — hapus satu slot jadwal committed yang berkontribusi
@@ -243,7 +260,20 @@ export async function saveAiCandidatesAction(
 export async function kurangiJpAction(assignmentId: string): Promise<AiActionResult<{ archived: boolean }>> {
   try {
     const { supabase } = await getActiveContext();
-    const result = await scheduleAssignmentUseCases.archiveOrDeleteAssignment(supabase, assignmentId);
+    const existing = await scheduleAssignmentUseCases.getScheduleAssignment(supabase, assignmentId);
+    const reason = existing
+      ? summarizeAiAction(buildAiAction({
+          actionType: "kurangi_jp",
+          destination: "jadwal",
+          targetEntity: { classId: existing.classId, subjectId: existing.subjectId, teacherId: existing.teacherId },
+          currentValue: { day: existing.day, periodStart: existing.periodStart, periodEnd: existing.periodEnd },
+          proposedValue: null,
+          reason: "Menghapus satu slot jadwal karena JP mapel ini melebihi target resmi.",
+          evidence: ["Target JP", "Jadwal committed"],
+          risk: "sedang",
+        }))
+      : "[SAKALA AI] Mengurangi JP kelebihan.";
+    const result = await scheduleAssignmentUseCases.archiveOrDeleteAssignment(supabase, assignmentId, "ai", reason);
     // Read-back: pastikan status resmi memang sudah berubah sebelum bilang berhasil.
     const verify = await scheduleAssignmentUseCases.getScheduleAssignment(supabase, assignmentId);
     const confirmed = result.archived ? verify?.status === "archived" : verify === null;
@@ -262,7 +292,17 @@ export async function kurangiJpAction(assignmentId: string): Promise<AiActionRes
 export async function tetapkanGuruAction(kelasId: string, mataPelajaranId: string, guruId: string, jpPerMinggu: number): Promise<AiActionResult<null>> {
   try {
     const { supabase, active } = await getActiveContext();
-    await createPembagianMengajar(supabase, { academicContextId: active.id, guruId, mataPelajaranId, kelasId, jpPerMinggu, status: "aktif" }, "ai");
+    const reason = summarizeAiAction(buildAiAction({
+      actionType: "tetapkan_guru",
+      destination: "pembagian_mengajar",
+      targetEntity: { classId: kelasId, subjectId: mataPelajaranId, teacherId: guruId },
+      currentValue: null,
+      proposedValue: { jpPerMinggu },
+      reason: `Mengusulkan guru untuk mapel yang belum punya guru sama sekali (${jpPerMinggu} JP).`,
+      evidence: ["Target JP", "Pembagian Mengajar (guru yang sudah mengajar mapel sama di kelas lain)"],
+      risk: "rendah",
+    }));
+    await createPembagianMengajar(supabase, { academicContextId: active.id, guruId, mataPelajaranId, kelasId, jpPerMinggu, status: "aktif" }, "ai", reason);
     return { ok: true, data: null };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Gagal menetapkan guru." };
@@ -278,7 +318,7 @@ export async function rollbackAiCandidatesAction(ids: string[]): Promise<AiActio
     let removed = 0;
     const unconfirmedIds: string[] = [];
     for (const id of ids) {
-      await scheduleAssignmentUseCases.archiveOrDeleteAssignment(supabase, id);
+      await scheduleAssignmentUseCases.archiveOrDeleteAssignment(supabase, id, "ai", "[SAKALA AI] Rollback — membatalkan candidate yang baru disimpan sendiri oleh AI.");
       const verify = await scheduleAssignmentUseCases.getScheduleAssignment(supabase, id);
       if (verify === null) removed += 1;
       else unconfirmedIds.push(id);
