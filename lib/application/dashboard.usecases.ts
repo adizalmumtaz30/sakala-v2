@@ -19,10 +19,10 @@ import { listMataPelajaran } from "@/lib/application/mata-pelajaran.usecases";
 import { listKelas } from "@/lib/application/kelas.usecases";
 import { listRuangan } from "@/lib/application/ruangan.usecases";
 import { listPembagianMengajar } from "@/lib/application/pembagianMengajar.usecases";
+import { getTargetJpView, type TargetJpStatus } from "@/lib/application/targetJp.usecases";
 import { scanCommittedConflicts } from "@/lib/application/conflictEngine";
 import { scheduleAssignmentRepository } from "@/lib/data-access/scheduleAssignment.repository";
 import { dashboardMetricSnapshotRepository } from "@/lib/data-access/dashboardMetricSnapshot.repository";
-import { summarizeJp, type JpSummaryStatus } from "@/lib/domain/pembagianMengajar";
 import type { SchoolProfile } from "@/lib/domain/schoolProfile";
 import type { AcademicContext } from "@/lib/domain/academicContext";
 
@@ -54,20 +54,22 @@ export interface DashboardScheduleConflictSummary {
 
 export interface DashboardJpInsight {
   totalKombinasi: number;
-  countByStatus: Record<JpSummaryStatus, number>;
-  /** 0-100, dibulatkan. Kombinasi "lebih" dihitung sebagai lengkap (bukan bonus di atas 100%). */
+  countByStatus: Record<TargetJpStatus, number>;
+  /** 0-100, dibulatkan, dari Target JP resmi (target_jp table) — bukan dari Pembagian Mengajar. */
   completionPercent: number;
+  /** JP yang belum punya guru sama sekali — beda dari "belum terjadwal" (sudah ada guru, tinggal dijadwalkan). */
+  belumSiapJp: number;
 }
 
-// PERINGATAN (kontrak SAKALA — Production Flow, Authority & AI Action Contract):
-// jpInsight di atas dihitung MURNI dari Pembagian Mengajar aktif, TIDAK dari
-// tabel target_jp resmi — jadi "completionPercent" di sini artinya "dari yang
-// SUDAH punya guru, berapa persen sudah terjadwal", BUKAN "dari Target JP
-// resmi sekolah, berapa persen selesai". Field ini saat ini TIDAK dirender di
-// UI Dashboard manapun (dead code). Kalau mau dipakai lagi untuk widget,
-// jangan dilabeli "Target JP" — pakai getTargetJpView() dari
-// targetJp.usecases.ts sebagai authority yang benar, seperti yang sudah
-// diperbaiki di halaman /pembagian-mengajar/target-jp.
+// SAKALA MASTER RULE (Production Flow, Authority & AI Action Contract):
+// jpInsight WAJIB berasal dari tabel target_jp resmi (getTargetJpView),
+// bukan dihitung dari Pembagian Mengajar — sebelumnya bug ini dikomentari
+// sebagai "dead code, jangan dipakai lagi tanpa fix" tapi keburu dirender
+// live di Dashboard Insight (PR #55) sebelum sempat diperbaiki, dan
+// sempat mengklaim "Semua kombinasi JP terpenuhi... Aman untuk
+// ditindaklanjuti" padahal itu cuma menghitung dari Pembagian Mengajar
+// yang sudah ada guru — mapel yang belum punya guru sama sekali tidak
+// pernah masuk hitungan sama sekali. Sekarang authority-correct.
 
 export interface DashboardWorkloadEntry {
   guruId: string;
@@ -88,7 +90,7 @@ export interface DashboardSummary {
   metricTrends: DashboardMetricTrends | null;
 }
 
-const EMPTY_JP_COUNT: Record<JpSummaryStatus, number> = { kosong: 0, sebagian: 0, penuh: 0, lebih: 0 };
+const EMPTY_JP_COUNT: Record<TargetJpStatus, number> = { belum_siap: 0, siap_belum_terjadwal: 0, sebagian_terjadwal: 0, lengkap: 0 };
 
 /**
  * Ringkasan lengkap satu konteks akademik aktif untuk Dashboard. Kalau tidak
@@ -123,28 +125,29 @@ export async function getDashboardSummary(supabase: SupabaseClient): Promise<Das
       schoolProfile,
       activeContext: null,
       metrics: baseMetrics,
-      jpInsight: { totalKombinasi: 0, countByStatus: EMPTY_JP_COUNT, completionPercent: 0 },
+      jpInsight: { totalKombinasi: 0, countByStatus: EMPTY_JP_COUNT, completionPercent: 0, belumSiapJp: 0 },
       workloadTop: [],
       scheduleConflicts: { total: 0, samples: [] },
       metricTrends: null,
     };
   }
 
-  const [pembagianList, assignments] = await Promise.all([
+  const [pembagianList, assignments, targetJpView] = await Promise.all([
     listPembagianMengajar(supabase, activeContext.id),
     scheduleAssignmentRepository.findByContext(supabase, activeContext.id),
+    getTargetJpView(supabase, activeContext.id),
   ]);
 
   const pembagianAktif = pembagianList.filter((p) => p.status === "aktif");
   const committed = assignments.filter((a) => a.status === "committed");
 
-  const countByStatus: Record<JpSummaryStatus, number> = { ...EMPTY_JP_COUNT };
-  for (const item of pembagianAktif) {
-    const { status } = summarizeJp(item.jpPerMinggu, item.jpTerjadwal ?? 0);
-    countByStatus[status] += 1;
+  // jpInsight sekarang authority-correct: dibangun dari getTargetJpView()
+  // (tabel target_jp resmi), bukan dihitung ulang dari Pembagian Mengajar.
+  const countByStatus: Record<TargetJpStatus, number> = { ...EMPTY_JP_COUNT };
+  for (const row of targetJpView.rows) {
+    countByStatus[row.status] += 1;
   }
-  const selesai = countByStatus.penuh + countByStatus.lebih;
-  const completionPercent = pembagianAktif.length === 0 ? 0 : Math.round((selesai / pembagianAktif.length) * 100);
+  const completionPercent = targetJpView.overallTargetJp === 0 ? 0 : Math.round((targetJpView.overallTerjadwalJp / targetJpView.overallTargetJp) * 100);
 
   const guruById = new Map(guruList.map((g) => [g.id, g.namaGuru]));
   const jamByGuru = new Map<string, number>();
@@ -211,7 +214,7 @@ export async function getDashboardSummary(supabase: SupabaseClient): Promise<Das
     schoolProfile,
     activeContext,
     metrics: finalMetrics,
-    jpInsight: { totalKombinasi: pembagianAktif.length, countByStatus, completionPercent },
+    jpInsight: { totalKombinasi: targetJpView.rows.length, countByStatus, completionPercent, belumSiapJp: targetJpView.overallBelumSiapJp },
     workloadTop,
     scheduleConflicts,
     metricTrends,

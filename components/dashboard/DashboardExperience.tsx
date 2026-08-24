@@ -481,20 +481,20 @@ function SmartInsight({ jpInsight, bebanTertinggi, bebanDistribution, scheduleCo
   if (scheduleConflicts.total > 0) {
     signals.push({ level: "critical", text: `${scheduleConflicts.total} bentrok jadwal aktif (guru/kelas/ruangan terjadwal bersamaan)${scheduleConflicts.samples[0] ? ` — ${scheduleConflicts.samples[0]}` : ""}`, href: "/jadwal" });
   }
-  if (jpInsight.countByStatus.kosong > 0) {
-    signals.push({ level: "critical", text: `${jpInsight.countByStatus.kosong} kombinasi guru+mapel+kelas belum punya jadwal sama sekali.`, href: "/pembagian-mengajar" });
+  if (jpInsight.belumSiapJp > 0) {
+    signals.push({ level: "critical", text: `${jpInsight.belumSiapJp} JP dari Target JP resmi belum punya guru sama sekali.`, href: "/pembagian-mengajar" });
   }
-  if (jpInsight.countByStatus.lebih > 0) {
-    signals.push({ level: "warning", text: `${jpInsight.countByStatus.lebih} kombinasi melebihi target JP mingguan.`, href: "/analitik" });
+  if (jpInsight.countByStatus.sebagian_terjadwal > 0) {
+    signals.push({ level: "warning", text: `${jpInsight.countByStatus.sebagian_terjadwal} kombinasi sudah punya guru tapi baru sebagian masuk jadwal.`, href: "/pembagian-mengajar/target-jp" });
   }
   if (bebanDistribution.berat > 0) {
     signals.push({ level: "warning", text: `${bebanDistribution.berat} guru dengan beban berat (≥ 33 JP/minggu)${bebanTertinggi[0] ? ` — tertinggi ${bebanTertinggi[0].namaGuru} (${bebanTertinggi[0].totalJamMengajar} JP)` : ""}.`, href: "/guru" });
   }
   if (signals.length === 0 && jpInsight.totalKombinasi > 0) {
-    signals.push({ level: "good", text: `Semua ${jpInsight.totalKombinasi} kombinasi JP terpenuhi, tidak ada bentrok jadwal aktif. Aman untuk ditindaklanjuti.`, href: "/analitik" });
+    signals.push({ level: "good", text: `Semua ${jpInsight.totalKombinasi} kombinasi Target JP resmi sudah punya guru dan terjadwal penuh, tidak ada bentrok jadwal aktif.`, href: "/pembagian-mengajar/target-jp" });
   }
   if (jpInsight.totalKombinasi === 0) {
-    signals.push({ level: "warning", text: "Belum ada Pembagian Mengajar aktif — mulai dari sana untuk mengisi jadwal.", href: "/pembagian-mengajar" });
+    signals.push({ level: "warning", text: "Belum ada Target JP resmi untuk konteks ini — isi lewat Generate Kurikulum terlebih dahulu.", href: "/akademik/generate-kurikulum" });
   }
   const styleFor: Record<Signal["level"], { dot: string; text: string }> = {
     critical: { dot: "bg-rose animate-pulse", text: "text-ink-900" },
