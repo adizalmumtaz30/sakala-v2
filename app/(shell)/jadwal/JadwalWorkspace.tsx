@@ -629,6 +629,12 @@ export default function JadwalWorkspace({
             contextLabel={contextLabel}
             schoolName={schoolName}
           />
+          <Link
+            href="/ai"
+            className="flex h-11 items-center gap-1.5 rounded-xl bg-ink-900 px-3.5 text-[12.5px] font-semibold text-white hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
+          >
+            <Sparkles size={14} /> SAKALA AI
+          </Link>
           {selectedModel && (
             <span className="text-[11.5px] text-ink-400">Mode ruangan: {formatModeRuangan(selectedModel.modeRuangan)}</span>
           )}
