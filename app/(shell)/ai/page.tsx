@@ -6,6 +6,7 @@ import { getAiCopilotContextAction, type AiCopilotClassStatus, type AiCopilotCon
 import { Card, Badge, EmptyState, ErrorState } from "@/components/ui/primitives";
 import RecommendationFlow from "@/components/ai/RecommendationFlow";
 import { IntelligenceCore, IntelligencePerimeter, type IntelligenceState } from "@/components/ai/IntelligenceCore";
+import { findClosestMatch } from "@/lib/domain/fuzzyMatch";
 
 function classStatusTone(remainingJp: number, belumSiapJp: number): "success" | "warning" | "danger" {
   if (remainingJp === 0) return "success";
@@ -27,6 +28,18 @@ function searchClasses(query: string, classes: AiCopilotClassStatus[]): AiCopilo
   if (wantsKurang) return classes.filter((c) => c.remainingJp > 0).sort((a, b) => b.remainingJp - a.remainingJp);
   if (wantsSesuai) return classes.filter((c) => c.remainingJp === 0);
   return classes.filter((c) => c.label.toLowerCase().includes(q) || c.subjectDeficits.some((d) => d.subjectName.toLowerCase().includes(q)));
+}
+
+// §35/§36 — kalau pencarian kosong hasil DAN bukan query pola khusus (kurang/
+// sesuai), coba tawarkan koreksi ("Maksud Anda X?") daripada diam menampilkan
+// "belum menemukan". Threshold ketat (lib/domain/fuzzyMatch) supaya tidak
+// asal menyarankan sesuatu yang sebenarnya tidak mirip.
+function searchSuggestion(query: string, classes: AiCopilotClassStatus[]): string | null {
+  const q = query.trim().toLowerCase();
+  if (!q || q.includes("kurang") || /sesuai|cukup|lengkap|terpenuhi/.test(q)) return null;
+  const classNames = classes.map((c) => c.label);
+  const subjectNames = [...new Set(classes.flatMap((c) => c.subjectDeficits.map((d) => d.subjectName)))];
+  return findClosestMatch(query, [...classNames, ...subjectNames]);
 }
 
 function ClassCard({ status, onSelect }: { status: AiCopilotClassStatus; onSelect: () => void }) {
@@ -71,6 +84,10 @@ export default function AiPage() {
 
   const selectedClass = context?.classes.find((c) => c.id === selectedClassId) ?? null;
   const searchResults = useMemo(() => searchClasses(searchQuery, context?.classes ?? []), [searchQuery, context]);
+  const suggestion = useMemo(
+    () => (searchResults.length === 0 ? searchSuggestion(searchQuery, context?.classes ?? []) : null),
+    [searchQuery, searchResults, context]
+  );
 
   useEffect(() => {
     const root = analysisRef.current;
@@ -165,6 +182,11 @@ export default function AiPage() {
               {searchQuery.trim() ? (
                 <div className="max-w-2xl space-y-1.5">
                   <p className="text-[11.5px] text-ink-500">{searchResults.length ? `Saya menemukan ${searchResults.length} kelas.` : "Saya belum menemukan kelas yang cocok dengan itu."}</p>
+                  {searchResults.length === 0 && suggestion && (
+                    <button type="button" onClick={() => setSearchQuery(suggestion)} className="flex items-center gap-1.5 rounded-full border border-violet/25 bg-violet-50/40 px-3 py-1.5 text-[11.5px] font-medium text-violet hover:bg-violet-50">
+                      Maksud Anda <strong>"{suggestion}"</strong>?
+                    </button>
+                  )}
                   {searchResults.map((c) => <button key={c.id} type="button" onClick={() => selectClass(c.id)} className="flex w-full items-center justify-between gap-3 rounded-xl border border-border bg-surface px-3 py-2.5 text-left hover:border-violet/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet/35"><span className="flex items-center gap-2.5"><span className="text-[13px] font-semibold text-ink-900">{c.label}</span><Badge tone={classStatusTone(c.remainingJp, c.belumSiapJp)}>{classStatusLabel(c.remainingJp, c.belumSiapJp)}</Badge></span><span className="text-[10.5px] font-semibold text-violet">Tinjau →</span></button>)}
                 </div>
               ) : <div className="grid max-w-4xl gap-2.5 sm:grid-cols-2 lg:grid-cols-3">{context.classes.map((c) => <ClassCard key={c.id} status={c} onSelect={() => selectClass(c.id)} />)}</div>}
