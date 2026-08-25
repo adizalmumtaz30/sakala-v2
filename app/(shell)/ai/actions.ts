@@ -12,6 +12,7 @@ import { getTargetJpView } from "@/lib/application/targetJp.usecases";
 import { listGuru } from "@/lib/application/guru.usecases";
 import { getSchoolProfile } from "@/lib/application/schoolProfile.usecases";
 import { formatContextLabel } from "@/lib/domain/academicContext";
+import type { AiAction, AiActionOutcome } from "@/lib/domain/aiAction";
 
 export type AiActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -297,4 +298,28 @@ export async function commitAiCandidatesAction(
   changeSummary: string | null
 ): Promise<AiActionResult<{ versionId: string; conflictsByAssignment: Record<string, import("@/lib/domain/conflict").ScheduleConflict[]> }>> {
   return commitAssignmentsAction(academicContextId, assignmentIds, label, changeSummary);
+}
+
+// AI Action Contract — dispatcher untuk dialog persetujuan multi-aksi.
+// Menjalankan satu AiAction lewat fungsi yang SUDAH ada (tetapkanGuruAction /
+// kurangiJpAction) — bukan implementasi baru, supaya read-back verification
+// dan audit trail yang sudah dibangun di masing-masing fungsi tetap berlaku
+// tanpa duplikasi. Dijalankan berurutan (bukan Promise.all) supaya satu aksi
+// gagal tidak membuat status aksi lain jadi tidak pasti.
+export async function executeAiActionBatchAction(actions: AiAction[]): Promise<AiActionOutcome[]> {
+  const outcomes: AiActionOutcome[] = [];
+  for (const action of actions) {
+    try {
+      if (action.payload.kind === "tetapkan_guru") {
+        const result = await tetapkanGuruAction(action.payload.kelasId, action.payload.subjectId, action.payload.guruId, action.payload.jpPerMinggu);
+        outcomes.push(result.ok ? { actionId: action.actionId, status: "success", message: `${action.proposedValue} — tersimpan.` } : { actionId: action.actionId, status: "failed", message: result.error });
+      } else {
+        const result = await kurangiJpAction(action.payload.assignmentId);
+        outcomes.push(result.ok ? { actionId: action.actionId, status: "success", message: `${action.proposedValue} — ${result.data.archived ? "diarsipkan" : "dihapus"}.` } : { actionId: action.actionId, status: "failed", message: result.error });
+      }
+    } catch (err) {
+      outcomes.push({ actionId: action.actionId, status: "failed", message: err instanceof Error ? err.message : "Aksi gagal dieksekusi." });
+    }
+  }
+  return outcomes;
 }

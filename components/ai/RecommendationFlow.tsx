@@ -30,8 +30,10 @@ import { useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { runAiCopilotIntentAction, planScheduleAction, saveAiCandidatesAction, rollbackAiCandidatesAction, kurangiJpAction, tetapkanGuruAction, type AiCopilotClassStatus, type AiCopilotIntent } from "@/app/(shell)/ai/actions";
 import type { AiSchedulePlan } from "@/lib/application/aiSchedulePlanner";
+import type { AiAction } from "@/lib/domain/aiAction";
+import MultiActionApprovalDialog from "@/components/ai/MultiActionApprovalDialog";
 import Button from "@/components/ui/Button";
-import { Sparkles, ArrowRight, CheckCircle2, Circle, X, Lightbulb, HelpCircle, Target, BookOpen, CalendarDays, GraduationCap, Pencil, AlertTriangle } from "lucide-react";
+import { Sparkles, ArrowRight, CheckCircle2, Circle, X, Lightbulb, HelpCircle, Target, BookOpen, CalendarDays, GraduationCap, Pencil, AlertTriangle, ListChecks } from "lucide-react";
 
 type FlowStep = "finding" | "solution" | "preview" | "done";
 const STAGE_ORDER: FlowStep[] = ["finding", "solution", "preview", "done"];
@@ -80,6 +82,17 @@ function Stage({ status, title, isLast, onReopen, children }: { status: "done" |
       {children}
     </div>
   </div>;
+}
+
+// AI Action Contract — pintu masuk dialog persetujuan multi-aksi. Cuma
+// muncul kalau benar-benar ada >1 aksi (beda destination atau tidak) —
+// kalau cuma satu, tombol inline yang sudah ada di alert masing-masing
+// sudah cukup, dialog jadi langkah ekstra yang tidak perlu.
+function MultiActionTrigger({ count, onOpen }: { count: number; onOpen: () => void }) {
+  return <button type="button" onClick={onOpen} className="sakala-stage-enter flex w-full items-center justify-between gap-3 rounded-xl border border-violet/30 bg-violet-50/40 px-4 py-3 text-left hover:bg-violet-50/70">
+    <span className="flex items-center gap-2.5"><ListChecks className="h-4 w-4 shrink-0 text-violet" /><span className="text-[12.5px] font-semibold text-ink-900">{count} aksi bisa ditinjau &amp; disetujui sekaligus</span></span>
+    <span className="shrink-0 text-[11.5px] font-semibold text-violet">Tinjau semua →</span>
+  </button>;
 }
 
 function ExcessAlert({ excess, onKurangi, isPending, pendingId, error }: {
@@ -244,13 +257,53 @@ export default function RecommendationFlow({
   const readyToSchedule = deficits.filter((d) => d.belumTerjadwalJp > 0);
   const topDeficit = readyToSchedule[0];
 
+  // AI Action Contract — antrean aksi terstruktur, dibangun dari data yang
+  // sama dipakai MissingTeacherAlert/ExcessAlert (satu sumber kebenaran).
+  // Cuma diusulkan kalau AI punya evidence nyata (guru yang sudah mengajar
+  // mapel ini, atau slot jadwal yang benar-benar kelebihan) — tidak mengarang.
+  const pendingActions: AiAction[] = [
+    ...missingTeacher.flatMap((d) => d.suggestedTeachers.slice(0, 1).map((t) => ({
+      actionId: `tetapkan_guru:${d.subjectId}:${t.id}`,
+      type: "tetapkan_guru" as const,
+      source: "ai" as const,
+      context: classStatus.label,
+      targetEntity: "pembagian_mengajar" as const,
+      targetRecordId: null,
+      destination: "Pembagian Mengajar",
+      currentValue: "Belum ada guru",
+      proposedValue: `Tetapkan ${t.name} — ${d.belumSiapJp} JP ${d.subjectName}`,
+      reason: `${d.subjectName} butuh ${d.belumSiapJp} JP guru; belum bisa dijadwalkan sampai ini ditentukan.`,
+      evidence: `${t.name} sudah mengajar ${d.subjectName} di kelas lain.`,
+      riskLevel: "rendah" as const,
+      payload: { kind: "tetapkan_guru" as const, kelasId: classStatus.id, subjectId: d.subjectId, guruId: t.id, jpPerMinggu: d.belumSiapJp },
+    }))),
+    ...excess.flatMap((e) => e.schedules.map((s) => ({
+      actionId: `kurangi_jp:${s.id}`,
+      type: "kurangi_jp" as const,
+      source: "ai" as const,
+      context: classStatus.label,
+      targetEntity: "jadwal" as const,
+      targetRecordId: s.id,
+      destination: "Jadwal",
+      currentValue: `${e.subjectName} · ${s.day.charAt(0).toUpperCase() + s.day.slice(1)} JP ${s.periodStart}${s.periodEnd !== s.periodStart ? `–${s.periodEnd}` : ""}`,
+      proposedValue: `Kosongkan slot ${e.subjectName}`,
+      reason: `${e.subjectName} terjadwal ${e.scheduledJp} JP, target resmi cuma ${e.targetJp} JP.`,
+      evidence: `Kelebihan ${e.excessJp} JP dari Target JP resmi.`,
+      riskLevel: "sedang" as const,
+      payload: { kind: "kurangi_jp" as const, assignmentId: s.id },
+    }))),
+  ];
+  const [approvalOpen, setApprovalOpen] = useState(false);
+
   // Kalau SEMUA kekurangan cuma soal guru belum ditentukan, planner tidak bisa
   // berbuat apa-apa — jangan tampilkan thread Temuan->Solusi->Preview->Diterapkan
   // yang kosong/tidak relevan. Cukup alert Tetapkan Guru (dan Excess kalau ada).
   if (readyToSchedule.length === 0) {
     return <div className="space-y-4">
+      {pendingActions.length > 1 && <MultiActionTrigger count={pendingActions.length} onOpen={() => setApprovalOpen(true)} />}
       {missingTeacher.length > 0 && <MissingTeacherAlert subjects={missingTeacher} onTetapkan={tetapkanGuru} isPending={tetapkanPending !== null} pendingKey={tetapkanPending} error={tetapkanError} />}
       {excess.length > 0 && <ExcessAlert excess={excess} onKurangi={kurangi} isPending={isPending} pendingId={kurangiPendingId} error={kurangiError} />}
+      {approvalOpen && <MultiActionApprovalDialog actions={pendingActions} onClose={() => setApprovalOpen(false)} onDone={onCandidatesSaved} />}
     </div>;
   }
 
@@ -333,8 +386,10 @@ export default function RecommendationFlow({
   const sisaDeficit = deficits.filter((d) => !plan?.interpretedTargets?.some((t) => t.subjectId === d.subjectId));
 
   return <div className="space-y-4">
+    {pendingActions.length > 1 && <MultiActionTrigger count={pendingActions.length} onOpen={() => setApprovalOpen(true)} />}
     {missingTeacher.length > 0 && <MissingTeacherAlert subjects={missingTeacher} onTetapkan={tetapkanGuru} isPending={tetapkanPending !== null} pendingKey={tetapkanPending} error={tetapkanError} />}
     {excess.length > 0 && <ExcessAlert excess={excess} onKurangi={kurangi} isPending={isPending} pendingId={kurangiPendingId} error={kurangiError} />}
+    {approvalOpen && <MultiActionApprovalDialog actions={pendingActions} onClose={() => setApprovalOpen(false)} onDone={onCandidatesSaved} />}
     <div className="space-y-0">
     {/* ── Tahap 1: Temuan (§08-10) ── */}
     <Stage status={stageStatus("finding")} title={STAGE_TITLE.finding} isLast={false} onReopen={step !== "finding" ? batal : undefined}>
