@@ -17,6 +17,7 @@ import { Card, EmptyState } from "@/components/ui/primitives";
 import Avatar from "@/components/ui/Avatar";
 import { teacherColor } from "@/lib/utils/teacherColor";
 import { mapelColor } from "@/lib/utils/mapelColor";
+import MapelLegend from "@/components/jadwal/MapelLegend";
 
 // Bagian 9 — "Teacher-focused Schedule View", data sama dengan Jadwal Utama
 // (buildJadwalGrid dipakai persis sama, tanpa modifikasi) tapi presentasi
@@ -203,6 +204,8 @@ export default function TeacherJadwalView({
           </div>
         )}
       </Card>
+
+      <MapelLegend subjectIds={assignments.map((a) => a.subjectId)} mapelMap={mapelMap} colorMap={mapelColorMap} />
 
       <p className="text-center text-[12px] text-ink-400">
         Tampilan ini hanya menampilkan jadwal committed dan bersifat lihat-saja. Untuk mengubah jadwal, gunakan halaman Jadwal.

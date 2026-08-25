@@ -27,6 +27,7 @@ import Input from "@/components/ui/Input";
 import Modal from "@/components/ui/Modal";
 import { Badge, EmptyState } from "@/components/ui/primitives";
 import DataJadwalMenu from "@/components/jadwal/DataJadwalMenu";
+import MapelLegend from "@/components/jadwal/MapelLegend";
 
 const ACTIVITY_OPTIONS: JenisSlot[] = ["belajar_mengajar", "upacara", "religi", "istirahat", "libur", "custom"];
 
@@ -167,6 +168,24 @@ export default function JadwalWorkspace({
     () => buildJadwalGrid({ days: gridDays, jamPelajaranList, slotTemplates, assignments: scopedAssignments }),
     [gridDays, jamPelajaranList, slotTemplates, scopedAssignments]
   );
+
+  // Indikator visual "ada kandidat pending" per sel — TIDAK mengganti kartu committed
+  // yang tampil (grid tetap sumber kebenaran committed), cuma ring dashed ungu sbg sinyal
+  // supaya operator tahu ada perubahan yang menunggu review di jam itu (per entity+model aktif).
+  const candidateCellKeys = useMemo(() => {
+    const set = new Set<string>();
+    assignments
+      .filter(
+        (a) =>
+          a.status === "candidate" &&
+          a.scheduleModelId === selectedModelId &&
+          (viewBy === "kelas" ? a.classId === activeEntityId : viewBy === "guru" ? a.teacherId === activeEntityId : a.roomId === activeEntityId)
+      )
+      .forEach((a) => {
+        for (let p = a.periodStart; p <= a.periodEnd; p += 1) set.add(cellKey(a.day, p));
+      });
+    return set;
+  }, [assignments, selectedModelId, viewBy, activeEntityId]);
 
   const cellsByKey = useMemo(() => {
     const map = new Map<string, GridCell>();
@@ -664,6 +683,7 @@ export default function JadwalWorkspace({
                             mapelLabel={cell.assignment ? mapelMap.get(cell.assignment.subjectId) : undefined}
                             ruanganLabel={cell.assignment?.roomId ? ruanganMap.get(cell.assignment.roomId) : undefined}
                             cardColor={cell.assignment ? mapelColorMap.get(cell.assignment.subjectId) : undefined}
+                            hasPendingCandidate={candidateCellKeys.has(cellKey(d, row.nomorUrut))}
                           />
                         </td>
                       );
@@ -675,6 +695,12 @@ export default function JadwalWorkspace({
           </table>
         </div>
       )}
+
+      <MapelLegend
+        subjectIds={scopedAssignments.map((a) => a.subjectId)}
+        mapelMap={mapelMap}
+        colorMap={mapelColorMap}
+      />
 
       {/* --- Add Schedule Modal (Bagian 26) --- */}
       <Modal open={!!addTarget} onClose={closeAdd} title="Tambah Jadwal">
@@ -984,6 +1010,7 @@ function JadwalCell({
   mapelLabel,
   ruanganLabel,
   cardColor,
+  hasPendingCandidate,
 }: {
   cell: GridCell;
   onClick: () => void;
@@ -991,6 +1018,7 @@ function JadwalCell({
   mapelLabel?: string;
   ruanganLabel?: string;
   cardColor?: { tint: string; accent: string; text: string };
+  hasPendingCandidate?: boolean;
 }) {
   if (cell.state === "empty") {
     if (!cell.jamPelajaran) {
@@ -1000,9 +1028,19 @@ function JadwalCell({
       return (
         <button
           onClick={onClick}
-          className="flex h-16 w-full items-center justify-center gap-1 rounded-xl border border-dashed border-border text-[11.5px] text-ink-400 transition-colors hover:border-brand-600/40 hover:bg-brand-50 hover:text-brand-700"
+          className={`relative flex h-16 w-full items-center justify-center gap-1 rounded-xl border border-dashed text-[11.5px] transition-colors ${
+            hasPendingCandidate
+              ? "border-violet bg-violet-50/40 text-violet hover:bg-violet-50"
+              : "border-border text-ink-400 hover:border-brand-600/40 hover:bg-brand-50 hover:text-brand-700"
+          }`}
         >
-          <Plus size={13} /> Tambah Jadwal
+          {hasPendingCandidate ? (
+            <span className="text-[10px] font-semibold">Ada kandidat</span>
+          ) : (
+            <>
+              <Plus size={13} /> Tambah Jadwal
+            </>
+          )}
         </button>
       );
     }
@@ -1032,14 +1070,17 @@ function JadwalCell({
     <button
       onClick={onClick}
       style={style}
-      className={`flex min-h-16 w-full flex-col justify-center gap-0.5 rounded-xl border px-2 py-1.5 text-left text-[11.5px] transition-colors ${
+      className={`relative flex min-h-16 w-full flex-col justify-center gap-0.5 rounded-xl border px-2 py-1.5 text-left text-[11.5px] transition-colors ${
         isConflict
           ? "border-rose bg-rose-50 hover:bg-rose-50/70"
           : cardColor
             ? "hover:brightness-95"
             : "border-brand-600/20 bg-brand-50 hover:bg-brand-50/70"
-      }`}
+      } ${hasPendingCandidate ? "ring-2 ring-dashed ring-violet ring-offset-1" : ""}`}
     >
+      {hasPendingCandidate && (
+        <span className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-violet text-[8px] font-bold text-white" title="Ada kandidat perubahan menunggu review">!</span>
+      )}
       <span className="break-words font-semibold leading-snug text-ink-900">{mapelLabel ?? "-"}</span>
       <span
         className="break-words leading-snug text-ink-600"
