@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Plus, X, Trash2, Copy, Pencil, Eye, AlertTriangle, CheckCircle2, Info, CalendarClock, User, Users, DoorOpen } from "lucide-react";
+import type { ReactNode } from "react";
+import { Plus, X, Trash2, Copy, Pencil, Eye, AlertTriangle, CheckCircle2, Info, CalendarClock, User, Users, DoorOpen, CalendarDays, Clock3, LayoutGrid, GitBranch, Sparkles } from "lucide-react";
+import Link from "next/link";
+import { scanCommittedConflicts } from "@/lib/application/conflictEngine";
 import type { AcademicContext } from "@/lib/domain/academicContext";
 import { formatContextLabel } from "@/lib/domain/academicContext";
 import type { ScheduleModel } from "@/lib/domain/scheduleModel";
@@ -140,6 +143,25 @@ export default function JadwalWorkspace({
   );
 
   const slotTemplates = selectedModelId ? slotTemplatesByModel[selectedModelId] ?? [] : [];
+
+  // Baris 5 KPI stat toolbar — model-wide (bukan per-entity spt scopedAssignments di atas).
+  const modelWideCommitted = useMemo(
+    () => assignments.filter((a) => a.status === "committed" && a.scheduleModelId === selectedModelId),
+    [assignments, selectedModelId]
+  );
+  const modelWideCandidateCount = useMemo(
+    () => assignments.filter((a) => a.status === "candidate" && a.scheduleModelId === selectedModelId).length,
+    [assignments, selectedModelId]
+  );
+  const totalJpTerjadwal = useMemo(
+    () => modelWideCommitted.reduce((sum, a) => sum + (a.periodEnd - a.periodStart + 1), 0),
+    [modelWideCommitted]
+  );
+  const totalSlotPembelajaran = useMemo(
+    () => slotTemplates.filter((s) => s.jenisSlot === "belajar_mengajar").length,
+    [slotTemplates]
+  );
+  const conflictCount = useMemo(() => scanCommittedConflicts(modelWideCommitted).length, [modelWideCommitted]);
 
   const grid = useMemo(
     () => buildJadwalGrid({ days: gridDays, jamPelajaranList, slotTemplates, assignments: scopedAssignments }),
@@ -445,6 +467,29 @@ export default function JadwalWorkspace({
         <h1 className="text-[20px] font-semibold text-ink-900">Jadwal</h1>
         <p className="text-[13px] text-ink-500">Jadwal operasional/committed — Per Kelas, Per Guru, Per Ruangan, Harian, Mingguan.</p>
       </div>
+
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
+        <JadwalStatCard icon={<CalendarDays size={16} />} value={modelWideCommitted.length} label="Jadwal" tone="brand" />
+        <JadwalStatCard icon={<Clock3 size={16} />} value={totalJpTerjadwal} label="JP Terjadwal" tone="violet" />
+        <JadwalStatCard icon={<LayoutGrid size={16} />} value={totalSlotPembelajaran} label="Slot Pembelajaran" tone="emerald" />
+        <JadwalStatCard icon={<AlertTriangle size={16} />} value={conflictCount} label="Conflict" tone={conflictCount > 0 ? "rose" : "neutral"} />
+        <JadwalStatCard icon={<GitBranch size={16} />} value={modelWideCandidateCount} label="Kandidat" tone={modelWideCandidateCount > 0 ? "amber" : "neutral"} />
+      </div>
+
+      {modelWideCandidateCount > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-violet-50 bg-violet-50/60 px-4 py-3">
+          <div className="flex items-center gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet"><Sparkles size={16} /></span>
+            <div>
+              <p className="text-[12.5px] font-semibold text-ink-900">Ada {modelWideCandidateCount} kandidat jadwal yang belum diterapkan.</p>
+              <p className="text-[11px] text-ink-500">Tinjau perubahan sebelum masuk ke jadwal operasional.</p>
+            </div>
+          </div>
+          <Link href="/jadwal-cerdas" className="shrink-0 rounded-xl bg-violet px-3.5 py-2 text-[12.5px] font-semibold text-white hover:brightness-95">
+            Tinjau Kandidat ({modelWideCandidateCount})
+          </Link>
+        </div>
+      )}
 
       {toast && (
         <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-[12.5px] text-emerald">
@@ -906,6 +951,28 @@ function ConflictList({ conflicts }: { conflicts: ScheduleConflict[] }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+const STAT_TONE: Record<"brand" | "violet" | "emerald" | "rose" | "amber" | "neutral", { bg: string; text: string }> = {
+  brand: { bg: "bg-brand-50", text: "text-brand-600" },
+  violet: { bg: "bg-violet-50", text: "text-violet-600" },
+  emerald: { bg: "bg-emerald-50", text: "text-emerald" },
+  rose: { bg: "bg-rose-50", text: "text-rose" },
+  amber: { bg: "bg-amber-50", text: "text-amber" },
+  neutral: { bg: "bg-surface-muted", text: "text-ink-400" },
+};
+
+function JadwalStatCard({ icon, value, label, tone }: { icon: ReactNode; value: number; label: string; tone: keyof typeof STAT_TONE }) {
+  const t = STAT_TONE[tone];
+  return (
+    <div className="flex items-center gap-2.5 rounded-2xl border border-border/70 bg-surface px-3.5 py-3">
+      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${t.bg} ${t.text}`}>{icon}</span>
+      <div className="min-w-0">
+        <p className="text-[17px] font-bold leading-none tabular-nums text-ink-900">{value}</p>
+        <p className="mt-1 truncate text-[10.5px] font-medium text-ink-500">{label}</p>
+      </div>
     </div>
   );
 }
