@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { CurriculumInstitution } from "@/lib/domain/curriculumIntelligence";
 import { recordAuditEvent } from "@/lib/application/auditLog.usecases";
+import { toPlainDatabaseError } from "@/lib/utils/databaseError";
 
 export type CurriculumActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -30,7 +31,7 @@ export async function getCurriculumDraftAction(academicContextId: string): Promi
     .select("curriculum_version_id,level,class_ids,candidate,baseline,updated_at")
     .eq("academic_context_id", academicContextId)
     .maybeSingle();
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: toPlainDatabaseError(error) };
   if (!data) return { ok: true, data: null };
   return {
     ok: true,
@@ -67,7 +68,7 @@ export async function saveCurriculumDraftAction(input: {
     },
     { onConflict: "academic_context_id" }
   );
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: toPlainDatabaseError(error) };
   return { ok: true, data: null };
 }
 
@@ -75,7 +76,7 @@ export async function clearCurriculumDraftAction(academicContextId: string): Pro
   if (!academicContextId) return { ok: true, data: null };
   const supabase = await createClient();
   const { error } = await supabase.from("curriculum_generate_draft").delete().eq("academic_context_id", academicContextId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: toPlainDatabaseError(error) };
   return { ok: true, data: null };
 }
 
@@ -88,7 +89,7 @@ export async function clearCurriculumDraftAction(academicContextId: string): Pro
 export async function deleteCurriculumSourceAction(sourceId: string): Promise<CurriculumActionResult<null>> {
   const supabase = await createClient();
   const { data: versions, error: vErr } = await supabase.from("curriculum_version").select("id").eq("source_id", sourceId);
-  if (vErr) return { ok: false, error: vErr.message };
+  if (vErr) return { ok: false, error: toPlainDatabaseError(vErr) };
   const versionIds = (versions ?? []).map((v: { id: string }) => v.id);
   if (versionIds.length) {
     const { error: delVErr } = await supabase.from("curriculum_version").delete().in("id", versionIds);
@@ -184,7 +185,7 @@ export async function saveExtractedCurriculumSourceAction(input: {
     })
     .select("id")
     .single();
-  if (sourceError) return { ok: false, error: sourceError.message };
+  if (sourceError) return { ok: false, error: toPlainDatabaseError(sourceError) };
 
   const { data: version, error: versionError } = await supabase
     .from("curriculum_version")
@@ -198,7 +199,7 @@ export async function saveExtractedCurriculumSourceAction(input: {
     })
     .select("id")
     .single();
-  if (versionError) return { ok: false, error: versionError.message };
+  if (versionError) return { ok: false, error: toPlainDatabaseError(versionError) };
 
   const itemRows = input.rows.map((row) => ({
     curriculum_version_id: version.id,
@@ -213,7 +214,7 @@ export async function saveExtractedCurriculumSourceAction(input: {
     extraction_status: "unverified" as const,
   }));
   const { error: itemError } = await supabase.from("curriculum_item").insert(itemRows);
-  if (itemError) return { ok: false, error: itemError.message };
+  if (itemError) return { ok: false, error: toPlainDatabaseError(itemError) };
 
   revalidatePath("/akademik/generate-kurikulum");
   return { ok: true, data: { versionId: version.id } };
@@ -225,16 +226,16 @@ export async function saveExtractedCurriculumSourceAction(input: {
 export async function promoteCurriculumSourceToOfficialAction(sourceId: string): Promise<CurriculumActionResult<null>> {
   const supabase = await createClient();
   const { error: sourceError } = await supabase.from("curriculum_source").update({ source_tier: 1, status: "official", last_verified_at: new Date().toISOString() }).eq("id", sourceId);
-  if (sourceError) return { ok: false, error: sourceError.message };
+  if (sourceError) return { ok: false, error: toPlainDatabaseError(sourceError) };
 
   const { data: versions, error: vErr } = await supabase.from("curriculum_version").select("id").eq("source_id", sourceId);
-  if (vErr) return { ok: false, error: vErr.message };
+  if (vErr) return { ok: false, error: toPlainDatabaseError(vErr) };
   const versionIds = (versions ?? []).map((v: { id: string }) => v.id);
   if (versionIds.length) {
     const { error: updVErr } = await supabase.from("curriculum_version").update({ verification_status: "verified", effective_status: "berlaku", verified_at: new Date().toISOString() }).in("id", versionIds);
-    if (updVErr) return { ok: false, error: updVErr.message };
+    if (updVErr) return { ok: false, error: toPlainDatabaseError(updVErr) };
     const { error: updIErr } = await supabase.from("curriculum_item").update({ extraction_status: "verified" }).in("curriculum_version_id", versionIds);
-    if (updIErr) return { ok: false, error: updIErr.message };
+    if (updIErr) return { ok: false, error: toPlainDatabaseError(updIErr) };
   }
   revalidatePath("/akademik/generate-kurikulum");
   return { ok: true, data: null };
@@ -247,7 +248,7 @@ export async function getActiveAcademicContextAction() {
     .select("id,tahun_pelajaran,semester,is_active")
     .order("is_active", { ascending: false })
     .order("tahun_pelajaran", { ascending: false });
-  if (contextError) return { ok: false as const, error: contextError.message };
+  if (contextError) return { ok: false as const, error: toPlainDatabaseError(contextError) };
 
   const active = (contexts ?? []).find((context) => context.is_active) ?? null;
   if (!active) return { ok: true as const, data: { contexts: contexts ?? [], classes: [] } };
@@ -259,7 +260,7 @@ export async function getActiveAcademicContextAction() {
     .eq("semester", active.semester)
     .order("tingkat")
     .order("nama_rombel");
-  if (classError) return { ok: false as const, error: classError.message };
+  if (classError) return { ok: false as const, error: toPlainDatabaseError(classError) };
 
   return { ok: true as const, data: { contexts: contexts ?? [], classes: classes ?? [] } };
 }
@@ -269,20 +270,20 @@ export async function listCurriculumIntelligenceAction(institution: CurriculumIn
   let sourceQuery = supabase.from("curriculum_source").select("*").order("source_tier").order("name");
   if (institution !== "all") sourceQuery = sourceQuery.eq("institution", institution);
   const { data: sources, error: sourceError } = await sourceQuery;
-  if (sourceError) return { ok: false as const, error: sourceError.message };
+  if (sourceError) return { ok: false as const, error: toPlainDatabaseError(sourceError) };
 
   const { data: versions, error: versionError } = await supabase
     .from("curriculum_version")
     .select("*")
     .order("retrieved_at", { ascending: false });
-  if (versionError) return { ok: false as const, error: versionError.message };
+  if (versionError) return { ok: false as const, error: toPlainDatabaseError(versionError) };
 
   const { data: items, error: itemError } = await supabase
     .from("curriculum_item")
     .select("*")
     .order("class_level")
     .order("subject_name");
-  if (itemError) return { ok: false as const, error: itemError.message };
+  if (itemError) return { ok: false as const, error: toPlainDatabaseError(itemError) };
 
   return { ok: true as const, data: { sources: sources ?? [], versions: versions ?? [], items: items ?? [] } };
 }
@@ -310,7 +311,7 @@ export async function adoptCurriculumItemsAction(input: {
     .from("curriculum_item")
     .select("id,subject_name,subject_code,class_level,weekly_target,derivation_status,curriculum_version_id")
     .in("id", selectedIds);
-  if (itemError) return { ok: false, error: itemError.message };
+  if (itemError) return { ok: false, error: toPlainDatabaseError(itemError) };
   if (!sourceItems?.length || sourceItems.length !== selectedIds.length) {
     return { ok: false, error: "Satu atau lebih item kurikulum tidak ditemukan. Silakan generate ulang dari sumber resmi." };
   }
@@ -320,7 +321,7 @@ export async function adoptCurriculumItemsAction(input: {
     .from("curriculum_version")
     .select("id,source_id,verification_status,effective_status")
     .in("id", versionIds);
-  if (versionError) return { ok: false, error: versionError.message };
+  if (versionError) return { ok: false, error: toPlainDatabaseError(versionError) };
   if (!versions?.length || versions.length !== versionIds.length) {
     return { ok: false, error: "Versi kurikulum sumber tidak ditemukan. Operasi diblokir." };
   }
@@ -335,7 +336,7 @@ export async function adoptCurriculumItemsAction(input: {
     .from("curriculum_source")
     .select("id,source_tier,status")
     .in("id", sourceIds);
-  if (sourceError) return { ok: false, error: sourceError.message };
+  if (sourceError) return { ok: false, error: toPlainDatabaseError(sourceError) };
   if (!sources?.length || sources.length !== sourceIds.length) {
     return { ok: false, error: "Source provenance tidak ditemukan. Operasi diblokir." };
   }
@@ -355,7 +356,7 @@ export async function adoptCurriculumItemsAction(input: {
     .from("kelas")
     .select("id,tingkat,nama_rombel")
     .in("id", input.classIds);
-  if (classError) return { ok: false, error: classError.message };
+  if (classError) return { ok: false, error: toPlainDatabaseError(classError) };
   if (!classes?.length || classes.length !== input.classIds.length) {
     return { ok: false, error: "Satu atau lebih kelas yang dipilih tidak ditemukan." };
   }
@@ -385,7 +386,7 @@ export async function adoptCurriculumItemsAction(input: {
         .select("id,nama,kode")
         .eq("nama", item.subject_name)
         .maybeSingle();
-      if (subjectLookupError) return { ok: false, error: subjectLookupError.message };
+      if (subjectLookupError) return { ok: false, error: toPlainDatabaseError(subjectLookupError) };
 
       let subjectId = existingSubject?.id;
       if (!subjectId) {
@@ -394,7 +395,7 @@ export async function adoptCurriculumItemsAction(input: {
           .insert({ nama: item.subject_name, kode: item.subject_code, status: "aktif" })
           .select("id")
           .single();
-        if (subjectError) return { ok: false, error: subjectError.message };
+        if (subjectError) return { ok: false, error: toPlainDatabaseError(subjectError) };
         subjectId = createdSubject.id;
       }
 
@@ -420,7 +421,7 @@ export async function adoptCurriculumItemsAction(input: {
   const { error: adoptionError } = await supabase.from("curriculum_adoption").upsert(rows, {
     onConflict: "academic_context_id,kelas_id,mata_pelajaran_id,curriculum_item_id",
   });
-  if (adoptionError) return { ok: false, error: adoptionError.message };
+  if (adoptionError) return { ok: false, error: toPlainDatabaseError(adoptionError) };
 
   const targetRows = rows
     .filter((row) => typeof row.school_target_jp === "number")
@@ -447,7 +448,7 @@ export async function adoptCurriculumItemsAction(input: {
     const { error: targetError } = await supabase.from("target_jp").upsert(targetRows, {
       onConflict: "academic_context_id,kelas_id,mata_pelajaran_id",
     });
-    if (targetError) return { ok: false, error: targetError.message };
+    if (targetError) return { ok: false, error: toPlainDatabaseError(targetError) };
 
     // SAKALA MASTER RULE (Read-Back): target_jp adalah authority resmi yang
     // dipakai di seluruh app (halaman Target JP, SAKALA AI, Analitik) — tidak
@@ -526,7 +527,7 @@ export async function getPreviouslyAdoptedSubjectsAction(academicContextId: stri
     .from("curriculum_adoption")
     .select("curriculum_item:curriculum_item_id(subject_name,class_level)")
     .eq("academic_context_id", academicContextId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: toPlainDatabaseError(error) };
   const seen = new Set<string>();
   const result: { subjectName: string; classLevel: string }[] = [];
   for (const row of data ?? []) {
