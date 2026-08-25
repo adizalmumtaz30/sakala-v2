@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { Check, ChevronDown, Search, X } from "lucide-react";
+import { Check, ChevronDown, Search, X, CalendarClock, UserRoundX, TriangleAlert } from "lucide-react";
 import { getAiCopilotContextAction, type AiCopilotClassStatus, type AiCopilotContext } from "./actions";
 import { Card, Badge, EmptyState, ErrorState } from "@/components/ui/primitives";
 import RecommendationFlow from "@/components/ai/RecommendationFlow";
@@ -211,9 +211,21 @@ export default function AiPage() {
             {summary && <section>
               <p className="mb-3 text-[9.5px] font-bold uppercase tracking-[.14em] text-ink-400">RINGKASAN INTELLIGENCE</p>
               <div className="grid gap-3 sm:grid-cols-3">
-                <div className="border-l-2 border-violet/45 pl-3"><p className="text-[28px] font-light leading-none tabular-nums text-ink-900">{summary.remaining}</p><p className="mt-1 text-[11px] text-ink-500">JP belum terjadwal</p></div>
-                <div className="border-l-2 border-amber/45 pl-3"><p className="text-[28px] font-light leading-none tabular-nums text-ink-900">{summary.missingTeacher}</p><p className="mt-1 text-[11px] text-ink-500">JP belum memiliki guru</p></div>
-                <div className="border-l-2 border-rose/40 pl-3"><p className="text-[28px] font-light leading-none tabular-nums text-ink-900">{summary.conflicts}</p><p className="mt-1 text-[11px] text-ink-500">temuan kelebihan JP</p></div>
+                <div className="rounded-xl border border-border bg-surface p-3.5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-50 text-violet"><CalendarClock size={15} /></div>
+                  <p className="mt-2.5 text-[24px] font-light leading-none tabular-nums text-ink-900">{summary.remaining}</p>
+                  <p className="mt-1 text-[11px] text-ink-500">JP belum terjadwal</p>
+                </div>
+                <div className="rounded-xl border border-border bg-surface p-3.5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber"><UserRoundX size={15} /></div>
+                  <p className="mt-2.5 text-[24px] font-light leading-none tabular-nums text-ink-900">{summary.missingTeacher}</p>
+                  <p className="mt-1 text-[11px] text-ink-500">JP belum memiliki guru</p>
+                </div>
+                <div className="rounded-xl border border-border bg-surface p-3.5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-50 text-rose"><TriangleAlert size={15} /></div>
+                  <p className="mt-2.5 text-[24px] font-light leading-none tabular-nums text-ink-900">{summary.conflicts}</p>
+                  <p className="mt-1 text-[11px] text-ink-500">mapel kelebihan JP</p>
+                </div>
               </div>
             </section>}
 
@@ -221,7 +233,7 @@ export default function AiPage() {
               <p className="mb-4 text-[9.5px] font-bold uppercase tracking-[.14em] text-ink-400">ANALISIS</p>
               <IntelligencePerimeter active={intelligenceState === "analyzing"}>
                 <div className="px-0.5 py-0.5">
-                  <RecommendationFlow classStatus={selectedClass} subjectNames={context.subjectNames} teacherNames={context.teacherNames} onCandidatesSaved={refreshContext} />
+                  <RecommendationFlow classStatus={selectedClass} subjectNames={context.subjectNames} teacherNames={context.teacherNames} roomNames={context.roomNames} onCandidatesSaved={refreshContext} />
                 </div>
               </IntelligencePerimeter>
             </section>

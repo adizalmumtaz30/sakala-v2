@@ -31,6 +31,7 @@ import Link from "next/link";
 import { runAiCopilotIntentAction, planScheduleAction, saveAiCandidatesAction, rollbackAiCandidatesAction, kurangiJpAction, tetapkanGuruAction, type AiCopilotClassStatus, type AiCopilotIntent } from "@/app/(shell)/ai/actions";
 import type { AiSchedulePlan } from "@/lib/application/aiSchedulePlanner";
 import Button from "@/components/ui/Button";
+import { Badge } from "@/components/ui/primitives";
 import { Sparkles, ArrowRight, CheckCircle2, Circle, X, Lightbulb, HelpCircle, Target, BookOpen, CalendarDays, GraduationCap, Pencil, AlertTriangle } from "lucide-react";
 
 type FlowStep = "finding" | "solution" | "preview" | "done";
@@ -168,11 +169,13 @@ export default function RecommendationFlow({
   classStatus,
   subjectNames,
   teacherNames,
+  roomNames,
   onCandidatesSaved,
 }: {
   classStatus: AiCopilotClassStatus;
   subjectNames: Record<string, string>;
   teacherNames: Record<string, string>;
+  roomNames: Record<string, string>;
   onCandidatesSaved: () => Promise<void>;
 }) {
   const [step, setStep] = useState<FlowStep>("finding");
@@ -192,6 +195,9 @@ export default function RecommendationFlow({
   const [kurangiError, setKurangiError] = useState<string | null>(null);
   const [tetapkanPending, setTetapkanPending] = useState<string | null>(null);
   const [tetapkanError, setTetapkanError] = useState<string | null>(null);
+  // Dismiss di kartu solusi (§18) — operator boleh menyingkirkan saran yang
+  // tidak relevan SEBELUM masuk Preview, bukan cuma pilih/batal semua sekaligus.
+  const [dismissedKeys, setDismissedKeys] = useState<Set<string>>(new Set());
   // §16/§38-39 Fase 3 — multi-select approval: operator boleh pilih sebagian
   // perubahan, bukan cuma semua-atau-tidak. Key = `${requirementId}-${index}`
   // (requirementId bisa berulang kalau 1 requirement butuh >1 slot).
@@ -268,6 +274,7 @@ export default function RecommendationFlow({
     setWhyOpen(false);
     setVariant("primary");
     setAltPlan(null);
+    setDismissedKeys(new Set());
     startTransition(async () => {
       // §23 Alternative Solutions — alternatif harus BENAR-BENAR berbeda hasilnya,
       // bukan cuma judul tombol berbeda dengan hasil identik (itu pilihan palsu,
@@ -316,6 +323,7 @@ export default function RecommendationFlow({
     setAltPlan(null);
     setAltFocusSubject(null);
     setVariant("primary");
+    setDismissedKeys(new Set());
     setError(null);
   }
 
@@ -398,12 +406,12 @@ export default function RecommendationFlow({
 
         {/* §23 Alternative Solutions */}
         {altPlan && <div className="grid gap-2 sm:grid-cols-2">
-          <button type="button" onClick={() => setVariant("primary")} className={`rounded-xl border p-3 text-left transition-colors ${variant === "primary" ? "border-violet/40 bg-violet-50" : "border-border bg-surface hover:border-violet/20"}`}>
+          <button type="button" onClick={() => { setVariant("primary"); setDismissedKeys(new Set()); }} className={`rounded-xl border p-3 text-left transition-colors ${variant === "primary" ? "border-violet/40 bg-violet-50" : "border-border bg-surface hover:border-violet/20"}`}>
             <p className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-violet">★ Disarankan</p>
             <p className="mt-1 text-[12px] font-semibold text-ink-900">Lengkapi semua mapel yang kurang</p>
             <p className="mt-0.5 text-[11px] text-ink-500">{primaryPlan?.result.candidates.length ?? 0} slot · {readyToSchedule.length} mapel sekaligus</p>
           </button>
-          <button type="button" onClick={() => setVariant("alt")} className={`rounded-xl border p-3 text-left transition-colors ${variant === "alt" ? "border-violet/40 bg-violet-50" : "border-border bg-surface hover:border-violet/20"}`}>
+          <button type="button" onClick={() => { setVariant("alt"); setDismissedKeys(new Set()); }} className={`rounded-xl border p-3 text-left transition-colors ${variant === "alt" ? "border-violet/40 bg-violet-50" : "border-border bg-surface hover:border-violet/20"}`}>
             <p className="text-[10px] font-bold uppercase tracking-wide text-ink-400">Alternatif</p>
             <p className="mt-1 text-[12px] font-semibold text-ink-900">Fokus {altFocusSubject} dulu</p>
             <p className="mt-0.5 text-[11px] text-ink-500">{altPlan.result.candidates.length} slot · bertahap, sisanya menyusul lain kali</p>
@@ -418,43 +426,56 @@ export default function RecommendationFlow({
             mempertimbangkan existing assignment saat generate (guru tersedia,
             tidak bentrok), dan hanya balikin batch candidate lengkap kalau JP
             targetnya tercapai penuh ("Exact-JP invariant") — jadi klaimnya jujur. */}
-        {plan.result.candidates.length > 0 && (() => {
-          const hero = plan.result.candidates[0];
-          const rest = plan.result.candidates.slice(1);
-          return <div className="space-y-1.5">
-            <p className="text-[10px] font-bold uppercase tracking-[.1em] text-ink-400">Solusi yang disarankan</p>
-            <div className="rounded-xl border border-violet/25 bg-surface p-3.5">
-              <p className="text-[13.5px] font-semibold text-ink-900">{subjectNames[hero.draft.subjectId] ?? hero.draft.subjectId}</p>
-              <p className="text-[11.5px] text-ink-500">{classStatus.label}</p>
-              <p className="mt-2 text-[12px] text-ink-700">{hero.draft.day.charAt(0).toUpperCase() + hero.draft.day.slice(1)} · JP {hero.draft.periodStart}{hero.draft.periodEnd !== hero.draft.periodStart ? `–${hero.draft.periodEnd}` : ""}</p>
-              <p className="text-[12px] text-ink-500">{teacherNames[hero.draft.teacherId] ?? hero.draft.teacherId}</p>
-              <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1 border-t border-border/60 pt-2.5 text-[10.5px] text-emerald">
-                <span className="flex items-center gap-1"><CheckCircle2 size={11} />Guru tersedia</span>
-                <span className="flex items-center gap-1"><CheckCircle2 size={11} />Tidak bentrok</span>
-                <span className="flex items-center gap-1"><CheckCircle2 size={11} />Sesuai target JP</span>
+        {(() => {
+          const visible = plan.result.candidates.filter((c, i) => !dismissedKeys.has(candidateKey(c, i)));
+          const heroes = visible.slice(0, 2);
+          const rest = visible.slice(2);
+          return <>
+            {visible.length > 0 ? <div className="space-y-1.5">
+              <p className="text-[10px] font-bold uppercase tracking-[.1em] text-ink-400">Solusi yang disarankan</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {heroes.map((hero) => {
+                  const key = candidateKey(hero, plan.result.candidates.indexOf(hero));
+                  return <div key={key} className="relative rounded-xl border border-violet/25 bg-surface p-3.5">
+                    <button type="button" onClick={() => setDismissedKeys((prev) => new Set(prev).add(key))} aria-label="Singkirkan saran ini" className="absolute right-2.5 top-2.5 rounded-full p-0.5 text-ink-300 hover:bg-surface-muted hover:text-ink-600"><X size={13} /></button>
+                    <p className="pr-5 text-[13.5px] font-semibold text-ink-900">{subjectNames[hero.draft.subjectId] ?? hero.draft.subjectId}</p>
+                    <p className="text-[11.5px] text-ink-500">{classStatus.label}</p>
+                    <p className="mt-2 text-[12px] text-ink-700">{hero.draft.day.charAt(0).toUpperCase() + hero.draft.day.slice(1)} · JP {hero.draft.periodStart}{hero.draft.periodEnd !== hero.draft.periodStart ? `–${hero.draft.periodEnd}` : ""}</p>
+                    <p className="text-[12px] text-ink-500">{teacherNames[hero.draft.teacherId] ?? hero.draft.teacherId}</p>
+                    <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1 border-t border-border/60 pt-2.5 text-[10.5px] text-emerald">
+                      <span className="flex items-center gap-1"><CheckCircle2 size={11} />Guru tersedia</span>
+                      <span className="flex items-center gap-1"><CheckCircle2 size={11} />Tidak bentrok</span>
+                    </div>
+                  </div>;
+                })}
               </div>
+              {rest.length > 0 && <div className="space-y-1">
+                {rest.slice(0, 4).map((c, i) => <div key={`${c.requirementId}-${i}`} className="flex items-center justify-between gap-3 rounded-lg bg-surface-muted px-3 py-1.5 text-[11.5px]">
+                  <span className="min-w-0 truncate text-ink-700">{subjectNames[c.draft.subjectId] ?? c.draft.subjectId}</span>
+                  <span className="shrink-0 text-ink-400">{c.draft.day} · JP {c.draft.periodStart}</span>
+                </div>)}
+                {rest.length > 4 && <p className="px-1 text-[10.5px] text-ink-400">+{rest.length - 4} slot lain di langkah Preview.</p>}
+              </div>}
+            </div> : plan.result.candidates.length > 0 && <p className="rounded-lg bg-surface-muted px-3 py-2 text-[11.5px] text-ink-500">Semua saran disingkirkan. Kembali ke Temuan untuk mulai ulang, atau pilih Alternatif kalau tersedia.</p>}
+
+            {/* Display numeral — angka JP adalah inti emosional fitur ini. */}
+            <div className="flex items-center justify-center gap-4 rounded-xl border border-border bg-surface-muted/60 px-4 py-3.5">
+              <span className="text-[26px] font-light leading-none tabular-nums text-ink-400">{classStatus.scheduledJp}</span>
+              <ArrowRight size={14} className="shrink-0 text-violet" />
+              <span className="text-[26px] font-semibold leading-none tabular-nums text-ink-900">{classStatus.scheduledJp + visible.length}</span>
+              <span className="text-[11px] font-medium text-ink-400">JP</span>
             </div>
-            {rest.length > 0 && <div className="space-y-1">
-              {rest.slice(0, 4).map((c, i) => <div key={`${c.requirementId}-${i}`} className="flex items-center justify-between gap-3 rounded-lg bg-surface-muted px-3 py-1.5 text-[11.5px]">
-                <span className="min-w-0 truncate text-ink-700">{subjectNames[c.draft.subjectId] ?? c.draft.subjectId}</span>
-                <span className="shrink-0 text-ink-400">{c.draft.day} · JP {c.draft.periodStart}</span>
-              </div>)}
-              {rest.length > 4 && <p className="px-1 text-[10.5px] text-ink-400">+{rest.length - 4} slot lain di langkah Preview.</p>}
-            </div>}
-          </div>;
+
+            {plan.result.candidates.length === 0 && <p className="rounded-lg bg-amber-50 px-3 py-2 text-[11.5px] text-amber">Belum ada slot valid yang ditemukan untuk solusi ini. Coba pilihan lain, atau atur jadwal secara manual.</p>}
+            {plan.needsClarification && <p className="rounded-lg bg-amber-50 px-3 py-2 text-[11.5px] text-amber">{plan.clarification}</p>}
+            {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-[11.5px] text-rose">{error}</p>}
+
+            <div className="flex gap-2">
+              <Button variant="accent" onClick={() => { setSelectedKeys(new Set(visible.map((c) => candidateKey(c, plan.result.candidates.indexOf(c))))); setStep("preview"); }} disabled={visible.length === 0}>Tinjau perubahan</Button>
+              <Button variant="secondary" onClick={batal}>Batal</Button>
+            </div>
+          </>;
         })()}
-
-        {/* Display numeral — angka JP adalah inti emosional fitur ini. */}
-        <div className="flex items-center justify-center gap-4 rounded-xl border border-border bg-surface-muted/60 px-4 py-3.5">
-          <span className="text-[26px] font-light leading-none tabular-nums text-ink-400">{classStatus.scheduledJp}</span>
-          <ArrowRight size={14} className="shrink-0 text-violet" />
-          <span className="text-[26px] font-semibold leading-none tabular-nums text-ink-900">{classStatus.scheduledJp + plan.result.candidates.length}</span>
-          <span className="text-[11px] font-medium text-ink-400">JP</span>
-        </div>
-
-        {plan.result.candidates.length === 0 && <p className="rounded-lg bg-amber-50 px-3 py-2 text-[11.5px] text-amber">Belum ada slot valid yang ditemukan untuk solusi ini. Coba pilihan lain, atau atur jadwal secara manual.</p>}
-        {plan.needsClarification && <p className="rounded-lg bg-amber-50 px-3 py-2 text-[11.5px] text-amber">{plan.clarification}</p>}
-        {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-[11.5px] text-rose">{error}</p>}
 
         <div className="flex gap-2">
           <Button variant="accent" onClick={() => { setSelectedKeys(new Set(plan.result.candidates.map((c, i) => candidateKey(c, i)))); setStep("preview"); }} disabled={plan.result.candidates.length === 0}>Tinjau perubahan</Button>
@@ -477,17 +498,25 @@ export default function RecommendationFlow({
             <button type="button" onClick={() => setSelectedKeys(allSelected ? new Set() : new Set(allKeys))} className="text-[11px] font-semibold text-violet hover:underline">{allSelected ? "Kosongkan" : "Pilih semua"}</button>
           </div>
 
-          <div className="max-h-64 space-y-1.5 overflow-y-auto">
-            {plan.result.candidates.map((c, i) => {
-              const key = candidateKey(c, i);
-              const checked = selectedKeys.has(key);
-              return <label key={key} className={`flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-[12px] transition-colors ${checked ? "bg-surface-muted" : "bg-surface-muted/40 opacity-60"}`}>
-                <input type="checkbox" checked={checked} onChange={() => setSelectedKeys((prev) => { const next = new Set(prev); if (checked) next.delete(key); else next.add(key); return next; })} className="h-3.5 w-3.5 shrink-0 accent-violet" />
-                <span className="min-w-0 flex-1 truncate font-medium text-ink-800">{subjectNames[c.draft.subjectId] ?? c.draft.subjectId}</span>
-                <span className="shrink-0 text-ink-400">{c.draft.day} · JP {c.draft.periodStart}{c.draft.periodEnd !== c.draft.periodStart ? `–${c.draft.periodEnd}` : ""}</span>
-                <span className="shrink-0 truncate text-ink-500">{teacherNames[c.draft.teacherId] ?? c.draft.teacherId}</span>
-              </label>;
-            })}
+          <div className="max-h-64 overflow-y-auto rounded-lg border border-border">
+            <table className="w-full text-[11.5px]">
+              <thead className="sticky top-0 bg-surface-muted text-left text-[10px] font-semibold uppercase tracking-wide text-ink-400">
+                <tr><th className="w-8 py-2 pl-3"></th><th className="py-2">Mapel</th><th className="py-2">Waktu</th><th className="py-2">Ruang</th><th className="py-2 pr-3">Status</th></tr>
+              </thead>
+              <tbody>
+                {plan.result.candidates.map((c, i) => {
+                  const key = candidateKey(c, i);
+                  const checked = selectedKeys.has(key);
+                  return <tr key={key} className={`border-t border-border/60 ${checked ? "" : "opacity-50"}`}>
+                    <td className="py-1.5 pl-3"><input type="checkbox" checked={checked} onChange={() => setSelectedKeys((prev) => { const next = new Set(prev); if (checked) next.delete(key); else next.add(key); return next; })} className="h-3.5 w-3.5 accent-violet" /></td>
+                    <td className="py-1.5 font-medium text-ink-800">{subjectNames[c.draft.subjectId] ?? c.draft.subjectId}</td>
+                    <td className="py-1.5 text-ink-500">{c.draft.day} · JP {c.draft.periodStart}{c.draft.periodEnd !== c.draft.periodStart ? `–${c.draft.periodEnd}` : ""}</td>
+                    <td className="py-1.5 text-ink-500">{c.draft.roomId ? (roomNames[c.draft.roomId] ?? c.draft.roomId) : "—"}</td>
+                    <td className="py-1.5 pr-3"><Badge tone="neutral">Kandidat baru</Badge></td>
+                  </tr>;
+                })}
+              </tbody>
+            </table>
           </div>
 
           <div className="flex items-center justify-center gap-4 rounded-xl border border-border bg-surface-muted/60 px-4 py-3.5">
@@ -495,6 +524,19 @@ export default function RecommendationFlow({
             <ArrowRight size={14} className="shrink-0 text-violet" />
             <span className="flex items-baseline gap-1 text-[26px] font-semibold leading-none tabular-nums text-ink-900">{classStatus.scheduledJp + selectedCandidates.length}<span className="text-[13px] font-medium text-ink-400">/{classStatus.targetJp} JP</span></span>
             {classStatus.scheduledJp + selectedCandidates.length >= classStatus.targetJp && <CheckCircle2 size={16} className="text-emerald" />}
+          </div>
+
+          {/* Dampak — angka nyata dari hasil solver, bukan klaim yang belum tentu benar
+              (kalau JP belum genap terpenuhi setelah batch ini, dibilang apa adanya). */}
+          <div className="space-y-1 rounded-lg bg-surface-muted px-3 py-2.5 text-[11.5px]">
+            <p className="font-semibold text-ink-700">Dampak</p>
+            <p className="flex items-center gap-1.5 text-ink-600"><CheckCircle2 size={11} className="text-emerald" />{selectedCandidates.length} JP akan dijadwalkan</p>
+            <p className="flex items-center gap-1.5 text-ink-600"><CheckCircle2 size={11} className="text-emerald" />Tidak ada bentrok baru — solver memeriksa jadwal existing sebelum mengusulkan</p>
+            <p className="flex items-center gap-1.5 text-ink-600">
+              {classStatus.scheduledJp + selectedCandidates.length >= classStatus.targetJp
+                ? <><CheckCircle2 size={11} className="text-emerald" />Target JP kelas ini terpenuhi setelah diterapkan</>
+                : <><Circle size={11} className="text-ink-300" />Target JP: {classStatus.scheduledJp + selectedCandidates.length}/{classStatus.targetJp} setelah diterapkan (belum genap)</>}
+            </p>
           </div>
 
           {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-[11.5px] text-rose">{error}</p>}

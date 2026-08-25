@@ -10,6 +10,7 @@ import { listMataPelajaran } from "@/lib/application/mata-pelajaran.usecases";
 import { listPembagianMengajar, createPembagianMengajar } from "@/lib/application/pembagianMengajar.usecases";
 import { getTargetJpView } from "@/lib/application/targetJp.usecases";
 import { listGuru } from "@/lib/application/guru.usecases";
+import { listRuangan } from "@/lib/application/ruangan.usecases";
 import { getSchoolProfile } from "@/lib/application/schoolProfile.usecases";
 import { formatContextLabel } from "@/lib/domain/academicContext";
 import { buildAiAction, summarizeAiAction } from "@/lib/domain/aiAction";
@@ -52,6 +53,7 @@ export interface AiCopilotContext {
   /** Peta id→nama supaya UI tidak perlu menampilkan raw id (dipakai Solution Drawer & Preview). */
   subjectNames: Record<string, string>;
   teacherNames: Record<string, string>;
+  roomNames: Record<string, string>;
 }
 
 async function getActiveContext() {
@@ -75,13 +77,14 @@ async function getActiveContext() {
 export async function getAiCopilotContextAction(): Promise<AiActionResult<AiCopilotContext>> {
   try {
     const { supabase, active } = await getActiveContext();
-    const [kelas, mapel, schoolProfile, guru, targetJpView, pembagianSemua] = await Promise.all([
+    const [kelas, mapel, schoolProfile, guru, targetJpView, pembagianSemua, ruangan] = await Promise.all([
       listKelas(supabase),
       listMataPelajaran(supabase),
       getSchoolProfile(supabase),
       listGuru(supabase),
       getTargetJpView(supabase, active.id),
       listPembagianMengajar(supabase, active.id),
+      listRuangan(supabase),
     ]);
 
     // §14/Fase 2 — untuk mapel yang belum punya guru (belumSiapJp), usulkan guru
@@ -160,7 +163,8 @@ export async function getAiCopilotContextAction(): Promise<AiActionResult<AiCopi
 
     const subjectNames = Object.fromEntries(mapel.map((m) => [m.id, m.nama]));
     const teacherNames = Object.fromEntries(guru.map((g) => [g.id, g.namaGuru]));
-    return { ok: true, data: { academicContextId: active.id, schoolName: schoolProfile?.namaSekolah ?? "Sekolah", contextLabel: formatContextLabel(active), classes, activeClassId: classes[0]?.id ?? null, subjectNames, teacherNames } };
+    const roomNames = Object.fromEntries(ruangan.map((r) => [r.id, r.nama]));
+    return { ok: true, data: { academicContextId: active.id, schoolName: schoolProfile?.namaSekolah ?? "Sekolah", contextLabel: formatContextLabel(active), classes, activeClassId: classes[0]?.id ?? null, subjectNames, teacherNames, roomNames } };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Gagal membaca kondisi jadwal AI." };
   }
