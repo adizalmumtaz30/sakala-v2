@@ -5,6 +5,7 @@ import { getActiveAcademicContext } from "@/lib/application/academicContext.usec
 import { buildControlledTemplateWorkbook, type ControlledTemplateColumn } from "@/lib/import/controlled-template";
 import { bufferToBodyInit } from "@/lib/utils/response";
 import { recordAuditEvent } from "@/lib/application/auditLog.usecases";
+import { toPlainDatabaseError } from "@/lib/utils/databaseError";
 
 const columns: ControlledTemplateColumn[] = [
   { key: "AcademicContext", required: true, format: "Pilih/ikuti Academic Context SAKALA", example: "2026/2027 · Ganjil" },
@@ -157,14 +158,14 @@ export async function PUT(request: Request) {
     const beforeMap = new Map((beforeRows ?? []).map((r) => [`${r.academic_context_id}:${r.kelas_id}:${r.mata_pelajaran_id}`, r.target_jp]));
 
     const { error } = await supabase.from("target_jp").upsert(payload, { onConflict: "academic_context_id,kelas_id,mata_pelajaran_id" });
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(toPlainDatabaseError(error));
 
     // Read-back: pastikan nilai benar-benar tersimpan sesuai yang dikirim.
     const { data: afterRows, error: verifyError } = await supabase
       .from("target_jp")
       .select("academic_context_id,kelas_id,mata_pelajaran_id,target_jp")
       .in("academic_context_id", contextIds);
-    if (verifyError) return NextResponse.json({ error: `Import tidak dapat dipastikan tersimpan: ${verifyError.message}` }, { status: 500 });
+    if (verifyError) return NextResponse.json({ error: `Import tidak dapat dipastikan tersimpan: ${toPlainDatabaseError(verifyError)}` }, { status: 500 });
     const afterMap = new Map((afterRows ?? []).map((r) => [`${r.academic_context_id}:${r.kelas_id}:${r.mata_pelajaran_id}`, r.target_jp]));
     const unconfirmed = keys.filter((k: string) => afterMap.get(k) !== payload.find((p: { academic_context_id: string; kelas_id: string; mata_pelajaran_id: string; target_jp: number }) => `${p.academic_context_id}:${p.kelas_id}:${p.mata_pelajaran_id}` === k)?.target_jp);
     if (unconfirmed.length > 0) {
