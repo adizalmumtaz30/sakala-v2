@@ -5,6 +5,7 @@ import { listMataPelajaran } from "@/lib/application/mata-pelajaran.usecases";
 import { listPembagianMengajar } from "@/lib/application/pembagianMengajar.usecases";
 import { generateCandidatePreview, type GenerationResult } from "@/lib/application/candidateGenerator";
 import type { GenerationRequirement } from "@/lib/domain/candidateGeneration";
+import { findClosestMatch } from "@/lib/domain/fuzzyMatch";
 
 export interface AiSchedulePlan {
   intent: "schedule_target_jp" | "schedule_full_week";
@@ -37,6 +38,10 @@ function normalize(value: string): string {
     .replace(/\s+/g, " ")
     .trim();
 }
+
+// §35/§36 — kalau operator salah ketik/tidak baku, AI seharusnya menawarkan
+// koreksi ("Maksud Anda X?"), bukan langsung gagal dengan pesan generik.
+// Lihat lib/domain/fuzzyMatch.ts untuk implementasi (dipakai bersama dengan client).
 
 function romanToArabic(value: string): string {
   const map: Record<string, string> = {
@@ -146,7 +151,12 @@ export async function planScheduleFromCommand(
     if (!classHint && kelas.length > 1) {
       throw new Error("Tentukan kelas/rombel terlebih dahulu karena konteks aktif memiliki lebih dari satu kelas.");
     }
-    throw new Error(`Kelas “${classHint ?? ""}” tidak ditemukan pada konteks akademik aktif.`);
+    const suggestion = classHint ? findClosestMatch(classHint, kelas.map((k) => `${k.tingkat} ${k.namaRombel}`)) : null;
+    throw new Error(
+      suggestion
+        ? `Kelas "${classHint}" tidak ditemukan. Maksud Anda "${suggestion}"?`
+        : `Kelas "${classHint ?? ""}" tidak ditemukan pada konteks akademik aktif.`
+    );
   }
 
   const activeAssignments = pembagian.filter(
@@ -186,7 +196,11 @@ export async function planScheduleFromCommand(
     const missing = parsedRows.filter(
       (row) => !mapel.some((m) => subjectMatches(row.subject, m.nama)),
     );
-    throw new Error(`Mata pelajaran belum ditemukan di SAKALA: ${missing.map((row) => row.subject).join(", ")}.`);
+    const withSuggestions = missing.map((row) => {
+      const suggestion = findClosestMatch(row.subject, mapel.map((m) => m.nama));
+      return suggestion ? `"${row.subject}" — maksud Anda "${suggestion}"?` : `"${row.subject}" (tidak dikenali)`;
+    });
+    throw new Error(`Mata pelajaran belum ditemukan di SAKALA: ${withSuggestions.join(", ")}.`);
   }
 
   // If the command contains a subject list, use that list only as a selector.
