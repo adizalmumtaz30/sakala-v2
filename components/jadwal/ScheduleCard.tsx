@@ -137,7 +137,7 @@ export default function ScheduleCard({
           <GripVertical size={13} />
         </span>
         <span className="break-words font-semibold leading-snug text-ink-900">{subjectLabel ?? "-"}</span>
-        <span className="break-words leading-snug text-ink-600">
+        <span className="break-words leading-snug text-ink-700">
           {entityLabel ?? "-"}
         </span>
         {roomLabel && <span className="break-words leading-snug text-ink-400">{roomLabel}</span>}

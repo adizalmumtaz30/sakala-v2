@@ -65,7 +65,7 @@ export default function ListControls({
         </span>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 text-[12px] font-medium text-ink-600">
+      <div className="flex flex-wrap items-center gap-2 text-[12px] font-medium text-ink-700">
         <SlidersHorizontal size={15} />
         <span>Tampilkan</span>
         <select
