@@ -471,7 +471,18 @@ export default function RecommendationFlow({
               <span className="text-[11px] font-medium text-ink-400">JP</span>
             </div>
 
-            {plan.result.candidates.length === 0 && <p className="rounded-lg bg-amber-50 px-3 py-2 text-[11.5px] text-amber">Belum ada slot valid yang ditemukan untuk solusi ini. Coba pilihan lain, atau atur jadwal secara manual.</p>}
+            {plan.result.candidates.length === 0 && (() => {
+              // §36 — bukan cuma "coba manual", tapi jelaskan ALASAN nyata dari
+              // solver (data sudah ada di solver.failures, sebelumnya tidak
+              // ditampilkan). Kode NO_SLOT/SEARCH_LIMIT/TEACHER_BUSY dsb sudah
+              // punya message berbahasa Indonesia yang manusiawi dari solver.
+              const failures = plan.result.solver.failures;
+              const uniqueMessages = [...new Set(failures.map((f) => f.message))];
+              return <div className="space-y-1 rounded-lg bg-amber-50 px-3 py-2 text-[11.5px] text-amber">
+                <p className="font-semibold">Tidak ada slot valid yang ditemukan</p>
+                {uniqueMessages.length > 0 ? uniqueMessages.map((m, i) => <p key={i}>{m}</p>) : <p>Coba pilihan lain, atau atur jadwal secara manual.</p>}
+              </div>;
+            })()}
             {plan.needsClarification && <p className="rounded-lg bg-amber-50 px-3 py-2 text-[11.5px] text-amber">{plan.clarification}</p>}
             {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-[11.5px] text-rose">{error}</p>}
 
