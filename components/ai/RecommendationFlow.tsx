@@ -147,11 +147,16 @@ function MissingTeacherAlert({ subjects, onTetapkan, isPending, pendingKey, erro
         </p>
       </div>
     </div>
-    {/* AI mengusulkan guru yang SUDAH mengajar mapel ini di kelas lain — bukan
-        tebakan buta. Kalau tidak ada satu pun, jujur bilang begitu, bukan
-        mengarang usulan (§36). Operator tetap yang menyetujui secara eksplisit. */}
+    {/* AI mengutamakan guru yang SUDAH mengajar mapel ini di kelas lain (sinyal
+        relevansi mapel). Kalau tidak ada satu pun, fallback ke guru aktif
+        berbeban paling ringan (data real: total JP yang sudah mereka pegang)
+        — operator TETAP yang pilih & menyetujui, tapi tanpa perlu pindah
+        halaman untuk sesuatu yang datanya sudah ada di sini (§36: jujur soal
+        dasar usulan, bukan mengarang — makanya label beda untuk fallback). */}
     {top.suggestedTeachers.length > 0 ? <div className="space-y-1.5">
-      <p className="text-[10px] font-bold uppercase tracking-[.1em] text-ink-400">Usulan — sudah mengajar {top.subjectName} di kelas lain</p>
+      <p className="text-[10px] font-bold uppercase tracking-[.1em] text-ink-400">
+        {top.suggestedTeachers[0].relevant ? `Usulan — sudah mengajar ${top.subjectName} di kelas lain` : "Belum ada guru yang mengajar mapel ini — diurutkan dari beban paling ringan"}
+      </p>
       {top.suggestedTeachers.map((t) => {
         const key = `${top.subjectId}:${t.id}`;
         return <div key={t.id} className="flex items-center justify-between gap-3 rounded-lg bg-surface px-3 py-2">
@@ -159,9 +164,9 @@ function MissingTeacherAlert({ subjects, onTetapkan, isPending, pendingKey, erro
           <button type="button" onClick={() => onTetapkan(top.subjectId, t.id, top.belumSiapJp)} disabled={isPending} className="text-[11px] font-semibold text-violet hover:underline disabled:opacity-50">{isPending && pendingKey === key ? "Menetapkan…" : `Tetapkan ${top.belumSiapJp} JP`}</button>
         </div>;
       })}
-    </div> : <p className="text-[11.5px] text-ink-500">Belum ada guru lain yang mengajar {top.subjectName} untuk diusulkan.</p>}
+    </div> : <p className="text-[11.5px] text-ink-500">Tidak ada guru aktif sama sekali di sekolah ini untuk diusulkan.</p>}
     {error && <p className="text-[11.5px] text-rose">{error}</p>}
-    <Link href="/pembagian-mengajar" className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-violet hover:underline">Atau pilih guru manual di Pembagian Mengajar →</Link>
+    <Link href="/pembagian-mengajar" className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-violet hover:underline">Atau cari guru lain di Pembagian Mengajar →</Link>
   </div>;
 }
 
