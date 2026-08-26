@@ -165,7 +165,7 @@ function RekapJtm({ heatmap, variant, onVariantChange }: { heatmap: DashboardHea
   return <div>
     <div className="mb-2 flex items-end justify-between gap-2">
       <div><strong className="text-[21px] font-bold leading-none tabular-nums text-ink-900">{totalMinggu}</strong><span className="ml-1 text-[10px] font-medium text-ink-400">JP minggu ini</span>
-        {busiestDay && busiestDay.total > 0 && <p className="mt-1 text-[9.5px] text-ink-400">Puncak: <span className="font-semibold text-ink-600">{busiestDay.label}</span> ({busiestDay.total} JP)</p>}
+        {busiestDay && busiestDay.total > 0 && <p className="mt-1 text-[9.5px] text-ink-400">Puncak: <span className="font-semibold text-ink-700">{busiestDay.label}</span> ({busiestDay.total} JP)</p>}
       </div>
       <button type="button" onClick={() => onVariantChange(variant === "garis" ? "batang" : "garis")} title="Ganti tipe grafik" aria-label="Ganti tipe grafik" className="flex shrink-0 items-center gap-1 rounded-lg border border-border bg-surface px-2 py-1 text-[9px] font-semibold text-ink-500 hover:border-brand-600/25 hover:text-brand-700">
         {variant === "garis" ? <BarChart3 size={11} /> : <LineChartIcon size={11} />}{variant === "garis" ? "Batang" : "Garis"}
@@ -229,14 +229,14 @@ function HeatmapGrid({ grid, rooms, gridByRoom }: { grid: DashboardHeatmapGridDa
   return <div>
     <div className="mb-2.5 flex flex-wrap gap-1.5">
       <div className="relative">
-        <select value={roomId} onChange={(e) => setRoomId(e.target.value)} className="appearance-none rounded-lg border border-border bg-surface py-1 pl-2.5 pr-6 text-[9.5px] font-semibold text-ink-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">
+        <select value={roomId} onChange={(e) => setRoomId(e.target.value)} className="appearance-none rounded-lg border border-border bg-surface py-1 pl-2.5 pr-6 text-[9.5px] font-semibold text-ink-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">
           <option value="all">Semua Ruangan</option>
           {rooms.map((r) => <option key={r.id} value={r.id}>{r.nama}</option>)}
         </select>
         <ChevronRight size={10} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rotate-90 text-ink-400" />
       </div>
       <div className="relative">
-        <select value={minLevel} onChange={(e) => setMinLevel(Number(e.target.value) as 0 | 1 | 2 | 3 | 4)} className="appearance-none rounded-lg border border-border bg-surface py-1 pl-2.5 pr-6 text-[9.5px] font-semibold text-ink-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">
+        <select value={minLevel} onChange={(e) => setMinLevel(Number(e.target.value) as 0 | 1 | 2 | 3 | 4)} className="appearance-none rounded-lg border border-border bg-surface py-1 pl-2.5 pr-6 text-[9.5px] font-semibold text-ink-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">
           {DENSITY_OPTIONS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
         </select>
         <ChevronRight size={10} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rotate-90 text-ink-400" />
@@ -255,7 +255,7 @@ function HeatmapGrid({ grid, rooms, gridByRoom }: { grid: DashboardHeatmapGridDa
       {hover && hoverCell && hoverDay && <div className="pointer-events-none absolute z-10 -translate-x-1/2 rounded-lg border border-border bg-surface px-2.5 py-2 text-left shadow-lg" style={{ left: `${((hover.dayIdx + 0.5) / activeGrid.length) * 100}%`, top: `${((hover.rowIdx + 1) / rows) * 100}%`, marginTop: 6 }}>
         <p className="whitespace-nowrap text-[9.5px] font-semibold text-ink-800">{hoverDay.label} · Jam ke-{hoverCell.periode}</p>
         <p className="whitespace-nowrap text-[8.5px] text-ink-400">{hoverCell.time}</p>
-        <p className="mt-1 whitespace-nowrap text-[9px] text-ink-600"><b className="tabular-nums">{hoverCell.kelasCount}</b> kelas · <b className="tabular-nums">{hoverCell.guruCount}</b> guru{roomId === "all" && <> · <b className="tabular-nums">{hoverCell.ruanganCount}</b> ruangan</>}</p>
+        <p className="mt-1 whitespace-nowrap text-[9px] text-ink-700"><b className="tabular-nums">{hoverCell.kelasCount}</b> kelas · <b className="tabular-nums">{hoverCell.guruCount}</b> guru{roomId === "all" && <> · <b className="tabular-nums">{hoverCell.ruanganCount}</b> ruangan</>}</p>
       </div>}
     </div>
     <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -398,16 +398,16 @@ function FloatingActionDock({ conflictCount }: { conflictCount: number }) {
   ];
   return <nav aria-label="Aksi cepat" className="pointer-events-none sticky bottom-4 z-10 mt-1 flex justify-center">
     <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-border/70 bg-surface/95 p-1.5 shadow-[0_10px_30px_rgba(15,23,42,.12)] backdrop-blur">
-      {actions.map((a) => <Link key={a.href + a.label} href={a.href} className={`group flex flex-col items-center gap-1 rounded-full px-3 py-1.5 text-ink-600 transition-colors hover:bg-brand-50 hover:text-brand-700 ${focusRing}`}>
-        <span className="relative flex h-8 w-8 items-center justify-center rounded-full bg-surface-muted text-ink-600 group-hover:bg-brand-100 group-hover:text-brand-700">
+      {actions.map((a) => <Link key={a.href + a.label} href={a.href} className={`group flex flex-col items-center gap-1 rounded-full px-3 py-1.5 text-ink-700 transition-colors hover:bg-brand-50 hover:text-brand-700 ${focusRing}`}>
+        <span className="relative flex h-8 w-8 items-center justify-center rounded-full bg-surface-muted text-ink-700 group-hover:bg-brand-100 group-hover:text-brand-700">
           {a.icon}
           {a.badge !== undefined && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose px-1 text-[8px] font-bold text-white animate-pulse">{a.badge}</span>}
         </span>
         <span className="whitespace-nowrap text-[8.5px] font-semibold">{a.label}</span>
       </Link>)}
       <div className="relative">
-        <button type="button" onClick={() => setMore((v) => !v)} aria-expanded={more} aria-haspopup="menu" aria-label="Lebih banyak aksi" className={`group flex flex-col items-center gap-1 rounded-full px-3 py-1.5 text-ink-600 transition-colors hover:bg-brand-50 hover:text-brand-700 ${focusRing}`}>
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-muted text-ink-600 group-hover:bg-brand-100 group-hover:text-brand-700">{more ? <X size={16} /> : <MoreHorizontal size={16} />}</span>
+        <button type="button" onClick={() => setMore((v) => !v)} aria-expanded={more} aria-haspopup="menu" aria-label="Lebih banyak aksi" className={`group flex flex-col items-center gap-1 rounded-full px-3 py-1.5 text-ink-700 transition-colors hover:bg-brand-50 hover:text-brand-700 ${focusRing}`}>
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-muted text-ink-700 group-hover:bg-brand-100 group-hover:text-brand-700">{more ? <X size={16} /> : <MoreHorizontal size={16} />}</span>
           <span className="whitespace-nowrap text-[8.5px] font-semibold">More</span>
         </button>
         {more && <div role="menu" className="absolute bottom-full right-0 mb-2 w-52 rounded-xl border border-border bg-surface p-1.5 shadow-lg">
@@ -448,7 +448,7 @@ function DashboardCustomizeBar({ open, onToggle, fontSize, fontFamily, onFontSiz
   open: boolean; onToggle: () => void; fontSize: FontSize; fontFamily: FontFamily; onFontSize: (v: FontSize) => void; onFontFamily: (v: FontFamily) => void; onReset: () => void;
 }) {
   return <div className="relative">
-    <button type="button" onClick={onToggle} aria-expanded={open} className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[10.5px] font-semibold shadow-sm transition-colors ${open ? "border-brand-600/40 bg-brand-50 text-brand-700" : "border-border bg-surface text-ink-600 hover:border-brand-600/25"}`}>
+    <button type="button" onClick={onToggle} aria-expanded={open} className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[10.5px] font-semibold shadow-sm transition-colors ${open ? "border-brand-600/40 bg-brand-50 text-brand-700" : "border-border bg-surface text-ink-700 hover:border-brand-600/25"}`}>
       <Settings2 size={13} /> {open ? "Selesai kustomisasi" : "Kustomisasi"}
     </button>
     {open && <div className="absolute right-0 top-full z-20 mt-2 w-72 rounded-2xl border border-border bg-surface p-4 shadow-xl">
@@ -502,7 +502,7 @@ function SmartInsight({ jpInsight, bebanTertinggi, bebanDistribution, scheduleCo
     good: { dot: "bg-emerald", text: "text-ink-700" },
   };
   return <div className="flex flex-col gap-2">
-    {jpInsight.totalKombinasi > 0 && <div className="mb-0.5 flex items-center gap-2"><div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-muted"><div className="h-full rounded-full bg-brand-500 transition-all" style={{ width: `${jpInsight.completionPercent}%` }} /></div><span className="shrink-0 text-[9.5px] font-bold tabular-nums text-ink-600">{jpInsight.completionPercent}% terpenuhi</span></div>}
+    {jpInsight.totalKombinasi > 0 && <div className="mb-0.5 flex items-center gap-2"><div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-muted"><div className="h-full rounded-full bg-brand-500 transition-all" style={{ width: `${jpInsight.completionPercent}%` }} /></div><span className="shrink-0 text-[9.5px] font-bold tabular-nums text-ink-700">{jpInsight.completionPercent}% terpenuhi</span></div>}
     {signals.slice(0, 3).map((s, i) => {
       const style = styleFor[s.level];
       return <Link key={i} href={s.href} className="group flex items-start gap-2 rounded-lg p-1.5 hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">
@@ -556,7 +556,7 @@ export default function DashboardExperience({ schoolName, adminName, context, me
         <p className="mt-1.5 text-[11px] text-ink-500">Ringkasan kondisi akademik <span className="font-semibold text-ink-700">{schoolName}</span> dan jadwal sekolah.</p>
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        <Link href="/analitik" className="hidden items-center gap-1 rounded-full border border-border bg-surface px-3 py-1.5 text-[10px] font-semibold text-ink-600 shadow-sm hover:border-brand-600/25 hover:text-brand-700 sm:flex">Analitik <ArrowRight size={12} /></Link>
+        <Link href="/analitik" className="hidden items-center gap-1 rounded-full border border-border bg-surface px-3 py-1.5 text-[10px] font-semibold text-ink-700 shadow-sm hover:border-brand-600/25 hover:text-brand-700 sm:flex">Analitik <ArrowRight size={12} /></Link>
         <DashboardCustomizeBar open={customizeOpen} onToggle={() => setCustomizeOpen((v) => !v)} fontSize={prefs.fontSize} fontFamily={prefs.fontFamily} onFontSize={setFontSize} onFontFamily={setFontFamily} onReset={reset} />
       </div>
     </header>

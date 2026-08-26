@@ -117,7 +117,7 @@ export default function ImportModal({
           </button>
         </div>
         <p className="mb-3 text-[12.5px] text-ink-500">{description}</p>
-        <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-brand-600/15 bg-brand-600/[0.04] px-3 py-2 text-[11.5px] text-ink-600">
+        <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-brand-600/15 bg-brand-600/[0.04] px-3 py-2 text-[11.5px] text-ink-700">
           <span className="font-semibold text-ink-800">Format SAKALA</span>
           <span>Gunakan template sesuai halaman ini.</span>
           <span>Validasi dilakukan sebelum data disimpan.</span>

@@ -145,24 +145,39 @@ export default function JadwalWorkspace({
 
   const slotTemplates = selectedModelId ? slotTemplatesByModel[selectedModelId] ?? [] : [];
 
-  // Baris 5 KPI stat toolbar — model-wide (bukan per-entity spt scopedAssignments di atas).
-  const modelWideCommitted = useMemo(
-    () => assignments.filter((a) => a.status === "committed" && a.scheduleModelId === selectedModelId),
-    [assignments, selectedModelId]
-  );
-  const modelWideCandidateCount = useMemo(
-    () => assignments.filter((a) => a.status === "candidate" && a.scheduleModelId === selectedModelId).length,
-    [assignments, selectedModelId]
+  // Baris 5 KPI stat toolbar — SAMA scope dgn scopedAssignments di atas (entity yang
+  // sedang dipilih: kelas/guru/ruangan), bukan model-wide. Slot Pembelajaran tetap
+  // model-wide krn itu kapasitas slot template, bukan metrik keterisian per-entity.
+  const scopedCandidates = useMemo(
+    () =>
+      assignments.filter(
+        (a) =>
+          a.status === "candidate" &&
+          a.scheduleModelId === selectedModelId &&
+          (viewBy === "kelas" ? a.classId === activeEntityId : viewBy === "guru" ? a.teacherId === activeEntityId : a.roomId === activeEntityId)
+      ),
+    [assignments, selectedModelId, viewBy, activeEntityId]
   );
   const totalJpTerjadwal = useMemo(
-    () => modelWideCommitted.reduce((sum, a) => sum + (a.periodEnd - a.periodStart + 1), 0),
-    [modelWideCommitted]
+    () => scopedAssignments.reduce((sum, a) => sum + (a.periodEnd - a.periodStart + 1), 0),
+    [scopedAssignments]
   );
   const totalSlotPembelajaran = useMemo(
     () => slotTemplates.filter((s) => s.jenisSlot === "belajar_mengajar").length,
     [slotTemplates]
   );
-  const conflictCount = useMemo(() => scanCommittedConflicts(modelWideCommitted).length, [modelWideCommitted]);
+  // Conflict di-scan dari SELURUH committed model (bentrok bisa lintas-entity, mis. guru
+  // kelas ini bentrok jadwal di kelas lain) lalu difilter ke yang benar2 melibatkan entity
+  // terpilih — supaya tidak melewatkan masalah nyata yang mempengaruhi kelas/guru/ruangan ini.
+  const modelWideCommittedForConflict = useMemo(
+    () => assignments.filter((a) => a.status === "committed" && a.scheduleModelId === selectedModelId),
+    [assignments, selectedModelId]
+  );
+  const scopedAssignmentIds = useMemo(() => new Set(scopedAssignments.map((a) => a.id)), [scopedAssignments]);
+  const conflictCount = useMemo(
+    () => scanCommittedConflicts(modelWideCommittedForConflict).filter((c) => c.scheduleIds.some((id) => scopedAssignmentIds.has(id))).length,
+    [modelWideCommittedForConflict, scopedAssignmentIds]
+  );
 
   const grid = useMemo(
     () => buildJadwalGrid({ days: gridDays, jamPelajaranList, slotTemplates, assignments: scopedAssignments }),
@@ -488,24 +503,24 @@ export default function JadwalWorkspace({
       </div>
 
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
-        <JadwalStatCard icon={<CalendarDays size={16} />} value={modelWideCommitted.length} label="Jadwal" tone="brand" />
+        <JadwalStatCard icon={<CalendarDays size={16} />} value={scopedAssignments.length} label="Jadwal" tone="brand" />
         <JadwalStatCard icon={<Clock3 size={16} />} value={totalJpTerjadwal} label="JP Terjadwal" tone="violet" />
         <JadwalStatCard icon={<LayoutGrid size={16} />} value={totalSlotPembelajaran} label="Slot Pembelajaran" tone="emerald" />
         <JadwalStatCard icon={<AlertTriangle size={16} />} value={conflictCount} label="Conflict" tone={conflictCount > 0 ? "rose" : "neutral"} />
-        <JadwalStatCard icon={<GitBranch size={16} />} value={modelWideCandidateCount} label="Kandidat" tone={modelWideCandidateCount > 0 ? "amber" : "neutral"} />
+        <JadwalStatCard icon={<GitBranch size={16} />} value={scopedCandidates.length} label="Kandidat" tone={scopedCandidates.length > 0 ? "amber" : "neutral"} />
       </div>
 
-      {modelWideCandidateCount > 0 && (
+      {scopedCandidates.length > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-violet-50 bg-violet-50/60 px-4 py-3">
           <div className="flex items-center gap-3">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet"><Sparkles size={16} /></span>
             <div>
-              <p className="text-[12.5px] font-semibold text-ink-900">Ada {modelWideCandidateCount} kandidat jadwal yang belum diterapkan.</p>
+              <p className="text-[12.5px] font-semibold text-ink-900">Ada {scopedCandidates.length} kandidat jadwal yang belum diterapkan.</p>
               <p className="text-[11px] text-ink-500">Tinjau perubahan sebelum masuk ke jadwal operasional.</p>
             </div>
           </div>
           <Link href="/jadwal-cerdas" className="shrink-0 rounded-xl bg-violet px-3.5 py-2 text-[12.5px] font-semibold text-white hover:brightness-95">
-            Tinjau Kandidat ({modelWideCandidateCount})
+            Tinjau Kandidat ({scopedCandidates.length})
           </Link>
         </div>
       )}
@@ -1089,7 +1104,7 @@ function JadwalCell({
       )}
       <span className="break-words font-semibold leading-snug text-ink-900">{mapelLabel ?? "-"}</span>
       <span
-        className="break-words leading-snug text-ink-600"
+        className="break-words leading-snug text-ink-700"
       >
         {entityLabel ?? "-"}
       </span>
