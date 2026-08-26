@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { listAuditLog } from "@/lib/application/auditLog.usecases";
 import { restoreScheduleVersion } from "@/lib/application/scheduleVersion.usecases";
+import { toPlainErrorMessage } from "@/lib/utils/databaseError";
 import type { AuditAction, AuditLogEntry } from "@/lib/domain/auditLog";
 
 export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -23,7 +24,7 @@ export async function loadAuditLogAction(
     });
     return { ok: true, data: result };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Terjadi kesalahan yang tidak diketahui." };
+    return { ok: false, error: toPlainErrorMessage(err, "Terjadi kesalahan yang tidak diketahui.") };
   }
 }
 
@@ -37,6 +38,6 @@ export async function restoreScheduleVersionAction(
     const result = await restoreScheduleVersion(supabase, academicContextId, versionId);
     return { ok: true, data: result };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Gagal memulihkan versi jadwal." };
+    return { ok: false, error: toPlainErrorMessage(err, "Gagal memulihkan versi jadwal.") };
   }
 }

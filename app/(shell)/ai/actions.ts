@@ -14,6 +14,7 @@ import { listRuangan } from "@/lib/application/ruangan.usecases";
 import { getSchoolProfile } from "@/lib/application/schoolProfile.usecases";
 import { formatContextLabel } from "@/lib/domain/academicContext";
 import { buildAiAction, summarizeAiAction } from "@/lib/domain/aiAction";
+import { toPlainErrorMessage } from "@/lib/utils/databaseError";
 
 export type AiActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -186,7 +187,7 @@ export async function getAiCopilotContextAction(): Promise<AiActionResult<AiCopi
     const roomNames = Object.fromEntries(ruangan.map((r) => [r.id, r.nama]));
     return { ok: true, data: { academicContextId: active.id, schoolName: schoolProfile?.namaSekolah ?? "Sekolah", contextLabel: formatContextLabel(active), classes, activeClassId: classes[0]?.id ?? null, subjectNames, teacherNames, roomNames } };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Gagal membaca kondisi jadwal AI." };
+    return { ok: false, error: toPlainErrorMessage(err, "Gagal membaca kondisi jadwal AI.") };
   }
 }
 
@@ -197,7 +198,7 @@ export async function planScheduleAction(command: string): Promise<AiActionResul
     const plan = await planScheduleFromCommand(supabase, active.id, command);
     return { ok: true, data: plan };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Gagal menyusun rancangan jadwal AI." };
+    return { ok: false, error: toPlainErrorMessage(err, "Gagal menyusun rancangan jadwal AI.") };
   }
 }
 
@@ -242,7 +243,7 @@ export async function runAiCopilotIntentAction(
     const plan = await planScheduleFromCommand(supabase, active.id, command);
     return { ok: true, data: plan };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Gagal menjalankan Quick Action AI." };
+    return { ok: false, error: toPlainErrorMessage(err, "Gagal menjalankan Quick Action AI.") };
   }
 }
 
@@ -304,7 +305,7 @@ export async function kurangiJpAction(assignmentId: string): Promise<AiActionRes
     if (!confirmed) return { ok: false, error: "Perubahan belum bisa dipastikan tersimpan — data resmi belum mencerminkan penghapusan ini. Coba lagi." };
     return { ok: true, data: result };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Gagal mengurangi JP." };
+    return { ok: false, error: toPlainErrorMessage(err, "Gagal mengurangi JP.") };
   }
 }
 
@@ -329,7 +330,7 @@ export async function tetapkanGuruAction(kelasId: string, mataPelajaranId: strin
     await createPembagianMengajar(supabase, { academicContextId: active.id, guruId, mataPelajaranId, kelasId, jpPerMinggu, status: "aktif" }, "ai", reason);
     return { ok: true, data: null };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Gagal menetapkan guru." };
+    return { ok: false, error: toPlainErrorMessage(err, "Gagal menetapkan guru.") };
   }
 }
 
@@ -349,7 +350,7 @@ export async function rollbackAiCandidatesAction(ids: string[]): Promise<AiActio
     }
     return { ok: true, data: { removedCount: removed, unconfirmedIds } };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Gagal mengembalikan candidate." };
+    return { ok: false, error: toPlainErrorMessage(err, "Gagal mengembalikan candidate.") };
   }
 }
 

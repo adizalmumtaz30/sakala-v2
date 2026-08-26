@@ -36,3 +36,25 @@ export function toPlainDatabaseError(error: PostgrestLikeError | Error | unknown
   }
   return fallback;
 }
+
+/**
+ * Untuk blok catch generik (`catch (err) { ... }`) yang bisa menangkap
+ * apa saja — bukan cuma error Postgres langsung, tapi juga error yang
+ * ditulis sendiri di codebase (throw new Error("...") dengan pesan bahasa
+ * Indonesia biasa) ATAU error Postgres mentah yang tidak sengaja lolos
+ * sampai lapisan ini (PostgrestError-nya Supabase extends Error bawaan
+ * JS, jadi `err instanceof Error` saja tidak cukup untuk membedakan).
+ *
+ * Urutan: (1) kalau bentuknya PostgrestError (punya field `code` yang
+ * dikenal) → terjemahkan lewat toPlainDatabaseError; (2) kalau Error biasa
+ * (kemungkinan besar sudah pesan bahasa Indonesia yang ditulis manual di
+ * codebase ini) → pakai apa adanya; (3) selain itu → fallback generik,
+ * tidak pernah menampilkan bentuk error yang tidak dikenali.
+ */
+export function toPlainErrorMessage(err: unknown, fallback: string): string {
+  if (err && typeof err === "object" && "code" in err && typeof (err as PostgrestLikeError).code === "string") {
+    return toPlainDatabaseError(err, fallback);
+  }
+  if (err instanceof Error && err.message) return err.message;
+  return fallback;
+}
