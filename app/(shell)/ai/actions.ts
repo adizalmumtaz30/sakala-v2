@@ -36,7 +36,7 @@ export interface AiCopilotClassStatus {
    * (planner bisa langsung cari slot), belumSiapJp harus ke Pembagian Mengajar
    * dulu (planner TIDAK BISA menjadwalkan mapel tanpa guru). */
   belumTerjadwalJp: number;
-  subjectDeficits: Array<{ subjectId: string; subjectName: string; targetJp: number; scheduledJp: number; remainingJp: number; belumSiapJp: number; belumTerjadwalJp: number; suggestedTeachers: Array<{ id: string; name: string }> }>;
+  subjectDeficits: Array<{ subjectId: string; subjectName: string; targetJp: number; scheduledJp: number; remainingJp: number; belumSiapJp: number; belumTerjadwalJp: number; suggestedTeachers: Array<{ id: string; name: string; relevant: boolean }> }>;
   /** JP yang terjadwal MELEBIHI target resmi — sebelumnya tidak pernah terlihat
    * (source data lama membungkam kelebihan lewat Math.min). AI wajib melaporkan
    * ini, bukan diam-diam menganggap kelas 'sudah sesuai' padahal kelebihan. */
@@ -87,17 +87,27 @@ export async function getAiCopilotContextAction(): Promise<AiActionResult<AiCopi
       listRuangan(supabase),
     ]);
 
-    // §14/Fase 2 — untuk mapel yang belum punya guru (belumSiapJp), usulkan guru
-    // yang SUDAH mengajar mapel yang sama di kelas lain (bukan tebakan buta).
-    // Kalau tidak ada satu pun, biarkan kosong — jujur, bukan mengarang usulan.
+    // §14/Fase 2 — utamakan guru yang SUDAH mengajar mapel yang sama di kelas
+    // lain (sinyal paling kuat: relevansi mapel). Kalau tidak ada satu pun,
+    // JANGAN mentok ke "pilih manual di halaman lain" — operator diminta
+    // pindah halaman untuk sesuatu yang datanya sudah saya punya di sini.
+    // Fallback ke SEMUA guru aktif, diurutkan dari beban mengajar paling
+    // ringan (total JP yang sudah mereka pegang saat ini, real data) —
+    // supaya operator tetap bisa pilih & Tetapkan langsung di SAKALA AI.
     const teachersBySubject = new Map<string, Map<string, string>>();
+    const teacherLoad = new Map<string, number>();
     for (const p of pembagianSemua) {
       if (p.status !== "aktif") continue;
+      teacherLoad.set(p.guruId, (teacherLoad.get(p.guruId) ?? 0) + p.jpPerMinggu);
       const m = teachersBySubject.get(p.mataPelajaranId) ?? new Map<string, string>();
       const g = guru.find((x) => x.id === p.guruId);
       if (g) m.set(g.id, g.namaGuru);
       teachersBySubject.set(p.mataPelajaranId, m);
     }
+    const activeTeachersByLoad = guru
+      .filter((g) => g.status === "aktif")
+      .map((g) => ({ id: g.id, name: g.namaGuru, load: teacherLoad.get(g.id) ?? 0 }))
+      .sort((a, b) => a.load - b.load);
 
     const rowsByKelas = new Map<string, typeof targetJpView.rows>();
     for (const row of targetJpView.rows) {
@@ -121,7 +131,17 @@ export async function getAiCopilotContextAction(): Promise<AiActionResult<AiCopi
           remainingJp: r.belumSiapJp + r.belumTerjadwalJp,
           belumSiapJp: r.belumSiapJp,
           belumTerjadwalJp: r.belumTerjadwalJp,
-          suggestedTeachers: r.belumSiapJp > 0 ? [...(teachersBySubject.get(r.mataPelajaranId) ?? new Map())].map(([id, name]) => ({ id, name })) : [],
+          suggestedTeachers: r.belumSiapJp > 0
+            ? (() => {
+                const relevant = [...(teachersBySubject.get(r.mataPelajaranId) ?? new Map())].map(([id, name]) => ({ id, name, relevant: true }));
+                if (relevant.length > 0) return relevant;
+                // Tidak ada guru yang sudah mengajar mapel ini di mana pun —
+                // fallback ke guru aktif berbeban paling ringan (data real),
+                // BUKAN dead-end "pilih manual". Operator tetap yang pilih &
+                // menyetujui, tapi tetap di dalam SAKALA AI.
+                return activeTeachersByLoad.slice(0, 5).map((t) => ({ id: t.id, name: t.name, relevant: false }));
+              })()
+            : [],
         }))
         .filter((x) => x.remainingJp > 0)
         .sort((a, b) => b.remainingJp - a.remainingJp);
