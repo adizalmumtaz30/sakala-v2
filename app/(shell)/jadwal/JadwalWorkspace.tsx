@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import type { ReactNode } from "react";
-import { Plus, X, Trash2, Copy, Pencil, Eye, AlertTriangle, CheckCircle2, Info, CalendarClock, User, Users, DoorOpen, CalendarDays, Clock3, LayoutGrid, GitBranch, Sparkles } from "lucide-react";
+import { Plus, X, Trash2, Copy, Pencil, Eye, AlertTriangle, CheckCircle2, Info, CalendarClock, User, Users, DoorOpen, CalendarDays, Clock3, LayoutGrid, GitBranch, Sparkles, Filter, ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { scanCommittedConflicts } from "@/lib/application/conflictEngine";
 import type { AcademicContext } from "@/lib/domain/academicContext";
@@ -94,6 +94,16 @@ export default function JadwalWorkspace({
 
   const [viewBy, setViewBy] = useState<JadwalViewBy>("kelas");
   const [rangeMode, setRangeMode] = useState<JadwalRangeMode>("mingguan");
+  const [highlightFilter, setHighlightFilter] = useState<"semua" | "conflict" | "kandidat">("semua");
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+  const filterMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!filterMenuOpen) return;
+    const onClick = (e: MouseEvent) => { if (filterMenuRef.current && !filterMenuRef.current.contains(e.target as Node)) setFilterMenuOpen(false); };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [filterMenuOpen]);
 
   const guruMap = useMemo(() => new Map(guruList.map((g) => [g.id, g.namaGuru])), [guruList]);
   // Identitas Warna Mata Pelajaran (menggantikan warna-per-guru) — di-hash dari
@@ -631,6 +641,39 @@ export default function JadwalWorkspace({
         )}
 
         <div className="ml-auto flex items-center gap-3">
+          <div className="relative" ref={filterMenuRef}>
+            <button
+              type="button"
+              onClick={() => setFilterMenuOpen((v) => !v)}
+              className={`flex h-11 items-center gap-1.5 rounded-xl border px-3.5 text-[12.5px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 ${
+                highlightFilter !== "semua" ? "border-brand-600/40 bg-brand-50 text-brand-700" : "border-border bg-surface text-ink-700 hover:border-brand-600/30 hover:text-brand-700"
+              }`}
+            >
+              <Filter size={14} /> Filter{highlightFilter !== "semua" ? ` · ${highlightFilter === "conflict" ? "Conflict" : "Kandidat"}` : ""}
+              <ChevronDown size={13} className={`transition-transform ${filterMenuOpen ? "rotate-180" : ""}`} />
+            </button>
+            {filterMenuOpen && (
+              <div className="absolute right-0 z-30 mt-1.5 w-56 rounded-2xl border border-border bg-surface p-1.5 shadow-float">
+                {(
+                  [
+                    { key: "semua" as const, label: "Semua", desc: "Tampilkan semua jadwal apa adanya" },
+                    { key: "conflict" as const, label: "Hanya Conflict", desc: `Redupkan yang lain${conflictCount > 0 ? ` (${conflictCount})` : ""}` },
+                    { key: "kandidat" as const, label: "Hanya Kandidat Pending", desc: `Redupkan yang lain${scopedCandidates.length > 0 ? ` (${scopedCandidates.length})` : ""}` },
+                  ]
+                ).map((opt) => (
+                  <button
+                    key={opt.key}
+                    onClick={() => { setHighlightFilter(opt.key); setFilterMenuOpen(false); }}
+                    className={`flex w-full flex-col items-start gap-0.5 rounded-xl px-3 py-2 text-left hover:bg-surface-muted ${highlightFilter === opt.key ? "bg-brand-50" : ""}`}
+                  >
+                    <span className="text-[12.5px] font-semibold text-ink-800">{opt.label}</span>
+                    <span className="text-[10.5px] text-ink-400">{opt.desc}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <DataJadwalMenu
             assignments={assignments}
             guruList={guruList}
@@ -705,6 +748,13 @@ export default function JadwalWorkspace({
                             ruanganLabel={cell.assignment?.roomId ? ruanganMap.get(cell.assignment.roomId) : undefined}
                             cardColor={cell.assignment ? mapelColorMap.get(cell.assignment.subjectId) : undefined}
                             hasPendingCandidate={candidateCellKeys.has(cellKey(d, row.nomorUrut))}
+                            dimmed={
+                              highlightFilter === "conflict"
+                                ? cell.state !== "conflict"
+                                : highlightFilter === "kandidat"
+                                  ? !candidateCellKeys.has(cellKey(d, row.nomorUrut))
+                                  : false
+                            }
                           />
                         </td>
                       );
@@ -1032,6 +1082,7 @@ function JadwalCell({
   ruanganLabel,
   cardColor,
   hasPendingCandidate,
+  dimmed,
 }: {
   cell: GridCell;
   onClick: () => void;
@@ -1040,6 +1091,7 @@ function JadwalCell({
   ruanganLabel?: string;
   cardColor?: { tint: string; accent: string; text: string };
   hasPendingCandidate?: boolean;
+  dimmed?: boolean;
 }) {
   if (cell.state === "empty") {
     if (!cell.jamPelajaran) {
@@ -1049,11 +1101,11 @@ function JadwalCell({
       return (
         <button
           onClick={onClick}
-          className={`relative flex h-16 w-full items-center justify-center gap-1 rounded-xl border border-dashed text-[11.5px] transition-colors ${
+          className={`relative flex h-16 w-full items-center justify-center gap-1 rounded-xl border border-dashed text-[11.5px] transition-all ${
             hasPendingCandidate
               ? "border-violet bg-violet-50/40 text-violet hover:bg-violet-50"
               : "border-border text-ink-400 hover:border-brand-600/40 hover:bg-brand-50 hover:text-brand-700"
-          }`}
+          } ${dimmed ? "opacity-20" : ""}`}
         >
           {hasPendingCandidate ? (
             <span className="text-[10px] font-semibold">Ada kandidat</span>
@@ -1091,13 +1143,13 @@ function JadwalCell({
     <button
       onClick={onClick}
       style={style}
-      className={`relative flex min-h-16 w-full flex-col justify-center gap-0.5 rounded-xl border px-2 py-1.5 text-left text-[11.5px] transition-colors ${
+      className={`relative flex min-h-16 w-full flex-col justify-center gap-0.5 rounded-xl border px-2 py-1.5 text-left text-[11.5px] transition-all ${
         isConflict
           ? "border-rose bg-rose-50 hover:bg-rose-50/70"
           : cardColor
             ? "hover:brightness-95"
             : "border-brand-600/20 bg-brand-50 hover:bg-brand-50/70"
-      } ${hasPendingCandidate ? "ring-2 ring-dashed ring-violet ring-offset-1" : ""}`}
+      } ${hasPendingCandidate ? "ring-2 ring-dashed ring-violet ring-offset-1" : ""} ${dimmed ? "opacity-20" : ""}`}
     >
       {hasPendingCandidate && (
         <span className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-violet text-[8px] font-bold text-white" title="Ada kandidat perubahan menunggu review">!</span>
