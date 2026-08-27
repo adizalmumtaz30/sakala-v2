@@ -182,6 +182,13 @@ export async function getAiCopilotContextAction(): Promise<AiActionResult<AiCopi
       };
     }).filter((x) => x.targetJp > 0);
 
+    // §04 Class Selection — operator jangan dipaksa scan manual satu-satu
+    // untuk cari kelas mana yang bermasalah. AI sudah tahu persis skornya
+    // (remainingJp + excessJp), jadi urutkan yang paling butuh perhatian
+    // di depan. Kelas yang sudah sesuai (skor 0) tetap terlihat, cuma di
+    // bawah — bukan disembunyikan.
+    classes.sort((a, b) => (b.remainingJp + b.excessJp) - (a.remainingJp + a.excessJp));
+
     const subjectNames = Object.fromEntries(mapel.map((m) => [m.id, m.nama]));
     const teacherNames = Object.fromEntries(guru.map((g) => [g.id, g.namaGuru]));
     const roomNames = Object.fromEntries(ruangan.map((r) => [r.id, r.nama]));
