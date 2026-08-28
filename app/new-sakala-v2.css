@@ -1,0 +1,16 @@
+/* NEW SAKALA V2 — Batch 01 visual layer
+   Dashboard scope only. Functional markup, routes, data and actions remain untouched.
+   Visual DNA: premium / luxury / elegant / operator-first / orbit-neural-core.
+*/
+.new-sakala-v2-dashboard{--ns-bg:#070c13;--ns-panel:#0d1520;--ns-panel-2:#111b28;--ns-border:rgba(215,170,77,.16);--ns-border-soft:rgba(255,255,255,.075);--ns-text:#f4f1e8;--ns-muted:#9aa4b3;--ns-gold:#d7aa4d;position:relative;isolation:isolate;min-height:100%;background:radial-gradient(900px 380px at 72% -8%,rgba(215,170,77,.075),transparent 62%),radial-gradient(700px 360px at 8% 16%,rgba(45,102,156,.09),transparent 65%),var(--ns-bg);color:var(--ns-text)}
+.new-sakala-v2-dashboard:before,.new-sakala-v2-dashboard:after{content:"";position:absolute;pointer-events:none;z-index:-1;border:1px solid rgba(215,170,77,.11);border-radius:999px;transform:rotate(-14deg)}
+.new-sakala-v2-dashboard:before{width:430px;height:170px;right:5%;top:6%;box-shadow:0 0 70px rgba(215,170,77,.035),inset 0 0 35px rgba(215,170,77,.025)}
+.new-sakala-v2-dashboard:after{width:270px;height:105px;right:11%;top:10%;border-color:rgba(89,163,207,.10);transform:rotate(18deg)}
+.new-sakala-v2-dashboard :is(.bg-surface,.bg-surface\/95,.bg-surface\/90,.bg-surface\/80){background:linear-gradient(145deg,rgba(17,27,40,.97),rgba(10,17,27,.97))!important}
+.new-sakala-v2-dashboard :is(.border-border,.border-border\/70,.border-border\/60){border-color:var(--ns-border-soft)!important}
+.new-sakala-v2-dashboard :is(.text-ink-900,.text-ink-800,.text-ink-700){color:var(--ns-text)!important}.new-sakala-v2-dashboard :is(.text-ink-500,.text-ink-400){color:var(--ns-muted)!important}.new-sakala-v2-dashboard .text-brand-600,.new-sakala-v2-dashboard .text-brand-700{color:var(--ns-gold)!important}
+.new-sakala-v2-dashboard :is(section,a.group){border-color:var(--ns-border-soft)!important;box-shadow:0 16px 36px -28px rgba(0,0,0,.85),inset 0 1px 0 rgba(255,255,255,.025)}
+.new-sakala-v2-dashboard a.group:hover{border-color:rgba(215,170,77,.34)!important;box-shadow:0 22px 44px -28px rgba(0,0,0,.9),0 0 0 1px rgba(215,170,77,.05)}
+.new-sakala-v2-dashboard a.group>span:first-child{background:linear-gradient(145deg,rgba(215,170,77,.18),rgba(215,170,77,.055))!important;color:var(--ns-gold)!important;border:1px solid rgba(215,170,77,.16)}
+.new-sakala-v2-dashboard svg.text-brand-600,.new-sakala-v2-dashboard svg.text-brand-500\/70{color:var(--ns-gold)!important}.new-sakala-v2-dashboard .bg-surface-muted\/45{background:rgba(255,255,255,.025)!important}
+@media(prefers-reduced-motion:reduce){.new-sakala-v2-dashboard button,.new-sakala-v2-dashboard a{transition:none!important}}

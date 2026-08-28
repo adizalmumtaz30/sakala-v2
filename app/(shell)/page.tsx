@@ -14,7 +14,7 @@ export default async function DashboardPage() {
     const supabase = await createClient();
     const summary = await getDashboardSummary(supabase);
     if (!summary.activeContext) {
-      return <div className="mx-auto max-w-[1440px] px-4 pt-6"><Card><EmptyState title="Belum ada konteks akademik aktif" description="Aktifkan satu Tahun Pelajaran/Semester di Akademik supaya Dashboard menampilkan ringkasan jadwal dan JP." action={<Link href="/akademik" className="mt-1 text-[12.5px] font-semibold text-brand-600">Buka Akademik →</Link>} /></Card></div>;
+      return <div className="new-sakala-v2-dashboard"><div className="mx-auto max-w-[1440px] px-4 pt-6"><Card><EmptyState title="Belum ada konteks akademik aktif" description="Aktifkan satu Tahun Pelajaran/Semester di Akademik supaya Dashboard menampilkan ringkasan jadwal dan JP." action={<Link href="/akademik" className="mt-1 text-[12.5px] font-semibold text-brand-600">Buka Akademik →</Link>} /></Card></div></div>;
     }
     const guruList = await guruRepository.findAll(supabase).catch(() => []);
     const kelasList = await kelasRepository.findAll(supabase).catch(() => []);
@@ -27,7 +27,7 @@ export default async function DashboardPage() {
       await getSafeList(supabase, "ruangan"),
     );
     const notifications = await getRecentNotifications(supabase, summary.activeContext.id).catch(() => []);
-    return <DashboardExperience
+    return <div className="new-sakala-v2-dashboard"><DashboardExperience
       schoolName={summary.schoolProfile?.namaSekolah ?? "Sekolah"}
       adminName={summary.schoolProfile?.nama ?? null}
       context={formatContextLabel(summary.activeContext)}
@@ -46,9 +46,9 @@ export default async function DashboardPage() {
       activity={intelligence.recentActivity}
       guruList={guruList}
       notifications={notifications}
-    />;
+    /></div>;
   } catch {
-    return <div className="mx-auto max-w-3xl px-4 pt-10"><ErrorState message="Gagal memuat ringkasan Dashboard dari Supabase. Cek koneksi dan environment variable kamu." /></div>;
+    return <div className="new-sakala-v2-dashboard"><div className="mx-auto max-w-3xl px-4 pt-10"><ErrorState message="Gagal memuat ringkasan Dashboard dari Supabase. Cek koneksi dan environment variable kamu." /></div></div>;
   }
 }
 
