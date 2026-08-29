@@ -1,23 +1,16 @@
 // Application layer — Regulation / Target JP View (Bagian 29).
 //
-// SAKALA MASTER RULE (PRODUCTION FLOW, AUTHORITY & AI ACTION CONTRACT):
-// Target JP resmi (tabel target_jp, diisi lewat Generate Kurikulum → Commit)
-// adalah SATU-SATUNYA authority untuk "berapa yang dibutuhkan". Jumlah baris
-// Pembagian Mengajar TIDAK PERNAH boleh dipakai sebagai pengganti angka ini —
-// mapel yang belum punya guru tetap harus terhitung sebagai "Belum Siap",
-// bukan hilang dari total.
-//
-// Kasus yang dicegah: kelas dengan Target JP resmi 40, tapi baru 6 mapel
-// (19 JP) yang punya guru — sebelumnya overallTargetJp menampilkan 19 (dari
-// pembagian mengajar) alih-alih 40 (dari tabel target_jp), dan 21 JP yang
-// belum punya guru sama sekali tidak muncul di halaman ini.
+// SOURCE-OF-TRUTH CONTRACT:
+// target_jp = official requirement.
+// committed assignments = official scheduled JP.
+// candidate assignments = pending proposal and MUST NOT inflate scheduled KPI.
+// Pembagian Mengajar = teacher allocation, not a substitute for target authority.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { listPembagianMengajar } from "@/lib/application/pembagianMengajar.usecases";
 import { scheduleAssignmentRepository } from "@/lib/data-access/scheduleAssignment.repository";
+import { ASSIGNMENT_STATUS, isCandidateStatus, isCommittedStatus } from "@/lib/domain/academicMetrics";
 import type { HariSekolah } from "@/lib/domain/jamPelajaran";
-
-const ASSIGNMENT_ACTIVE_STATUSES = new Set(["draft", "candidate", "committed"]);
 
 export interface TargetJpScheduleRef {
   id: string;
@@ -27,8 +20,6 @@ export interface TargetJpScheduleRef {
   status: string;
 }
 
-// Rumus 1 (kontrak §8): Target = Siap + Belum Siap.
-// Rumus 2: Siap = Terjadwal + Belum Terjadwal.
 export type TargetJpStatus = "belum_siap" | "siap_belum_terjadwal" | "sebagian_terjadwal" | "lengkap";
 
 export interface TargetJpGuruAssignment {
@@ -39,32 +30,28 @@ export interface TargetJpGuruAssignment {
 }
 
 export interface TargetJpRow {
-  id: string; // "<kelasId>:<mataPelajaranId>"
+  id: string;
   kelasId: string;
   kelasLabel: string;
   mataPelajaranId: string;
   mataPelajaranNama: string;
   mataPelajaranWarna?: string;
-  /** Resmi dari tabel target_jp — authority. Tidak pernah dihitung ulang dari Pembagian Mengajar. */
+  /** Official requirement from target_jp. */
   targetJp: number;
-  /** JP yang sudah punya guru (Pembagian Mengajar aktif), dibatasi maksimum targetJp. */
+  /** Active teacher allocation, capped at target for readiness. */
   siapJp: number;
-  /** targetJp - siapJp. "Guru belum ditentukan" untuk sejumlah ini. */
   belumSiapJp: number;
-  /** Dari siapJp, berapa yang sudah masuk Jadwal (draft/candidate/committed). */
+  /** ONLY committed schedule JP. Candidate/draft do not count as official schedule. */
   terjadwalJp: number;
-  /** siapJp - terjadwalJp. */
   belumTerjadwalJp: number;
-  /** Guru dialokasikan MELEBIHI target_jp resmi (jpPerMinggu total > target_jp) —
-   * sebelumnya diam-diam disembunyikan lewat Math.min(target_jp, assignedJp).
-   * AI (dan fitur lain) perlu tahu ini supaya tidak melaporkan 'sudah sesuai'
-   * padahal sebenarnya ada alokasi guru yang perlu dikoreksi. */
+  /** Candidate JP waiting for operator review/commit. */
+  pendingCandidateJp: number;
   assignedExcessJp: number;
-  /** JP yang benar-benar terjadwal MELEBIHI siapJp (kelebihan riil di jadwal) —
-   * sebelumnya diam-diam disembunyikan lewat Math.min(siapJp, scheduledRaw). */
+  /** Official committed JP beyond ready allocation, if any. */
   scheduledExcessJp: number;
   status: TargetJpStatus;
   guruAssignments: TargetJpGuruAssignment[];
+  /** Official committed schedule references only. */
   schedules: TargetJpScheduleRef[];
 }
 
@@ -77,6 +64,7 @@ export interface TargetJpSubjectRollup {
   belumSiapJp: number;
   terjadwalJp: number;
   belumTerjadwalJp: number;
+  pendingCandidateJp: number;
   status: TargetJpStatus;
 }
 
@@ -86,8 +74,15 @@ export interface TargetJpView {
   overallTargetJp: number;
   overallSiapJp: number;
   overallBelumSiapJp: number;
+  /** Official scheduled JP = committed only. */
   overallTerjadwalJp: number;
   overallBelumTerjadwalJp: number;
+  /** Pending candidate JP, intentionally separate from scheduled. */
+  overallPendingCandidateJp: number;
+}
+
+function assignmentJp(a: { periodStart: number; periodEnd: number }): number {
+  return Math.max(0, a.periodEnd - a.periodStart + 1);
 }
 
 function classify(targetJp: number, siapJp: number, terjadwalJp: number): TargetJpStatus {
@@ -111,14 +106,13 @@ export async function getTargetJpView(supabase: SupabaseClient, academicContextI
 
   type TargetRow = { kelas_id: string; mata_pelajaran_id: string; target_jp: number; kelas: { tingkat: string; nama_rombel: string } | null; mata_pelajaran: { nama: string; warna_jadwal: string | null } | null };
   const officialTargets = (targetRowsResult.data ?? []) as unknown as TargetRow[];
-
-  const activeAssignments = assignments.filter((a) => ASSIGNMENT_ACTIVE_STATUSES.has(a.status));
   const pembagianAktif = pembagianList.filter((p) => p.status === "aktif");
+  const committedAssignments = assignments.filter((a) => isCommittedStatus(a.status));
+  const candidateAssignments = assignments.filter((a) => isCandidateStatus(a.status));
 
   const rows: TargetJpRow[] = officialTargets.map((target) => {
     const key = `${target.kelas_id}:${target.mata_pelajaran_id}`;
     const guruEntries = pembagianAktif.filter((p) => p.kelasId === target.kelas_id && p.mataPelajaranId === target.mata_pelajaran_id);
-
     const guruAssignments: TargetJpGuruAssignment[] = guruEntries.map((g) => ({
       guruId: g.guruId,
       guruNama: g.guruNama ?? "(tidak diketahui)",
@@ -131,13 +125,15 @@ export async function getTargetJpView(supabase: SupabaseClient, academicContextI
     const belumSiapJp = target.target_jp - siapJp;
     const assignedExcessJp = Math.max(0, assignedJp - target.target_jp);
 
-    const scheduledRaw = guruAssignments.reduce((sum, g) => sum + g.jpTerjadwal, 0);
-    const terjadwalJp = Math.min(siapJp, scheduledRaw);
-    const belumTerjadwalJp = siapJp - terjadwalJp;
-    const scheduledExcessJp = Math.max(0, scheduledRaw - siapJp);
+    const committedForTarget = committedAssignments.filter((a) => a.subjectId === target.mata_pelajaran_id && a.classId === target.kelas_id);
+    const candidateForTarget = candidateAssignments.filter((a) => a.subjectId === target.mata_pelajaran_id && a.classId === target.kelas_id);
+    const committedRaw = committedForTarget.reduce((sum, a) => sum + assignmentJp(a), 0);
+    const candidateJp = candidateForTarget.reduce((sum, a) => sum + assignmentJp(a), 0);
+    const terjadwalJp = Math.min(siapJp, committedRaw);
+    const belumTerjadwalJp = Math.max(0, siapJp - terjadwalJp);
+    const scheduledExcessJp = Math.max(0, committedRaw - siapJp);
 
-    const schedules = activeAssignments
-      .filter((a) => a.subjectId === target.mata_pelajaran_id && a.classId === target.kelas_id)
+    const schedules = committedForTarget
       .map((a) => ({ id: a.id, day: a.day, periodStart: a.periodStart, periodEnd: a.periodEnd, status: a.status }))
       .sort((a, b) => a.periodStart - b.periodStart);
 
@@ -153,6 +149,7 @@ export async function getTargetJpView(supabase: SupabaseClient, academicContextI
       belumSiapJp,
       terjadwalJp,
       belumTerjadwalJp,
+      pendingCandidateJp: candidateJp,
       assignedExcessJp,
       scheduledExcessJp,
       status: classify(target.target_jp, siapJp, terjadwalJp),
@@ -161,17 +158,19 @@ export async function getTargetJpView(supabase: SupabaseClient, academicContextI
     };
   });
 
-  const rollupMap = new Map<string, { nama: string; warna?: string; target: number; siap: number; terjadwal: number }>();
+  const rollupMap = new Map<string, { nama: string; warna?: string; target: number; siap: number; terjadwal: number; candidate: number }>();
   for (const row of rows) {
     const existing = rollupMap.get(row.mataPelajaranId);
     if (existing) {
       existing.target += row.targetJp;
       existing.siap += row.siapJp;
       existing.terjadwal += row.terjadwalJp;
+      existing.candidate += row.pendingCandidateJp;
     } else {
-      rollupMap.set(row.mataPelajaranId, { nama: row.mataPelajaranNama, warna: row.mataPelajaranWarna, target: row.targetJp, siap: row.siapJp, terjadwal: row.terjadwalJp });
+      rollupMap.set(row.mataPelajaranId, { nama: row.mataPelajaranNama, warna: row.mataPelajaranWarna, target: row.targetJp, siap: row.siapJp, terjadwal: row.terjadwalJp, candidate: row.pendingCandidateJp });
     }
   }
+
   const subjectRollups: TargetJpSubjectRollup[] = Array.from(rollupMap.entries())
     .map(([mataPelajaranId, v]) => ({
       mataPelajaranId,
@@ -181,7 +180,8 @@ export async function getTargetJpView(supabase: SupabaseClient, academicContextI
       siapJp: v.siap,
       belumSiapJp: v.target - v.siap,
       terjadwalJp: v.terjadwal,
-      belumTerjadwalJp: v.siap - v.terjadwal,
+      belumTerjadwalJp: Math.max(0, v.siap - v.terjadwal),
+      pendingCandidateJp: v.candidate,
       status: classify(v.target, v.siap, v.terjadwal),
     }))
     .sort((a, b) => a.mataPelajaranNama.localeCompare(b.mataPelajaranNama));
@@ -194,5 +194,6 @@ export async function getTargetJpView(supabase: SupabaseClient, academicContextI
     overallBelumSiapJp: rows.reduce((sum, r) => sum + r.belumSiapJp, 0),
     overallTerjadwalJp: rows.reduce((sum, r) => sum + r.terjadwalJp, 0),
     overallBelumTerjadwalJp: rows.reduce((sum, r) => sum + r.belumTerjadwalJp, 0),
+    overallPendingCandidateJp: rows.reduce((sum, r) => sum + r.pendingCandidateJp, 0),
   };
 }
