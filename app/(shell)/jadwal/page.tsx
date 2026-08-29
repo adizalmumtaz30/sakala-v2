@@ -8,8 +8,9 @@ import { listKelas } from "@/lib/application/kelas.usecases";
 import { listMataPelajaran } from "@/lib/application/mata-pelajaran.usecases";
 import { listRuangan } from "@/lib/application/ruangan.usecases";
 import { listScheduleAssignments } from "@/lib/application/scheduleAssignment.usecases";
+import { listPembagianMengajar } from "@/lib/application/pembagianMengajar.usecases";
 import { getSchoolProfile } from "@/lib/application/schoolProfile.usecases";
-import JadwalWorkspace from "./JadwalWorkspace";
+import JadwalUnifiedWorkspace from "./JadwalUnifiedWorkspace";
 import JadwalPointerDrag from "@/components/jadwal/JadwalPointerDrag";
 import { ErrorState, EmptyState } from "@/components/ui/primitives";
 
@@ -20,14 +21,10 @@ export default async function JadwalPage() {
     const activeContext = contexts.find((c) => c.isActive) ?? null;
 
     if (!activeContext) {
-      return (
-        <div className="mx-auto max-w-6xl pt-10">
-          <EmptyState title="Belum ada konteks akademik aktif" description="Aktifkan satu konteks akademik dulu di halaman Akademik sebelum membuka Jadwal." />
-        </div>
-      );
+      return <div className="mx-auto max-w-6xl pt-10"><EmptyState title="Belum ada konteks akademik aktif" description="Aktifkan satu konteks akademik dulu di halaman Akademik sebelum membuka Jadwal." /></div>;
     }
 
-    const [scheduleModels, jamPelajaranList, guruList, kelasList, mapelList, ruanganList, allAssignments, schoolProfile] = await Promise.all([
+    const [scheduleModels, jamPelajaranList, guruList, kelasList, mapelList, ruanganList, allAssignments, pembagianMengajarList, schoolProfile] = await Promise.all([
       listScheduleModels(supabase, activeContext.id),
       listJamPelajaran(supabase, activeContext.id),
       listGuru(supabase),
@@ -35,20 +32,21 @@ export default async function JadwalPage() {
       listMataPelajaran(supabase),
       listRuangan(supabase),
       listScheduleAssignments(supabase, activeContext.id),
+      listPembagianMengajar(supabase, activeContext.id),
       getSchoolProfile(supabase),
     ]);
 
     const slotTemplateLists = await Promise.all(scheduleModels.map((m) => listSlotTemplate(supabase, m.id)));
     const slotTemplatesByModel: Record<string, Awaited<ReturnType<typeof listSlotTemplate>>> = {};
     scheduleModels.forEach((m, i) => { slotTemplatesByModel[m.id] = slotTemplateLists[i]; });
-
     const contextLabel = `${activeContext.tahunPelajaran} · ${activeContext.semester === "ganjil" ? "Ganjil" : "Genap"}`;
+    const candidateAssignments = allAssignments.filter((a) => a.status === "candidate");
 
     return (
       <div data-sakala-jadwal-root>
         <h1 className="sr-only">Jadwal</h1>
         <JadwalPointerDrag academicContextId={activeContext.id} scheduleModels={scheduleModels} assignments={allAssignments} />
-        <JadwalWorkspace
+        <JadwalUnifiedWorkspace
           activeContext={activeContext}
           scheduleModels={scheduleModels}
           jamPelajaranList={jamPelajaranList}
@@ -58,6 +56,8 @@ export default async function JadwalPage() {
           mapelList={mapelList}
           ruanganList={ruanganList}
           assignments={allAssignments}
+          candidateAssignments={candidateAssignments}
+          pembagianMengajarList={pembagianMengajarList.filter((p) => p.status === "aktif")}
           schoolName={schoolProfile?.namaSekolah}
           contextLabel={contextLabel}
         />
