@@ -36,9 +36,14 @@ export default function TargetJpWorkspace({ activeContextLabel, view }: Props) {
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-5 pt-6">
       <div>
-        <Link href="/pembagian-mengajar" className="mb-2 flex items-center gap-1 text-[12.5px] text-ink-400 hover:text-ink-700">
-          <ArrowLeft size={13} /> Pembagian Mengajar
-        </Link>
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <Link href="/pembagian-mengajar" className="flex items-center gap-1 text-[12.5px] text-ink-400 hover:text-ink-700">
+            <ArrowLeft size={13} /> Pembagian Mengajar
+          </Link>
+          <Link href="/akademik/target-jp" className="rounded-lg border border-border px-3 py-1.5 text-[12px] font-medium text-ink-700 hover:bg-surface-muted">
+            Import / Edit Massal
+          </Link>
+        </div>
         <h1 className="text-[20px] font-bold text-ink-900">Target JP</h1>
         <p className="text-[13px] text-ink-500">
           Kebutuhan resmi per Kelas+Mapel (dari Target JP hasil Generate Kurikulum) dibandingkan kesiapan guru dan jadwal — konteks aktif:{" "}
