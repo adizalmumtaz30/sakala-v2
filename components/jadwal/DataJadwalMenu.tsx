@@ -153,7 +153,7 @@ export default function DataJadwalMenu({
         templateFilename="Template_Jadwal_SAKALA_V2.3.xlsx"
         onValidate={handleValidateImport}
         onCommit={handleCommitImport}
-        onImported={() => router.push("/jadwal-cerdas")}
+        onImported={() => router.push("/jadwal?mode=cerdas")}
       />
     </div>
   );
