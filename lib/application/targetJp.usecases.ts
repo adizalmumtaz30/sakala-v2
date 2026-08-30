@@ -19,6 +19,68 @@ import type { HariSekolah } from "@/lib/domain/jamPelajaran";
 
 const ASSIGNMENT_ACTIVE_STATUSES = new Set(["draft", "candidate", "committed"]);
 
+// SAKALA MASTER RULE (Zero Duplicate Information): target_jp adalah SATU
+// authority resmi, tapi sebelumnya ditulis lewat DUA jalur terpisah yang
+// masing-masing punya logic upsert + read-back verification sendiri (Generate
+// Kurikulum → Commit, dan Import/Manual Target JP) — berisiko divergen kalau
+// salah satu diperbaiki tapi yang lain tidak. Fungsi ini menjadi satu-satunya
+// pintu tulis ke target_jp; kedua jalur di atas wajib memanggil ini.
+export interface TargetJpUpsertRow {
+  academic_context_id: string;
+  kelas_id: string;
+  mata_pelajaran_id: string;
+  target_jp: number;
+}
+
+export interface TargetJpUpsertResult {
+  upserted: number;
+  beforeMap: Map<string, number>;
+}
+
+function targetJpRowKey(row: { academic_context_id: string; kelas_id: string; mata_pelajaran_id: string }): string {
+  return `${row.academic_context_id}:${row.kelas_id}:${row.mata_pelajaran_id}`;
+}
+
+export async function upsertTargetJp(
+  supabase: SupabaseClient,
+  rows: TargetJpUpsertRow[]
+): Promise<TargetJpUpsertResult> {
+  if (!rows.length) return { upserted: 0, beforeMap: new Map() };
+
+  const contextIds = [...new Set(rows.map((r) => r.academic_context_id))];
+
+  const { data: beforeRows } = await supabase
+    .from("target_jp")
+    .select("academic_context_id,kelas_id,mata_pelajaran_id,target_jp")
+    .in("academic_context_id", contextIds);
+  const beforeMap = new Map((beforeRows ?? []).map((r) => [targetJpRowKey(r), r.target_jp as number]));
+
+  const { error } = await supabase.from("target_jp").upsert(rows, {
+    onConflict: "academic_context_id,kelas_id,mata_pelajaran_id",
+  });
+  if (error) throw error;
+
+  // Read-back: target_jp dipakai di seluruh app (Target JP, SAKALA AI,
+  // Analitik) — tidak cukup cek upsert() tidak error, wajib baca ulang dan
+  // cocokkan nilainya persis sebelum mengklaim berhasil.
+  const { data: afterRows, error: verifyError } = await supabase
+    .from("target_jp")
+    .select("academic_context_id,kelas_id,mata_pelajaran_id,target_jp")
+    .in("academic_context_id", contextIds);
+  if (verifyError) {
+    throw new Error(`Tidak dapat dipastikan tersimpan: ${verifyError.message}`);
+  }
+  const afterMap = new Map((afterRows ?? []).map((r) => [targetJpRowKey(r), r.target_jp as number]));
+  const mismatched = rows.filter((r) => afterMap.get(targetJpRowKey(r)) !== r.target_jp);
+  if (mismatched.length > 0) {
+    throw new Error(
+      `Belum bisa dipastikan tersimpan dengan benar untuk ${mismatched.length} kombinasi Kelas+Mapel. Data resmi belum mencerminkan perubahan ini — coba lagi sebelum melanjutkan.`
+    );
+  }
+
+  return { upserted: rows.length, beforeMap };
+}
+
 export interface TargetJpScheduleRef {
   id: string;
   day: HariSekolah;

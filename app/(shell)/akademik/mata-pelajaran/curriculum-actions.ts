@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { CurriculumInstitution } from "@/lib/domain/curriculumIntelligence";
 import { recordAuditEvent } from "@/lib/application/auditLog.usecases";
 import { toPlainDatabaseError } from "@/lib/utils/databaseError";
+import { upsertTargetJp } from "@/lib/application/targetJp.usecases";
 
 export type CurriculumActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -432,39 +433,22 @@ export async function adoptCurriculumItemsAction(input: {
       target_jp: Math.round(Number(row.school_target_jp)),
     }));
 
-  // Baca nilai LAMA sebelum menulis — supaya audit trail punya before/after
-  // yang nyata, bukan cuma jumlah baris (kontrak: evidence harus konkret).
+  // SAKALA MASTER RULE (Zero Duplicate Information): upsert + read-back
+  // verification ke target_jp sekarang lewat satu fungsi bersama
+  // (upsertTargetJp) yang juga dipakai jalur Import/Manual Target JP, supaya
+  // kedua jalur tidak bisa divergen dan validasinya selalu konsisten.
   let beforeMap = new Map<string, number>();
   if (targetRows.length) {
-    const { data: beforeRows } = await supabase
-      .from("target_jp")
-      .select("kelas_id,mata_pelajaran_id,target_jp")
-      .eq("academic_context_id", input.academicContextId)
-      .in("kelas_id", input.classIds);
-    beforeMap = new Map((beforeRows ?? []).map((r) => [`${r.kelas_id}:${r.mata_pelajaran_id}`, r.target_jp]));
-  }
-
-  if (targetRows.length) {
-    const { error: targetError } = await supabase.from("target_jp").upsert(targetRows, {
-      onConflict: "academic_context_id,kelas_id,mata_pelajaran_id",
-    });
-    if (targetError) return { ok: false, error: toPlainDatabaseError(targetError) };
-
-    // SAKALA MASTER RULE (Read-Back): target_jp adalah authority resmi yang
-    // dipakai di seluruh app (halaman Target JP, SAKALA AI, Analitik) — tidak
-    // cukup cuma cek upsert() tidak error. Baca ulang baris yang baru saja
-    // ditulis dan cocokkan nilainya persis, sebelum mengklaim berhasil.
-    const { data: verifyRows, error: verifyError } = await supabase
-      .from("target_jp")
-      .select("kelas_id,mata_pelajaran_id,target_jp")
-      .eq("academic_context_id", input.academicContextId)
-      .in("kelas_id", input.classIds);
-    if (verifyError) return { ok: false, error: `Commit tidak dapat dipastikan tersimpan: ${verifyError.message}` };
-
-    const verifyMap = new Map((verifyRows ?? []).map((r) => [`${r.kelas_id}:${r.mata_pelajaran_id}`, r.target_jp]));
-    const mismatched = targetRows.filter((t) => verifyMap.get(`${t.kelas_id}:${t.mata_pelajaran_id}`) !== t.target_jp);
-    if (mismatched.length > 0) {
-      return { ok: false, error: `Commit belum bisa dipastikan tersimpan dengan benar untuk ${mismatched.length} kombinasi Kelas+Mapel. Data resmi belum mencerminkan perubahan ini — coba lagi sebelum melanjutkan.` };
+    try {
+      const result = await upsertTargetJp(supabase, targetRows as { academic_context_id: string; kelas_id: string; mata_pelajaran_id: string; target_jp: number }[]);
+      // beforeMap dari fungsi bersama berkunci academic_context_id:kelas_id:mata_pelajaran_id;
+      // audit di bawah pakai kunci kelas_id:mata_pelajaran_id (satu context per commit).
+      beforeMap = new Map(
+        [...result.beforeMap.entries()].map(([k, v]) => [k.split(":").slice(1).join(":"), v])
+      );
+    } catch (targetErr) {
+      const message = targetErr instanceof Error ? targetErr.message : toPlainDatabaseError(targetErr);
+      return { ok: false, error: message.startsWith("Tidak dapat") || message.startsWith("Belum bisa") ? `Commit ${message.charAt(0).toLowerCase()}${message.slice(1)}` : toPlainDatabaseError(targetErr) };
     }
   }
 
