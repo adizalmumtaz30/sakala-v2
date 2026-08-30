@@ -11,7 +11,6 @@ import {
 } from "@/lib/domain/scheduleAssignment";
 import type { ScheduleConflict } from "@/lib/domain/conflict";
 import { scheduleAssignmentRepository } from "@/lib/data-access/scheduleAssignment.repository";
-import { scheduleVersionRepository } from "@/lib/data-access/scheduleVersion.repository";
 import { validateAssignmentCandidate } from "@/lib/application/conflictEngine";
 import { recordAuditEvent } from "@/lib/application/auditLog.usecases";
 import type { AuditSource } from "@/lib/domain/auditLog";
@@ -201,7 +200,6 @@ export async function commitAssignments(
 
   const uniqueIds = [...new Set(assignmentIds)];
   const conflictsByAssignment: Record<string, ScheduleConflict[]> = {};
-  const assignments: ScheduleAssignment[] = [];
 
   for (const id of uniqueIds) {
     const existing = await scheduleAssignmentRepository.findById(supabase, id);
@@ -221,7 +219,6 @@ export async function commitAssignments(
     const draftForCommitCheck = { ...existing, status: "committed" as const };
     const conflicts = await validateAssignmentCandidate(supabase, draftForCommitCheck, id);
     conflictsByAssignment[id] = conflicts;
-    assignments.push(existing);
   }
 
   const blocking = Object.values(conflictsByAssignment).some((conflicts) => conflicts.some((c) => c.blocking));
@@ -232,40 +229,28 @@ export async function commitAssignments(
     );
   }
 
-  // Only now create the committed version. The previous active version is
-  // superseded after the new version exists, so candidate review never alters
-  // the current committed version.
-  const previousActive = await scheduleVersionRepository.findActiveByContext(supabase, academicContextId);
-  const version = await scheduleVersionRepository.create(supabase, {
-    academicContextId,
-    label,
-    createdBy: null,
-    source: "manual",
-    changeSummary,
+  // SAKALA MASTER RULE (Transaction Safety / Bagian 21.3 & 68): fase TULIS
+  // commit (create version + supersede versi lama + set status tiap
+  // assignment + audit) sebelumnya lewat beberapa panggilan Supabase
+  // terpisah -- kalau salah satu gagal di tengah, state bisa jadi parsial
+  // (versi baru menggantung tanpa semua assignment ter-commit). Sekarang
+  // seluruh fase tulis ini satu panggilan RPC ke fungsi Postgres
+  // commit_schedule_assignments() yang atomic (satu transaksi, rollback
+  // otomatis kalau ada langkah gagal). Validasi conflict di atas TETAP di
+  // TS karena reuse validateAssignmentCandidate yang sudah ada.
+  const { data: versionId, error: commitError } = await supabase.rpc("commit_schedule_assignments", {
+    p_academic_context_id: academicContextId,
+    p_assignment_ids: uniqueIds,
+    p_label: label,
+    p_change_summary: changeSummary,
   });
 
-  if (previousActive && previousActive.id !== version.id) {
-    await scheduleVersionRepository.setStatus(supabase, previousActive.id, "superseded");
+  if (commitError) {
+    throw new ScheduleAssignmentValidationError(
+      "commit",
+      `Commit gagal, tidak ada perubahan yang tersimpan (transaksi dibatalkan): ${commitError.message}`
+    );
   }
 
-  for (const assignment of assignments) {
-    await scheduleAssignmentRepository.setStatus(supabase, assignment.id, "committed", version.id);
-  }
-
-  for (const id of uniqueIds) {
-    const committed = await scheduleAssignmentRepository.findById(supabase, id);
-    await recordAuditEvent({
-      supabase,
-      academicContextId,
-      action: "commit",
-      entityType: "schedule_assignment",
-      entityId: id,
-      entityLabel: label,
-      after: committed,
-      source: "manual",
-      reason: changeSummary,
-    });
-  }
-
-  return { versionId: version.id, conflictsByAssignment };
+  return { versionId: versionId as string, conflictsByAssignment };
 }
