@@ -385,7 +385,7 @@ function FloatingActionDock({ conflictCount }: { conflictCount: number }) {
   const focusRing = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40";
   const actions: { label: string; href: string; icon: ReactNode; badge?: number }[] = [
     { label: "Tambah Guru", href: "/guru?new=1", icon: <Plus size={16} /> },
-    { label: "Generate Jadwal", href: "/jadwal-cerdas", icon: <Sparkles size={16} /> },
+    { label: "Generate Jadwal", href: "/jadwal?mode=cerdas", icon: <Sparkles size={16} /> },
     { label: "Validasi Jadwal", href: "/jadwal", icon: <ShieldCheck size={16} /> },
     { label: "Lihat Konflik", href: "/jadwal", icon: <AlertTriangle size={16} />, badge: conflictCount > 0 ? conflictCount : undefined },
     { label: "Import Data", href: "/guru?import=1", icon: <Upload size={16} /> },

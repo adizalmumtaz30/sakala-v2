@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, GraduationCap, BrainCircuit, Target, BookOpen, School2, DoorOpen, Split, Sparkles, CalendarDays, BarChart3, History, Bell, Bot, Compass, ChevronLeft, ChevronRight, LifeBuoy, ArrowUpRight } from "lucide-react";
+import { LayoutDashboard, Users, GraduationCap, BrainCircuit, Target, BookOpen, School2, DoorOpen, Split, CalendarDays, BarChart3, History, Bell, Bot, Compass, ChevronLeft, ChevronRight, LifeBuoy, ArrowUpRight } from "lucide-react";
 
 type NavItem = { label: string; href: string; icon: typeof LayoutDashboard; match?: (path: string) => boolean };
 type NavSection = { section: string; items: NavItem[] };
@@ -37,8 +37,7 @@ const sections: NavSection[] = [
   {
     section: "Jadwal",
     items: [
-      { label: "Jadwal Cerdas", href: "/jadwal-cerdas", icon: Sparkles },
-      { label: "Jadwal", href: "/jadwal", icon: CalendarDays },
+      { label: "Jadwal", href: "/jadwal", icon: CalendarDays, match: (p) => p.startsWith("/jadwal") },
     ],
   },
   {
