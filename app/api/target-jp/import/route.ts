@@ -6,6 +6,7 @@ import { buildControlledTemplateWorkbook, type ControlledTemplateColumn } from "
 import { bufferToBodyInit } from "@/lib/utils/response";
 import { recordAuditEvent } from "@/lib/application/auditLog.usecases";
 import { toPlainDatabaseError } from "@/lib/utils/databaseError";
+import { upsertTargetJp } from "@/lib/application/targetJp.usecases";
 
 const columns: ControlledTemplateColumn[] = [
   { key: "AcademicContext", required: true, format: "Pilih/ikuti Academic Context SAKALA", example: "2026/2027 · Ganjil" },
@@ -142,34 +143,20 @@ export async function PUT(request: Request) {
     if (invalid.length) return NextResponse.json({ error: `Import diblokir: ${invalid.length} baris tidak valid.`, results: invalid }, { status: 400 });
     const supabase = await createClient(); const payload = results.map((r: any) => r.data);
 
-    // SAKALA MASTER RULE (Authority Matrix): jalur ini menulis LANGSUNG ke
-    // target_jp — authority resmi yang juga ditulis Generate Kurikulum →
-    // Commit — tanpa lewat rantai verifikasi sumber (curriculum_source/
-    // version/item). Ini override manual yang sah (operator boleh koreksi
-    // cepat satu angka), tapi WAJIB tercatat di audit trail dengan
-    // before/after nyata dan WAJIB dibaca ulang sebelum klaim berhasil —
-    // sebelumnya baik audit trail maupun read-back sama sekali tidak ada.
-    const keys = payload.map((p: { academic_context_id: string; kelas_id: string; mata_pelajaran_id: string }) => `${p.academic_context_id}:${p.kelas_id}:${p.mata_pelajaran_id}`);
-    const contextIds = [...new Set(payload.map((p: { academic_context_id: string }) => p.academic_context_id))];
-    const { data: beforeRows } = await supabase
-      .from("target_jp")
-      .select("academic_context_id,kelas_id,mata_pelajaran_id,target_jp")
-      .in("academic_context_id", contextIds);
-    const beforeMap = new Map((beforeRows ?? []).map((r) => [`${r.academic_context_id}:${r.kelas_id}:${r.mata_pelajaran_id}`, r.target_jp]));
-
-    const { error } = await supabase.from("target_jp").upsert(payload, { onConflict: "academic_context_id,kelas_id,mata_pelajaran_id" });
-    if (error) throw new Error(toPlainDatabaseError(error));
-
-    // Read-back: pastikan nilai benar-benar tersimpan sesuai yang dikirim.
-    const { data: afterRows, error: verifyError } = await supabase
-      .from("target_jp")
-      .select("academic_context_id,kelas_id,mata_pelajaran_id,target_jp")
-      .in("academic_context_id", contextIds);
-    if (verifyError) return NextResponse.json({ error: `Import tidak dapat dipastikan tersimpan: ${toPlainDatabaseError(verifyError)}` }, { status: 500 });
-    const afterMap = new Map((afterRows ?? []).map((r) => [`${r.academic_context_id}:${r.kelas_id}:${r.mata_pelajaran_id}`, r.target_jp]));
-    const unconfirmed = keys.filter((k: string) => afterMap.get(k) !== payload.find((p: { academic_context_id: string; kelas_id: string; mata_pelajaran_id: string; target_jp: number }) => `${p.academic_context_id}:${p.kelas_id}:${p.mata_pelajaran_id}` === k)?.target_jp);
-    if (unconfirmed.length > 0) {
-      return NextResponse.json({ error: `Import belum bisa dipastikan tersimpan untuk ${unconfirmed.length} kombinasi. Data resmi belum mencerminkan perubahan ini — coba lagi.` }, { status: 500 });
+    // SAKALA MASTER RULE (Authority Matrix / Zero Duplicate Information):
+    // jalur ini menulis LANGSUNG ke target_jp — authority resmi yang juga
+    // ditulis Generate Kurikulum → Commit — tanpa lewat rantai verifikasi
+    // sumber (curriculum_source/version/item). Ini override manual yang sah
+    // (operator boleh koreksi cepat satu angka). Upsert + read-back
+    // verification sekarang lewat satu fungsi bersama (upsertTargetJp) yang
+    // juga dipakai Generate Kurikulum, supaya kedua jalur tidak bisa divergen.
+    let beforeMap: Map<string, number>;
+    try {
+      const result = await upsertTargetJp(supabase, payload);
+      beforeMap = result.beforeMap;
+    } catch (upsertErr) {
+      const message = upsertErr instanceof Error ? upsertErr.message : toPlainDatabaseError(upsertErr);
+      return NextResponse.json({ error: message.startsWith("Tidak dapat") || message.startsWith("Belum bisa") ? `Import ${message.charAt(0).toLowerCase()}${message.slice(1)}` : toPlainDatabaseError(upsertErr) }, { status: 500 });
     }
 
     for (const p of payload as { academic_context_id: string; kelas_id: string; mata_pelajaran_id: string; target_jp: number }[]) {
