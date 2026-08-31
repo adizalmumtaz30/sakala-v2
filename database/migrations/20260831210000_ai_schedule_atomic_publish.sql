@@ -1,16 +1,22 @@
 -- AI one-click schedule publication.
--- The operator never needs to manage candidate/commit states for AI actions.
--- All AI-generated rows are validated in the application layer first, then
--- inserted as committed rows + new active version in ONE Postgres transaction.
--- If any database step fails, the whole operation rolls back and the previous
--- active schedule remains untouched.
+-- Candidate/Commit remains available for explicit/manual workflows, but AI does
+-- not expose either state to the operator. AI publishes a complete active
+-- version in one transaction.
+--
+-- fill   = copy the current active committed schedule into the new version,
+--          then add AI-generated placements.
+-- replace = publish the generated full-week schedule as the new version.
+--
+-- In both modes, failure rolls back the entire transaction. The previous
+-- active version is never superseded until the new version is complete.
 
 create or replace function public.publish_ai_schedule_atomic(
   p_academic_context_id uuid,
   p_schedule_model_id uuid,
   p_drafts jsonb,
   p_label text,
-  p_change_summary text
+  p_change_summary text,
+  p_mode text default 'fill'
 )
 returns jsonb
 language plpgsql
@@ -31,6 +37,10 @@ begin
 
   if p_drafts is null or jsonb_typeof(p_drafts) <> 'array' or jsonb_array_length(p_drafts) = 0 then
     raise exception 'Draft jadwal AI kosong';
+  end if;
+
+  if p_mode not in ('fill', 'replace') then
+    raise exception 'Mode publikasi AI tidak valid';
   end if;
 
   if not exists (
@@ -73,6 +83,47 @@ begin
     p_change_summary
   )
   returning id into v_new_version_id;
+
+  -- A partial "fill" must not replace the whole timetable. Copy the current
+  -- active committed version into the new version first; committed rows are
+  -- immutable, so this creates a new version snapshot rather than mutating
+  -- historical rows.
+  if p_mode = 'fill' and v_previous_active_id is not null then
+    insert into schedule_assignment (
+      academic_context_id,
+      schedule_model_id,
+      class_id,
+      subject_id,
+      teacher_id,
+      room_id,
+      day,
+      period_start,
+      period_end,
+      activity_type,
+      status,
+      source,
+      version_id
+    )
+    select
+      academic_context_id,
+      schedule_model_id,
+      class_id,
+      subject_id,
+      teacher_id,
+      room_id,
+      day,
+      period_start,
+      period_end,
+      activity_type,
+      'committed',
+      source,
+      v_new_version_id
+    from schedule_assignment
+    where academic_context_id = p_academic_context_id
+      and schedule_model_id = p_schedule_model_id
+      and version_id = v_previous_active_id
+      and status = 'committed';
+  end if;
 
   for v_draft in
     select *
@@ -135,16 +186,14 @@ begin
     v_assignment_ids := array_append(v_assignment_ids, v_assignment_id);
   end loop;
 
-  -- The new schedule becomes active only after every assignment was inserted.
-  -- The previous version is never exposed as inactive before this point.
+  -- The new version is only allowed to replace the old active version after
+  -- every row in the new snapshot has been written successfully.
   if v_previous_active_id is not null and v_previous_active_id <> v_new_version_id then
     update schedule_version
     set status = 'superseded'
     where id = v_previous_active_id;
   end if;
 
-  -- Audit is best-effort so an audit insert cannot destroy an otherwise valid
-  -- schedule publication. The schedule data itself remains transactional.
   foreach v_assignment_id in array v_assignment_ids
   loop
     begin
@@ -178,10 +227,11 @@ begin
   return jsonb_build_object(
     'version_id', v_new_version_id,
     'assignment_ids', to_jsonb(v_assignment_ids),
-    'assignment_count', coalesce(array_length(v_assignment_ids, 1), 0)
+    'assignment_count', coalesce(array_length(v_assignment_ids, 1), 0),
+    'mode', p_mode
   );
 end;
 $$;
 
 comment on function public.publish_ai_schedule_atomic is
-  'Publikasi jadwal SAKALA AI satu-klik secara atomic: insert seluruh assignment committed + active version + supersede versi lama dalam satu transaksi. Candidate/commit tidak menjadi langkah operator.';
+  'Publikasi jadwal SAKALA AI satu-klik secara atomic. Mode fill mempertahankan snapshot jadwal aktif lalu menambah hasil AI; mode replace mengganti snapshot hanya setelah jadwal baru lengkap. Candidate/commit tidak menjadi langkah operator.';
