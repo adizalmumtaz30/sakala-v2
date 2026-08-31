@@ -1,5 +1,4 @@
 import { createClient } from "@/lib/supabase/server";
-import { Suspense } from "react";
 import { listAcademicContexts } from "@/lib/application/academicContext.usecases";
 import { listScheduleModels } from "@/lib/application/scheduleModel.usecases";
 import { listSlotTemplate } from "@/lib/application/slotTemplate.usecases";
@@ -11,7 +10,7 @@ import { listRuangan } from "@/lib/application/ruangan.usecases";
 import { listScheduleAssignments } from "@/lib/application/scheduleAssignment.usecases";
 import { listPembagianMengajar } from "@/lib/application/pembagianMengajar.usecases";
 import { getSchoolProfile } from "@/lib/application/schoolProfile.usecases";
-import JadwalUnifiedWorkspace from "./JadwalUnifiedWorkspace";
+import JadwalWorkspace from "./JadwalWorkspace";
 import { ErrorState, EmptyState } from "@/components/ui/primitives";
 
 // SAKALA MASTER RULE (Performance / Zero Duplicate Information): sebelumnya
@@ -57,22 +56,20 @@ export default async function JadwalPage() {
     const contextLabel = `${activeContext.tahunPelajaran} · ${activeContext.semester === "ganjil" ? "Ganjil" : "Genap"}`;
 
     return (
-      <Suspense fallback={null}>
-        <JadwalUnifiedWorkspace
-          activeContext={activeContext}
-          scheduleModels={scheduleModels}
-          jamPelajaranList={jamPelajaranList}
-          slotTemplatesByModel={slotTemplatesByModel}
-          guruList={guruList}
-          kelasList={kelasList}
-          mapelList={mapelList}
-          ruanganList={ruanganList}
-          assignments={allAssignments}
-          pembagianMengajarList={pembagianMengajarList.filter((p) => p.status === "aktif")}
-          schoolName={schoolProfile?.namaSekolah}
-          contextLabel={contextLabel}
-        />
-      </Suspense>
+      <JadwalWorkspace
+        activeContext={activeContext}
+        scheduleModels={scheduleModels}
+        jamPelajaranList={jamPelajaranList}
+        slotTemplatesByModel={slotTemplatesByModel}
+        guruList={guruList}
+        kelasList={kelasList}
+        mapelList={mapelList}
+        ruanganList={ruanganList}
+        assignments={allAssignments}
+        pembagianMengajarList={pembagianMengajarList.filter((p) => p.status === "aktif")}
+        schoolName={schoolProfile?.namaSekolah}
+        contextLabel={contextLabel}
+      />
     );
   } catch {
     return <div className="mx-auto max-w-3xl pt-10"><ErrorState message="Gagal memuat data Jadwal dari Supabase. Cek koneksi dan environment variable kamu." /></div>;
