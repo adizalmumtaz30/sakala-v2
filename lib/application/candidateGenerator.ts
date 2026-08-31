@@ -50,7 +50,8 @@ export async function generateCandidatePreview(
   supabase: SupabaseClient,
   academicContextId: string,
   scheduleModelId: string,
-  requirements: GenerationRequirement[]
+  requirements: GenerationRequirement[],
+  options?: { includeActiveExisting?: boolean }
 ): Promise<GenerationResult> {
   if (requirements.length === 0) {
     return { candidates: [], outcomes: [], solver: { complete: true, searchNodes: 0, reason: null, failures: [] } };
@@ -70,7 +71,9 @@ export async function generateCandidatePreview(
   }
 
   const slots = buildAvailableSlots(scheduleModel.hariAktif, jamPelajaranList, slotTemplates);
-  const activeExisting = existingAssignments.filter((a) => a.status !== "archived" && a.status !== "cancelled");
+  const activeExisting = options?.includeActiveExisting === false
+    ? []
+    : existingAssignments.filter((a) => a.status !== "archived" && a.status !== "cancelled");
 
   const solverResult = solveWeeklySchedule(
     requirements.map((r) => ({
@@ -168,9 +171,6 @@ export async function saveGeneratedCandidates(
       continue;
     }
     const created = await scheduleAssignmentRepository.create(supabase, draft);
-    // Sebelumnya TIDAK ADA audit trail sama sekali untuk penyimpanan candidate
-    // (baik dari Jadwal Cerdas manual maupun SAKALA AI) — celah nyata untuk
-    // fitur yang seharusnya "setiap perubahan data harus terlacak" (§46/§47).
     await recordAuditEvent({
       supabase,
       academicContextId: created.academicContextId,
