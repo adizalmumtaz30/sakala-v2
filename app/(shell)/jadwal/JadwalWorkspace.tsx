@@ -140,6 +140,47 @@ export default function JadwalWorkspace({
     }
   }
 
+  // SAKALA MASTER RULE (Jadwal Satu Layar tahap 4): tampilan Jadwal ini
+  // satu-entitas-per-waktu (viewBy: kelas/guru/ruangan), BUKAN grid
+  // multi-kolom semua kelas sekaligus -- badge JP & drag guru didesain
+  // menyesuaikan pola ini, bukan dipaksakan jadi tampilan kalender
+  // multi-kolom yang tidak ada.
+
+  // Badge "31/40 JP" -- progress kebutuhan per kelas, dari pembagianMengajarList
+  // yang sudah punya jpTerjadwal/jpTersisa terhitung (attachJpTerjadwal usecase).
+  const kelasJpSummary = useMemo(() => {
+    const map = new Map<string, { target: number; terjadwal: number }>();
+    for (const p of pembagianMengajarList) {
+      if (p.status !== "aktif") continue;
+      const cur = map.get(p.kelasId) ?? { target: 0, terjadwal: 0 };
+      cur.target += p.jpPerMinggu;
+      cur.terjadwal += p.jpTerjadwal ?? Math.max(p.jpPerMinggu - (p.jpTersisa ?? 0), 0);
+      map.set(p.kelasId, cur);
+    }
+    return map;
+  }, [pembagianMengajarList]);
+
+  const [kelasPickerOpen, setKelasPickerOpen] = useState(false);
+  const kelasPickerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!kelasPickerOpen) return;
+    function onClickOutside(e: MouseEvent) {
+      if (kelasPickerRef.current && !kelasPickerRef.current.contains(e.target as Node)) setKelasPickerOpen(false);
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [kelasPickerOpen]);
+
+  // Drag guru dari panel samping ke sel kosong -- teacherId (dan classId,
+  // krn kita sedang di view kelas) diisikan otomatis ke form tambah, operator
+  // tinggal pilih Mata Pelajaran & konfirmasi (subjek sengaja tidak
+  // diasumsikan, supaya tidak salah tempatkan guru ke mapel yang keliru).
+  const [draggingTeacherId, setDraggingTeacherId] = useState<string | null>(null);
+  function handleGuruDrop(day: HariSekolah, nomorUrut: number, teacherId: string) {
+    openAdd(day, nomorUrut);
+    setAddForm((f) => ({ ...f, teacherId, classId: viewBy === "kelas" ? activeEntityId : f.classId }));
+  }
+
   async function runAiFill(scope: AiFillScope) {
     if (!activeContext || !selectedModelId) return;
     setAiMenuOpen(false);
@@ -720,18 +761,55 @@ export default function JadwalWorkspace({
 
         <div className="flex flex-col gap-1.5">
           <label className="text-[12.5px] font-medium text-ink-700 capitalize">{viewBy}</label>
-          <select
-            value={activeEntityId}
-            onChange={(e) => setSelectedEntityId(e.target.value)}
-            className="h-11 min-w-[180px] rounded-xl border border-border bg-surface px-3 text-[13.5px] text-ink-900"
-          >
-            {entityOptions.length === 0 && <option value="">Belum ada data</option>}
-            {entityOptions.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.label}
-              </option>
-            ))}
-          </select>
+          {viewBy === "kelas" ? (
+            <div className="relative" ref={kelasPickerRef}>
+              <button
+                type="button"
+                onClick={() => setKelasPickerOpen((v) => !v)}
+                className="flex h-11 min-w-[220px] items-center justify-between gap-2 rounded-xl border border-border bg-surface px-3 text-[13.5px] text-ink-900 hover:bg-surface-muted"
+              >
+                <span>{entityOptions.find((o) => o.id === activeEntityId)?.label ?? "Belum ada data"}</span>
+                {kelasJpSummary.get(activeEntityId) && (
+                  <Badge tone={kelasJpSummary.get(activeEntityId)!.terjadwal >= kelasJpSummary.get(activeEntityId)!.target ? "success" : "warning"}>
+                    {kelasJpSummary.get(activeEntityId)!.terjadwal}/{kelasJpSummary.get(activeEntityId)!.target} JP
+                  </Badge>
+                )}
+                <ChevronDown size={14} className="text-ink-400" />
+              </button>
+              {kelasPickerOpen && (
+                <div className="absolute left-0 top-full z-20 mt-1.5 max-h-80 w-72 overflow-y-auto rounded-xl border border-border bg-surface p-1.5 shadow-lg">
+                  {entityOptions.length === 0 && <p className="px-3 py-2 text-[12.5px] text-ink-400">Belum ada data kelas.</p>}
+                  {entityOptions.map((o) => {
+                    const jp = kelasJpSummary.get(o.id);
+                    return (
+                      <button
+                        key={o.id}
+                        type="button"
+                        onClick={() => { setSelectedEntityId(o.id); setKelasPickerOpen(false); }}
+                        className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-[13px] hover:bg-surface-muted ${o.id === activeEntityId ? "bg-brand-50 font-semibold text-brand-700" : "text-ink-800"}`}
+                      >
+                        <span>{o.label}</span>
+                        {jp && <Badge tone={jp.terjadwal >= jp.target ? "success" : "warning"}>{jp.terjadwal}/{jp.target} JP</Badge>}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : (
+            <select
+              value={activeEntityId}
+              onChange={(e) => setSelectedEntityId(e.target.value)}
+              className="h-11 min-w-[180px] rounded-xl border border-border bg-surface px-3 text-[13.5px] text-ink-900"
+            >
+              {entityOptions.length === 0 && <option value="">Belum ada data</option>}
+              {entityOptions.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
         <div className="flex flex-col gap-1.5">
@@ -832,7 +910,26 @@ export default function JadwalWorkspace({
       ) : grid.rows.length === 0 ? (
         <EmptyState title="Belum ada Jam Pelajaran" description="Susun Jam Pelajaran untuk konteks akademik ini dulu di halaman Akademik." />
       ) : (
-        <div className="overflow-x-auto rounded-card border border-border bg-surface">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+        {viewBy === "kelas" && guruList.length > 0 && (
+          <aside className="shrink-0 rounded-card border border-border bg-surface p-3 lg:w-56">
+            <p className="mb-2 text-[11.5px] font-semibold uppercase tracking-wide text-ink-400">Seret guru ke jam kosong</p>
+            <div className="flex max-h-[420px] flex-col gap-1 overflow-y-auto">
+              {guruList.map((g) => (
+                <div
+                  key={g.id}
+                  draggable
+                  onDragStart={(e) => { setDraggingTeacherId(g.id); e.dataTransfer.setData("text/plain", g.id); e.dataTransfer.effectAllowed = "copy"; }}
+                  onDragEnd={() => setDraggingTeacherId(null)}
+                  className={`cursor-grab rounded-lg border border-border bg-surface-muted px-2.5 py-1.5 text-[12px] font-medium text-ink-700 active:cursor-grabbing ${draggingTeacherId === g.id ? "opacity-40" : ""}`}
+                >
+                  {g.namaGuru}
+                </div>
+              ))}
+            </div>
+          </aside>
+        )}
+        <div className="min-w-0 flex-1 overflow-x-auto rounded-card border border-border bg-surface">
           <table className="w-full border-collapse text-[12.5px]">
             <thead>
               <tr className="border-b border-border bg-surface-muted">
@@ -865,6 +962,7 @@ export default function JadwalWorkspace({
                           <JadwalCell
                             cell={cell}
                             onClick={() => handleCellClick(cell)}
+                            onDropTeacher={viewBy === "kelas" ? (teacherId) => handleGuruDrop(d, row.nomorUrut, teacherId) : undefined}
                             entityLabel={
                               cell.assignment
                                 ? viewBy === "kelas"
@@ -892,6 +990,7 @@ export default function JadwalWorkspace({
               })}
             </tbody>
           </table>
+        </div>
         </div>
       )}
 
@@ -1192,6 +1291,7 @@ function JadwalStatCard({ icon, value, label, tone }: { icon: ReactNode; value: 
 function JadwalCell({
   cell,
   onClick,
+  onDropTeacher,
   entityLabel,
   mapelLabel,
   ruanganLabel,
@@ -1201,6 +1301,7 @@ function JadwalCell({
 }: {
   cell: GridCell;
   onClick: () => void;
+  onDropTeacher?: (teacherId: string) => void;
   entityLabel?: string;
   mapelLabel?: string;
   ruanganLabel?: string;
@@ -1216,6 +1317,16 @@ function JadwalCell({
       return (
         <button
           onClick={onClick}
+          onDragOver={onDropTeacher ? (e) => e.preventDefault() : undefined}
+          onDrop={
+            onDropTeacher
+              ? (e) => {
+                  e.preventDefault();
+                  const teacherId = e.dataTransfer.getData("text/plain");
+                  if (teacherId) onDropTeacher(teacherId);
+                }
+              : undefined
+          }
           className={`relative flex h-16 w-full items-center justify-center gap-1 rounded-xl border border-dashed text-[11.5px] transition-all ${
             hasPendingCandidate
               ? "border-violet bg-violet-50/40 text-violet hover:bg-violet-50"
