@@ -9,9 +9,9 @@ import type { GenerationRequirement } from "@/lib/domain/candidateGeneration";
 // SAKALA AI Jadwal — operator-facing contract:
 // 1 klik -> plan -> validate -> atomic publish -> read-back.
 // Candidate/Commit tetap mekanisme internal; operator tidak perlu mengurusnya.
-// Full-week selalu membangun ULANG seluruh target resmi, bukan hanya sisa JP.
+// Full-week membangun ulang seluruh target resmi hanya bila seluruh kebutuhan
+// punya guru aktif. Jika data dasar belum lengkap, tidak ada mutation sama sekali.
 // Fill/class hanya menambah kekurangan pada active committed version.
-// Tidak ada mutation sebelum solver menghasilkan rencana LENGKAP.
 
 export type AiFillScope = "class" | "empty" | "full-week";
 
@@ -104,8 +104,6 @@ async function buildRequirements(
       .filter((a) => a.classId === target.classId && a.subjectId === target.subjectId)
       .reduce((sum, a) => sum + Math.max(1, a.periodEnd - a.periodStart + 1), 0);
 
-    // Full-week means complete official target from scratch. Fill/class means
-    // only the unscheduled remainder. Never trust stale jpTersisa for this.
     let remaining = scope === "full-week" ? target.targetJp : Math.max(0, target.targetJp - alreadyScheduled);
     if (remaining <= 0) continue;
 
@@ -127,8 +125,15 @@ async function buildRequirements(
     }
   }
 
+  // Full-week is all-or-nothing at the preflight stage. Never archive or
+  // replace the current schedule when a required teacher mapping is missing.
   if (missingTeacher.length > 0 && scope === "full-week") {
-    throw new Error(`Susun ulang penuh membutuhkan guru untuk semua Target JP. ${missingTeacher.length} kebutuhan belum memiliki Pembagian Mengajar aktif.`);
+    return {
+      requirements: [],
+      totalTargetJp,
+      currentCommittedJp,
+      missingTeacher,
+    };
   }
 
   return { requirements, totalTargetJp, currentCommittedJp, missingTeacher };
@@ -141,6 +146,17 @@ export async function runAiScheduleFill(
   const { academicContextId, scheduleModelId, scope, classId } = params;
 
   const built = await buildRequirements(supabase, academicContextId, scheduleModelId, scope, classId);
+  if (scope === "full-week" && built.missingTeacher.length > 0) {
+    return {
+      placedCount: 0,
+      skippedCount: built.missingTeacher.length,
+      versionId: null,
+      solverIncomplete: true,
+      message: `Belum bisa menyusun penuh. ${built.missingTeacher.length} kebutuhan belum memiliki guru aktif. Jadwal lama tetap aman.`,
+      committedAssignmentIds: [],
+    };
+  }
+
   if (built.requirements.length === 0) {
     const label = scope === "class" ? "kelas ini" : "jadwal saat ini";
     return { placedCount: 0, skippedCount: 0, versionId: null, solverIncomplete: false, message: `Tidak ada kekurangan JP yang perlu diisi di ${label} — semuanya sudah lengkap.`, committedAssignmentIds: [] };
@@ -165,7 +181,7 @@ export async function runAiScheduleFill(
       skippedCount: built.requirements.length,
       versionId: null,
       solverIncomplete: true,
-      message: `SAKALA tidak menerapkan perubahan karena belum menemukan jadwal lengkap yang valid. Jadwal lama tetap aman. ${detail}`,
+      message: `SAKALA belum menemukan jadwal valid. Tidak ada perubahan. ${detail}`,
       committedAssignmentIds: [],
     };
   }
