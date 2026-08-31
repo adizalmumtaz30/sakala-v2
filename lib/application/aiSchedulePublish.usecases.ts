@@ -1,10 +1,18 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ScheduleAssignmentDraft } from "@/lib/domain/scheduleAssignment";
 
+export type AiSchedulePublishMode = "fill" | "replace";
+
 /**
- * Publishes an AI-generated schedule directly as the new active schedule.
- * The database function performs insert + version activation + audit in one
- * transaction. There is deliberately no user-facing candidate/commit step.
+ * Publishes an AI-generated schedule without exposing candidate/commit steps to
+ * the operator. The database transaction either publishes a complete active
+ * version or leaves the previous active version untouched.
+ *
+ * fill: copies the current active committed schedule into the new version and
+ * adds the newly generated placements. This prevents a partial "fill" action
+ * from accidentally replacing the entire timetable.
+ *
+ * replace: publishes only the generated full-week schedule as the new version.
  */
 export async function publishAiScheduleAtomic(
   supabase: SupabaseClient,
@@ -14,6 +22,7 @@ export async function publishAiScheduleAtomic(
     drafts: ScheduleAssignmentDraft[];
     label: string;
     changeSummary: string;
+    mode: AiSchedulePublishMode;
   }
 ): Promise<{ versionId: string; assignmentIds: string[] }> {
   if (params.drafts.length === 0) {
@@ -35,6 +44,7 @@ export async function publishAiScheduleAtomic(
     p_drafts: params.drafts,
     p_label: params.label,
     p_change_summary: params.changeSummary,
+    p_mode: params.mode,
   });
 
   if (error) {
@@ -42,7 +52,7 @@ export async function publishAiScheduleAtomic(
   }
 
   const result = data as { version_id: string; assignment_ids: string[] } | null;
-  if (!result?.version_id || !Array.isArray(result.assignment_ids)) {
+  if (!result?.version_id || !Array.isArray(result.assignment_ids) || result.assignment_ids.length === 0) {
     throw new Error("Publikasi jadwal AI tidak mengembalikan hasil verifikasi yang valid.");
   }
 
