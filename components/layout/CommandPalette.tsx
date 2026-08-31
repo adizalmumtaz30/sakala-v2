@@ -17,7 +17,7 @@ const routes = [
   { title: "Generate Kurikulum", href: "/akademik/generate-kurikulum" },
   { title: "Target JP", href: "/pembagian-mengajar/target-jp" },
   { title: "Pembagian Mengajar", href: "/pembagian-mengajar" },
-  { title: "Jadwal Cerdas", href: "/jadwal?mode=cerdas" },
+  { title: "Jadwal Cerdas", href: "/jadwal-cerdas" },
   { title: "Jadwal", href: "/jadwal" },
   { title: "Analitik", href: "/analitik" },
   { title: "Riwayat", href: "/riwayat" },

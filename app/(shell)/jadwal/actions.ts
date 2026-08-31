@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import * as scheduleAssignmentUseCases from "@/lib/application/scheduleAssignment.usecases";
 import { validateJadwalImportRows, commitJadwalImportRows, type JadwalImportRowResult } from "@/lib/application/jadwalImport.usecases";
+import { runAiScheduleFill, undoAiScheduleFill, type AiFillScope, type AiFillResult } from "@/lib/application/aiScheduleFill.usecases";
 import { ScheduleAssignmentValidationError, type ScheduleAssignment, type ScheduleAssignmentDraft } from "@/lib/domain/scheduleAssignment";
 import type { ScheduleConflict } from "@/lib/domain/conflict";
 import type { HariSekolah } from "@/lib/domain/jamPelajaran";
@@ -93,6 +94,40 @@ export async function commitJadwalImportAction(academicContextId: string, schedu
   try {
     const supabase = await createClient();
     const result = await commitJadwalImportRows(supabase, academicContextId, scheduleModelId, rows);
+    revalidateJadwal();
+    return { ok: true, data: result };
+  } catch (err) {
+    return { ok: false, error: toMessage(err) };
+  }
+}
+
+/**
+ * SAKALA AI — Jadwal Satu Layar (tahap 2+3): satu tombol AI, tiga skenario.
+ * Generate dan commit LANGSUNG dalam satu panggilan -- tidak ada status
+ * "candidate" yang perlu direview terpisah lagi. Lihat
+ * lib/application/aiScheduleFill.usecases.ts untuk detail mesinnya.
+ */
+export async function aiScheduleFillAction(
+  academicContextId: string,
+  scheduleModelId: string,
+  scope: AiFillScope,
+  classId?: string
+): Promise<ActionResult<AiFillResult>> {
+  try {
+    const supabase = await createClient();
+    const result = await runAiScheduleFill(supabase, { academicContextId, scheduleModelId, scope, classId });
+    revalidateJadwal();
+    return { ok: true, data: result };
+  } catch (err) {
+    return { ok: false, error: toMessage(err) };
+  }
+}
+
+/** Undo hasil SAKALA AI -- arsipkan assignment yang baru saja di-commit AI (bukan hapus permanen, tetap terlacak di riwayat). */
+export async function undoAiFillAction(assignmentIds: string[]): Promise<ActionResult<{ undone: number }>> {
+  try {
+    const supabase = await createClient();
+    const result = await undoAiScheduleFill(supabase, assignmentIds);
     revalidateJadwal();
     return { ok: true, data: result };
   } catch (err) {

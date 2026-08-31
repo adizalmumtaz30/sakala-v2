@@ -18,10 +18,12 @@ import { formatHari, URUTAN_HARI } from "@/lib/domain/jamPelajaran";
 import type { SlotTemplate, JenisSlot } from "@/lib/domain/slotTemplate";
 import { formatJenisSlot } from "@/lib/domain/slotTemplate";
 import type { ScheduleAssignment, ScheduleAssignmentDraft } from "@/lib/domain/scheduleAssignment";
+import type { PembagianMengajar } from "@/lib/domain/pembagianMengajar";
 import { buildJadwalGrid, isEligibleForAdd, cellKey, type GridCell, type JadwalViewBy, type JadwalRangeMode } from "@/lib/domain/jadwalGrid";
 import { checkRealtimeOverlap, CONFLICT_TYPE_LABEL, type ScheduleConflict } from "@/lib/domain/conflict";
 import { mapelColor } from "@/lib/utils/mapelColor";
-import { addAssignmentAction, moveAssignmentAction, deleteAssignmentAction } from "./actions";
+import { addAssignmentAction, moveAssignmentAction, deleteAssignmentAction, aiScheduleFillAction, undoAiFillAction } from "./actions";
+import type { AiFillScope } from "@/lib/application/aiScheduleFill.usecases";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Modal from "@/components/ui/Modal";
@@ -67,6 +69,7 @@ export default function JadwalWorkspace({
   mapelList,
   ruanganList,
   assignments,
+  pembagianMengajarList,
   schoolName,
   contextLabel,
 }: {
@@ -79,6 +82,7 @@ export default function JadwalWorkspace({
   mapelList: MataPelajaran[];
   ruanganList: Ruangan[];
   assignments: ScheduleAssignment[];
+  pembagianMengajarList: PembagianMengajar[];
   schoolName?: string;
   contextLabel: string;
 }) {
@@ -97,6 +101,68 @@ export default function JadwalWorkspace({
   const [highlightFilter, setHighlightFilter] = useState<"semua" | "conflict" | "kandidat">("semua");
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const filterMenuRef = useRef<HTMLDivElement>(null);
+
+  // SAKALA AI -- satu tombol, menu kontekstual (Jadwal Satu Layar tahap 2+3).
+  const [aiMenuOpen, setAiMenuOpen] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiUndoHint, setAiUndoHint] = useState<string | null>(null);
+  const [aiUndoIds, setAiUndoIds] = useState<string[]>([]);
+  const [aiUndoBusy, setAiUndoBusy] = useState(false);
+  const [aiConfirmFullWeek, setAiConfirmFullWeek] = useState(false);
+  const aiMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!aiMenuOpen) return;
+    function onClickOutside(e: MouseEvent) {
+      if (aiMenuRef.current && !aiMenuRef.current.contains(e.target as Node)) setAiMenuOpen(false);
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [aiMenuOpen]);
+  useEffect(() => {
+    if (!aiUndoHint) return;
+    const t = setTimeout(() => { setAiUndoHint(null); setAiUndoIds([]); }, 8000);
+    return () => clearTimeout(t);
+  }, [aiUndoHint]);
+
+  async function runAiUndo() {
+    if (aiUndoIds.length === 0) return;
+    setAiUndoBusy(true);
+    try {
+      const res = await undoAiFillAction(aiUndoIds);
+      if (!res.ok) setToast(`Undo gagal: ${res.error}`);
+      else setToast(`${res.data.undone} slot dibatalkan.`);
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : "Undo gagal.");
+    } finally {
+      setAiUndoBusy(false);
+      setAiUndoHint(null);
+      setAiUndoIds([]);
+    }
+  }
+
+  async function runAiFill(scope: AiFillScope) {
+    if (!activeContext || !selectedModelId) return;
+    setAiMenuOpen(false);
+    setAiConfirmFullWeek(false);
+    setAiBusy(true);
+    setAiUndoHint(null);
+    try {
+      const classId = scope === "class" ? activeEntityId : undefined;
+      const res = await aiScheduleFillAction(activeContext.id, selectedModelId, scope, classId);
+      if (!res.ok) {
+        setToast(`AI gagal: ${res.error}`);
+      } else if (res.data.placedCount > 0) {
+        setAiUndoHint(`AI mengisi ${res.data.placedCount} slot jadwal${res.data.skippedCount > 0 ? ` (${res.data.skippedCount} dilewati karena bentrok)` : ""}.`);
+        setAiUndoIds(res.data.committedAssignmentIds);
+      } else {
+        setToast(res.data.message);
+      }
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : "AI gagal memproses.");
+    } finally {
+      setAiBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (!filterMenuOpen) return;
@@ -503,14 +569,76 @@ export default function JadwalWorkspace({
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-5 pb-16 pt-6">
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-2 text-ink-400">
-          <CalendarClock size={16} />
-          <span className="text-[12.5px]">{formatContextLabel(context)}</span>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2 text-ink-400">
+            <CalendarClock size={16} />
+            <span className="text-[12.5px]">{formatContextLabel(context)}</span>
+          </div>
+          <h1 className="text-[20px] font-semibold text-ink-900">Jadwal</h1>
+          <p className="text-[13px] text-ink-500">Jadwal operasional/committed — Per Kelas, Per Guru, Per Ruangan, Harian, Mingguan.</p>
         </div>
-        <h1 className="text-[20px] font-semibold text-ink-900">Jadwal</h1>
-        <p className="text-[13px] text-ink-500">Jadwal operasional/committed — Per Kelas, Per Guru, Per Ruangan, Harian, Mingguan.</p>
+
+        <div className="relative" ref={aiMenuRef}>
+          <Button variant="secondary" size="sm" loading={aiBusy} onClick={() => setAiMenuOpen((v) => !v)}>
+            <Sparkles size={15} className="text-violet" /> SAKALA AI
+          </Button>
+          {aiMenuOpen && (
+            <div className="absolute right-0 top-full z-20 mt-1.5 w-72 rounded-xl border border-border bg-surface p-1.5 shadow-lg">
+              {viewBy === "kelas" && activeEntityId && (
+                <button
+                  type="button"
+                  onClick={() => void runAiFill("class")}
+                  className="flex w-full flex-col items-start rounded-lg px-3 py-2 text-left hover:bg-surface-muted"
+                >
+                  <span className="text-[13px] font-semibold text-ink-900">Lengkapi kekurangan kelas ini</span>
+                  <span className="text-[11.5px] text-ink-500">Cuma isi slot kosong untuk {entityOptions.find((o) => o.id === activeEntityId)?.label ?? "kelas ini"}.</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => void runAiFill("empty")}
+                className="flex w-full flex-col items-start rounded-lg px-3 py-2 text-left hover:bg-surface-muted"
+              >
+                <span className="text-[13px] font-semibold text-ink-900">Lengkapi semua yang kosong</span>
+                <span className="text-[11.5px] text-ink-500">Isi semua slot kosong di seluruh sekolah.</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setAiConfirmFullWeek(true)}
+                className="flex w-full flex-col items-start rounded-lg px-3 py-2 text-left hover:bg-surface-muted"
+              >
+                <span className="text-[13px] font-semibold text-ink-900">Susun ulang penuh seminggu</span>
+                <span className="text-[11.5px] text-ink-500">Ganti seluruh jadwal model ini dari nol.</span>
+              </button>
+            </div>
+          )}
+        </div>
       </div>
+
+      {aiConfirmFullWeek && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="text-[12.5px] font-medium text-ink-800">Ini akan menghapus & menyusun ulang SEMUA jadwal di model ini dari nol. Lanjutkan?</p>
+          <div className="flex shrink-0 gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setAiConfirmFullWeek(false)}>Batal</Button>
+            <Button variant="primary" size="sm" onClick={() => void runAiFill("full-week")}>Ya, susun ulang</Button>
+          </div>
+        </div>
+      )}
+
+      {aiUndoHint && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-violet-100 bg-violet-50/70 px-4 py-2.5 text-[12.5px] text-ink-800">
+          <span className="flex items-center gap-2"><Sparkles size={14} className="text-violet" /> {aiUndoHint}</span>
+          <div className="flex shrink-0 items-center gap-3">
+            {aiUndoIds.length > 0 && (
+              <button type="button" disabled={aiUndoBusy} onClick={() => void runAiUndo()} className="font-semibold text-violet hover:underline disabled:opacity-50">
+                {aiUndoBusy ? "Membatalkan…" : "Undo"}
+              </button>
+            )}
+            <button type="button" onClick={() => { setAiUndoHint(null); setAiUndoIds([]); }} className="font-medium text-ink-400 hover:text-ink-700">Tutup</button>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
         <JadwalStatCard icon={<CalendarDays size={16} />} value={scopedAssignments.length} label="Jadwal" tone="brand" />

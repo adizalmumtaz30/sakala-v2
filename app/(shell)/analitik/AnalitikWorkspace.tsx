@@ -101,7 +101,7 @@ export default function AnalitikWorkspace({ activeContextLabel, schoolName, view
           </p>
         </div>
         <Link
-          href="/jadwal?mode=cerdas"
+          href="/jadwal-cerdas"
           className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-xl border border-border bg-surface px-3.5 text-[12px] font-semibold text-ink-700 transition-[box-shadow,border-color,transform] duration-200 hover:-translate-y-px hover:border-border-strong hover:shadow-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
         >
           Buka Jadwal Cerdas <ArrowRight size={14} aria-hidden="true" />

@@ -583,7 +583,7 @@ export default function RecommendationFlow({
 
           <div className="space-y-2 rounded-lg bg-surface-muted p-3 text-[12.5px] text-ink-700">
             <p><strong>{savedCount}</strong> candidate tersimpan{skippedCount > 0 && <span className="text-amber"> · {skippedCount} dilewati karena conflict</span>}.
-            Lanjutkan ke <Link href="/jadwal?mode=cerdas" className="font-semibold text-violet hover:underline">Jadwal Cerdas</Link> untuk meninjau dan menerapkan ke jadwal resmi.</p>
+            Lanjutkan ke <Link href="/jadwal-cerdas" className="font-semibold text-violet hover:underline">Jadwal Cerdas</Link> untuk meninjau dan menerapkan ke jadwal resmi.</p>
             {error && <p className="text-[11.5px] text-rose">{error}</p>}
             <button type="button" onClick={kembalikan} disabled={isPending} className="text-[11px] font-semibold text-ink-500 underline decoration-dotted hover:text-rose disabled:opacity-50">{isPending ? "Mengembalikan…" : "Kembalikan"}</button>
           </div>
