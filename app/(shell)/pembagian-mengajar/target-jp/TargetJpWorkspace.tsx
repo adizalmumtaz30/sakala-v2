@@ -6,6 +6,7 @@ import { ArrowLeft, ChevronDown, ChevronRight } from "lucide-react";
 import type { TargetJpView, TargetJpRow, TargetJpStatus } from "@/lib/application/targetJp.usecases";
 import { formatHari } from "@/lib/domain/jamPelajaran";
 import { Card, Badge, EmptyState } from "@/components/ui/primitives";
+import TargetJpImportPanel from "./TargetJpImportPanel";
 
 interface Props {
   activeContextLabel: string;
@@ -30,6 +31,7 @@ const STATUS_FILTERS: (TargetJpStatus | "semua")[] = ["semua", "belum_siap", "si
 export default function TargetJpWorkspace({ activeContextLabel, view }: Props) {
   const [filter, setFilter] = useState<TargetJpStatus | "semua">("semua");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [showManage, setShowManage] = useState(false);
 
   const filteredRows = filter === "semua" ? view.rows : view.rows.filter((r) => r.status === filter);
 
@@ -40,9 +42,13 @@ export default function TargetJpWorkspace({ activeContextLabel, view }: Props) {
           <Link href="/pembagian-mengajar" className="flex items-center gap-1 text-[12.5px] text-ink-400 hover:text-ink-700">
             <ArrowLeft size={13} /> Pembagian Mengajar
           </Link>
-          <Link href="/akademik/target-jp" className="rounded-lg border border-border px-3 py-1.5 text-[12px] font-medium text-ink-700 hover:bg-surface-muted">
-            Import / Edit Massal
-          </Link>
+          <button
+            type="button"
+            onClick={() => setShowManage((v) => !v)}
+            className="rounded-lg border border-border px-3 py-1.5 text-[12px] font-medium text-ink-700 hover:bg-surface-muted"
+          >
+            {showManage ? "Tutup Import / Edit Massal" : "Import / Edit Massal"}
+          </button>
         </div>
         <h1 className="text-[20px] font-bold text-ink-900">Target JP</h1>
         <p className="text-[13px] text-ink-500">
@@ -50,6 +56,8 @@ export default function TargetJpWorkspace({ activeContextLabel, view }: Props) {
           <span className="font-medium text-ink-700">{activeContextLabel}</span>
         </p>
       </div>
+
+      {showManage && <TargetJpImportPanel onSaved={() => setShowManage(false)} />}
 
       {/* Empat angka wajib beda (kontrak §7): Target, Siap, Terjadwal, Belum Siap. */}
       <Card>

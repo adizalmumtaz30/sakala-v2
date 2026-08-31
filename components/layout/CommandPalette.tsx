@@ -15,7 +15,7 @@ const routes = [
   { title: "Ruangan", href: "/ruangan" },
   { title: "Akademik", href: "/akademik" },
   { title: "Generate Kurikulum", href: "/akademik/generate-kurikulum" },
-  { title: "Target JP", href: "/akademik/target-jp" },
+  { title: "Target JP", href: "/pembagian-mengajar/target-jp" },
   { title: "Pembagian Mengajar", href: "/pembagian-mengajar" },
   { title: "Jadwal Cerdas", href: "/jadwal?mode=cerdas" },
   { title: "Jadwal", href: "/jadwal" },

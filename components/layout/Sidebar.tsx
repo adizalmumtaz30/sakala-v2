@@ -21,7 +21,7 @@ const sections: NavSection[] = [
     items: [
       { label: "Konteks Akademik", href: "/akademik", icon: GraduationCap, match: (p) => p === "/akademik" },
       { label: "Generate Kurikulum", href: "/akademik/generate-kurikulum", icon: BrainCircuit, match: (p) => p.startsWith("/akademik/generate-kurikulum") },
-      { label: "Target JP", href: "/akademik/target-jp", icon: Target, match: (p) => p.startsWith("/akademik/target-jp") },
+      { label: "Target JP", href: "/pembagian-mengajar/target-jp", icon: Target, match: (p) => p.startsWith("/akademik/target-jp") || p.startsWith("/pembagian-mengajar/target-jp") },
     ],
   },
   {
