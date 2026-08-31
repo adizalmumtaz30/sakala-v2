@@ -51,7 +51,7 @@ export async function generateCandidatePreview(
   academicContextId: string,
   scheduleModelId: string,
   requirements: GenerationRequirement[],
-  options?: { includeActiveExisting?: boolean }
+  options?: { includeActiveExisting?: boolean; committedOnly?: boolean }
 ): Promise<GenerationResult> {
   if (requirements.length === 0) {
     return { candidates: [], outcomes: [], solver: { complete: true, searchNodes: 0, reason: null, failures: [] } };
@@ -73,7 +73,11 @@ export async function generateCandidatePreview(
   const slots = buildAvailableSlots(scheduleModel.hariAktif, jamPelajaranList, slotTemplates);
   const activeExisting = options?.includeActiveExisting === false
     ? []
-    : existingAssignments.filter((a) => a.status !== "archived" && a.status !== "cancelled");
+    : existingAssignments.filter((a) => {
+        if (a.status === "archived" || a.status === "cancelled") return false;
+        if (options?.committedOnly) return a.status === "committed";
+        return true;
+      });
 
   const solverResult = solveWeeklySchedule(
     requirements.map((r) => ({
@@ -154,7 +158,7 @@ export async function generateCandidatePreview(
   };
 }
 
-/** Save is still an explicit transition. Blocking conflicts are never written. */
+/** Save is still an explicit transition for non-AI/manual workflows. */
 export async function saveGeneratedCandidates(
   supabase: SupabaseClient,
   drafts: ScheduleAssignmentDraft[],
