@@ -470,6 +470,7 @@ export async function adoptCurriculumItemsAction(input: {
 
   revalidatePath("/akademik/mata-pelajaran");
   revalidatePath("/akademik/target-jp");
+  revalidatePath("/pembagian-mengajar/target-jp");
   return { ok: true, data: { adopted: rows.length } };
 }
 

@@ -47,7 +47,7 @@ const INTENT_LABEL: Record<AiCopilotIntent, string> = {
 
 // §26 Cross-Feature Action — arahkan ke fitur yang tepat, jangan menirunya di sini.
 const CROSS_FEATURE_LINKS = [
-  { href: "/akademik/target-jp", label: "Atur Target JP", icon: Target },
+  { href: "/pembagian-mengajar/target-jp", label: "Atur Target JP", icon: Target },
   { href: "/mata-pelajaran", label: "Kelola Mata Pelajaran", icon: BookOpen },
   { href: "/jadwal", label: "Atur Jadwal", icon: CalendarDays },
   { href: "/akademik/generate-kurikulum", label: "Buka Generate Kurikulum", icon: GraduationCap },
