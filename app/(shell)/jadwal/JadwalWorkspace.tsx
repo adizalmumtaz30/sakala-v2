@@ -829,18 +829,7 @@ export default function JadwalWorkspace({
             {addForm.classId && addForm.teacherId && <ConflictList conflicts={addRealtimeConflicts} />}
             {addError && <p className="text-[12px] text-rose">{addError}</p>}
 
-            <Input label="Label Schedule Version (opsional)" value={addLabel} onChange={(e) => setAddLabel(e.target.value)} placeholder="mis. Tambahan manual — Agustus" />
-
             <div className="flex flex-wrap gap-2 pt-1">
-              <Button
-                variant="secondary"
-                size="sm"
-                loading={addSaving}
-                disabled={!addForm.classId || !addForm.subjectId || !addForm.teacherId || addHasBlockingConflict}
-                onClick={() => runSaveAdd(false)}
-              >
-                Simpan Draft
-              </Button>
               <Button
                 variant="primary"
                 size="sm"
@@ -848,7 +837,7 @@ export default function JadwalWorkspace({
                 disabled={!addForm.classId || !addForm.subjectId || !addForm.teacherId || addHasBlockingConflict}
                 onClick={() => runSaveAdd(true)}
               >
-                Simpan &amp; Commit
+                Simpan Jadwal
               </Button>
             </div>
           </div>
@@ -923,11 +912,9 @@ export default function JadwalWorkspace({
             </div>
             {editForm.classId && editForm.teacherId && <ConflictList conflicts={editRealtimeConflicts} />}
             {editError && <p className="text-[12px] text-rose">{editError}</p>}
-            <Input label="Label Schedule Version (opsional)" value={editLabel} onChange={(e) => setEditLabel(e.target.value)} placeholder="mis. Pindah karena bentrok ruangan" />
-            <p className="text-[11.5px] text-ink-400">Menyimpan akan langsung memvalidasi ulang dan membuat Schedule Version baru (histori perubahan).</p>
             <div className="flex gap-2 pt-1">
               <Button variant="primary" size="sm" loading={editSaving} disabled={editHasBlockingConflict} onClick={runSaveEdit}>
-                Validasi &amp; Commit Perubahan
+                Simpan Perubahan
               </Button>
             </div>
           </div>
