@@ -3,19 +3,10 @@
 // pada workflow Generate Kurikulum / Target JP, karena nilainya bergantung
 // Academic Context + Kelas + Mata Pelajaran.
 
-import type {
-  StatusAktif,
-  MataPelajaranDraft,
-  PrioritasPenjadwalan,
-  JenisMapel,
-} from "./mata-pelajaran";
+import type { StatusAktif, MataPelajaranDraft, PrioritasPenjadwalan, JenisMapel } from "./mata-pelajaran";
 import { PRIORITAS_OPTIONS, JENIS_MAPEL_OPTIONS } from "./mata-pelajaran";
 
-export interface MapelImportIssue {
-  column: string;
-  message: string;
-}
-
+export interface MapelImportIssue { column: string; message: string; }
 export interface MapelImportRowResult {
   rowNumber: number;
   nama: string;
@@ -38,17 +29,12 @@ function parseJenis(raw: string): { value?: JenisMapel; invalid: boolean } {
   const trimmed = raw.trim().toLowerCase().replace(/\s+/g, "_");
   if (!trimmed) return { invalid: false };
   const match = JENIS_MAPEL_OPTIONS.find((j) => j === trimmed);
-  return match ? { value: match, invalid: true } : { invalid: true };
+  return match ? { value: match, invalid: false } : { invalid: true };
 }
 
-export function validateMapelImportRows(
-  rows: Record<string, string>[],
-  existingKodes: Set<string>,
-  existingNames: Set<string>
-): MapelImportRowResult[] {
+export function validateMapelImportRows(rows: Record<string, string>[], existingKodes: Set<string>, existingNames: Set<string>): MapelImportRowResult[] {
   const seenKodes = new Set<string>();
   const seenNames = new Set<string>();
-
   return rows.map((raw, index) => {
     const rowNumber = index + 1;
     const nama = (raw["NamaMapel"] ?? raw["Nama"] ?? "").trim();
@@ -59,23 +45,15 @@ export function validateMapelImportRows(
     const warnaJadwal = (raw["WarnaJadwal"] ?? "").trim();
     const prioritasRaw = (raw["PrioritasPenjadwalan"] ?? "").trim();
     const jenisRaw = (raw["JenisMapel"] ?? "").trim();
-
     const issues: MapelImportIssue[] = [];
-    if (nama.length < 2) issues.push({ column: "NamaMapel", message: "Wajib diisi, minimal 2 karakter." });
 
-    if (warnaJadwal && !HEX_COLOR_PATTERN.test(warnaJadwal)) {
-      issues.push({ column: "WarnaJadwal", message: `"${warnaJadwal}" harus format hex, mis. #6366F1.` });
-    }
+    if (nama.length < 2) issues.push({ column: "NamaMapel", message: "Wajib diisi, minimal 2 karakter." });
+    if (warnaJadwal && !HEX_COLOR_PATTERN.test(warnaJadwal)) issues.push({ column: "WarnaJadwal", message: `"${warnaJadwal}" harus format hex, mis. #6366F1.` });
 
     const prioritas = parsePrioritas(prioritasRaw);
-    if (prioritas.invalid) {
-      issues.push({ column: "PrioritasPenjadwalan", message: `"${prioritasRaw}" tidak dikenali. Gunakan: tinggi, normal, atau rendah.` });
-    }
-
+    if (prioritas.invalid) issues.push({ column: "PrioritasPenjadwalan", message: `"${prioritasRaw}" tidak dikenali. Gunakan: tinggi, normal, atau rendah.` });
     const jenis = parseJenis(jenisRaw);
-    if (jenis.invalid) {
-      issues.push({ column: "JenisMapel", message: `"${jenisRaw}" tidak dikenali. Lihat sheet REFERENSI untuk nilai yang valid.` });
-    }
+    if (jenis.invalid) issues.push({ column: "JenisMapel", message: `"${jenisRaw}" tidak dikenali. Lihat sheet REFERENSI untuk nilai yang valid.` });
 
     if (kode) {
       const key = kode.toUpperCase();
@@ -99,15 +77,7 @@ export function validateMapelImportRows(
       kode,
       status: issues.length === 0 ? "valid" : "perlu_diperbaiki",
       issues,
-      draft: {
-        nama,
-        kode,
-        status,
-        kelompok: kelompok || undefined,
-        warnaJadwal: warnaJadwal || undefined,
-        prioritasPenjadwalan: prioritas.value,
-        jenisMapel: jenis.value,
-      },
+      draft: { nama, kode, status, kelompok: kelompok || undefined, warnaJadwal: warnaJadwal || undefined, prioritasPenjadwalan: prioritas.value, jenisMapel: jenis.value },
     };
   });
 }
