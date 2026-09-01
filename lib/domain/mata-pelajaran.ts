@@ -43,6 +43,8 @@ export interface MataPelajaran {
   nama: string;
   kode: string | null;
   status: StatusAktif;
+  /** @deprecated Transitional compatibility only. Never use as an academic target. */
+  targetJpPerRombel?: number | null;
   kelompok?: string;
   warnaJadwal?: string;
   prioritasPenjadwalan?: PrioritasPenjadwalan;
@@ -53,6 +55,8 @@ export interface MataPelajaranDraft {
   nama: string;
   kode: string;
   status: StatusAktif;
+  /** @deprecated Transitional compatibility only. Repository ignores this field. */
+  targetJpPerRombel?: number | null;
   kelompok?: string;
   warnaJadwal?: string;
   prioritasPenjadwalan?: PrioritasPenjadwalan;
