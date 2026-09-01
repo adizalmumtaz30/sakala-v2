@@ -245,6 +245,12 @@ export default function JadwalWorkspace({
   const [selectedEntityId, setSelectedEntityId] = useState<string>(entityOptions[0]?.id ?? "");
   const activeEntityId = entityOptions.some((o) => o.id === selectedEntityId) ? selectedEntityId : entityOptions[0]?.id ?? "";
 
+  const activeClassHasAiGap = useMemo(() => {
+    if (viewBy !== "kelas") return false;
+    const jp = kelasJpSummary.get(activeEntityId);
+    return !!jp && jp.terjadwal < jp.target;
+  }, [viewBy, kelasJpSummary, activeEntityId]);
+
   function changeViewBy(next: JadwalViewBy) {
     setViewBy(next);
     const options = next === "kelas" ? kelasList.map((k) => k.id) : next === "guru" ? guruList.map((g) => g.id) : ruanganList.map((r) => r.id);
@@ -1024,6 +1030,7 @@ export default function JadwalWorkspace({
                             cardColor={cell.assignment ? mapelColorMap.get(cell.assignment.subjectId) : undefined}
                             hasPendingCandidate={candidateCellKeys.has(cellKey(d, row.nomorUrut))}
                             isNew={cell.assignment ? newlyAddedIds.has(cell.assignment.id) : false}
+                            showAiHint={!cell.assignment && activeClassHasAiGap}
                             dimmed={
                               highlightFilter === "conflict"
                                 ? cell.state !== "conflict"
@@ -1349,6 +1356,7 @@ function JadwalCell({
   hasPendingCandidate,
   dimmed,
   isNew,
+  showAiHint,
 }: {
   cell: GridCell;
   onClick: () => void;
@@ -1360,6 +1368,7 @@ function JadwalCell({
   hasPendingCandidate?: boolean;
   dimmed?: boolean;
   isNew?: boolean;
+  showAiHint?: boolean;
 }) {
   if (cell.state === "empty") {
     if (!cell.jamPelajaran) {
@@ -1385,6 +1394,12 @@ function JadwalCell({
               : "border-border text-ink-400 hover:border-brand-600/40 hover:bg-brand-50 hover:text-brand-700"
           } ${dimmed ? "opacity-20" : ""}`}
         >
+          {!hasPendingCandidate && showAiHint && (
+            <span
+              className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-amber-400"
+              title="SAKALA AI kemungkinan bisa bantu isi sebagian jadwal kelas ini — coba tombol SAKALA AI di toolbar"
+            />
+          )}
           {hasPendingCandidate ? (
             <span className="text-[10px] font-semibold">Ada kandidat</span>
           ) : (
