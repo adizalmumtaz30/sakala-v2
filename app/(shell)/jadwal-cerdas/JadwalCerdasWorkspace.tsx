@@ -154,8 +154,7 @@ export default function JadwalCerdasWorkspace({
   /**
    * Bagian 73: quick-add dari Pembagian Mengajar — prefill kelas/mapel/guru
    * otomatis, jpTarget dipakai dari JP TERSISA (bukan JP total), supaya tidak
-   * generate ulang porsi yang sudah dijadwalkan. jpTouched: true supaya tidak
-   * ketimpa efek pre-fill targetJpPerRombel Mata Pelajaran di updateRow().
+   * generate ulang porsi yang sudah dijadwalkan.
    */
   function addRowFromPembagianMengajar(item: PembagianMengajar) {
     const jpTersisa = item.jpTersisa ?? item.jpPerMinggu;
@@ -170,16 +169,7 @@ export default function JadwalCerdasWorkspace({
 
   function updateRow(clientId: string, patch: Partial<RequirementRow>) {
     setRows((prev) =>
-      prev.map((r) => {
-        if (r.clientId !== clientId) return r;
-        const merged = { ...r, ...patch };
-        // Pre-fill jpTarget dari targetJpPerRombel Mata Pelajaran kalau user belum pernah ubah manual.
-        if (patch.subjectId !== undefined && !r.jpTouched) {
-          const mapel = mapelList.find((m) => m.id === patch.subjectId);
-          if (mapel?.targetJpPerRombel != null) merged.jpTarget = mapel.targetJpPerRombel;
-        }
-        return merged;
-      })
+      prev.map((r) => (r.clientId === clientId ? { ...r, ...patch } : r))
     );
   }
 
@@ -321,10 +311,6 @@ export default function JadwalCerdasWorkspace({
         return;
       }
       setCommitMessage(`Berhasil commit — Schedule Version baru dibuat (${result.data.versionId}).`);
-      // Blocking conflict sudah dicegah di lapisan usecases (batch dibatalkan
-      // seluruhnya kalau ada) — sisa di sini murni non-blocking (mis.
-      // JP_MISMATCH Bagian 22.5), ditampilkan sebagai info pasca-commit,
-      // bukan untuk mencegah apa pun.
       setPostCommitConflicts(Object.values(result.data.conflictsByAssignment).flat());
       setSelectedIds(new Set());
       setLabel("");

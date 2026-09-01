@@ -17,7 +17,7 @@ function institutionLabel(raw: string): string {
 }
 type Item = { id: string; curriculum_version_id: string; subject_name: string; class_level: string; allocation_unit: string | null; official_allocation: number | null; weekly_target: number | null; derivation_status: string; extraction_status: string };
 type Context = { id: string; tahun_pelajaran: string; semester: string; jenjang: string; institution: string; is_active: boolean };
-type Kelas = { id: string; tingkat: string; nama_rombel: string; tahun_ajaran: string; semester: string };
+type Kelas = { id: string; tingkat: string; nama_rombel: string };
 type Candidate = Item & { manualTarget: number | null };
 type StatusFilter = "all" | "new" | "changed" | "unchanged" | "review";
 
@@ -119,7 +119,7 @@ export default function GenerateKurikulumPage() {
   const duplicateSource = sourceUrl.trim() ? sources.find((s) => s.official_url && s.official_url.trim().toLowerCase() === sourceUrl.trim().toLowerCase()) ?? null : null;
   const levels = useMemo(() => Array.from(new Set(items.filter((i) => i.curriculum_version_id === versionId).map((i) => i.class_level))), [items, versionId]);
   const validItems = items.filter((i) => i.curriculum_version_id === versionId && (!level || i.class_level === level) && i.extraction_status === "verified" && i.derivation_status !== "blocked");
-  const eligibleClasses = classes.filter((c) => (!level || c.tingkat === level) && (!activeContext || c.tahun_ajaran === activeContext.tahun_pelajaran) && (!activeContext || c.semester === activeContext.semester));
+  const eligibleClasses = classes.filter((c) => !level || c.tingkat === level);
 
   const changedIds = candidate.filter((x) => x.manualTarget !== baseline[x.id]).map((x) => x.id);
   const newIds = candidate.filter((x) => baseline[x.id] === undefined).map((x) => x.id);
@@ -235,8 +235,7 @@ export default function GenerateKurikulumPage() {
   // available for exceptions, but they are no longer a prerequisite to Generate.
   useEffect(() => {
     if (busy || !activeContext || classIds.length) return;
-    const matchingClasses = classes.filter((c) => c.tahun_ajaran === activeContext.tahun_pelajaran && c.semester === activeContext.semester);
-    if (matchingClasses.length) setClassIds(matchingClasses.map((c) => c.id));
+    if (classes.length) setClassIds(classes.map((c) => c.id));
   }, [busy, activeContext, classes, classIds.length]);
 
   // GENERATE-KURIKULUM-MASTER-UX-FLOW poin 11 (Persistence) — simpan draft

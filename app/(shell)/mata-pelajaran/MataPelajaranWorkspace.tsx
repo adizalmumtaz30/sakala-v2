@@ -4,27 +4,9 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Plus, Pencil, Trash2, Search, Upload, Check, BrainCircuit } from "lucide-react";
-import type {
-  MataPelajaran,
-  MataPelajaranDraft,
-  StatusAktif,
-  PrioritasPenjadwalan,
-  JenisMapel,
-} from "@/lib/domain/mata-pelajaran";
-import {
-  PRIORITAS_OPTIONS,
-  PRIORITAS_LABEL,
-  JENIS_MAPEL_OPTIONS,
-  JENIS_MAPEL_LABEL,
-  WARNA_JADWAL_PRESET,
-} from "@/lib/domain/mata-pelajaran";
-import {
-  createMataPelajaranAction,
-  updateMataPelajaranAction,
-  deleteMataPelajaranAction,
-  validateMapelImportAction,
-  commitMapelImportAction,
-} from "./actions";
+import type { MataPelajaran, MataPelajaranDraft, StatusAktif, PrioritasPenjadwalan, JenisMapel } from "@/lib/domain/mata-pelajaran";
+import { PRIORITAS_OPTIONS, PRIORITAS_LABEL, JENIS_MAPEL_OPTIONS, JENIS_MAPEL_LABEL, WARNA_JADWAL_PRESET } from "@/lib/domain/mata-pelajaran";
+import { createMataPelajaranAction, updateMataPelajaranAction, deleteMataPelajaranAction, validateMapelImportAction, commitMapelImportAction } from "./actions";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Modal from "@/components/ui/Modal";
@@ -35,13 +17,11 @@ const emptyForm = {
   nama: "",
   kode: "",
   status: "aktif" as StatusAktif,
-  targetJpPerRombel: "",
   kelompok: "",
   warnaJadwal: WARNA_JADWAL_PRESET[0],
   prioritasPenjadwalan: "normal" as PrioritasPenjadwalan,
   jenisMapel: "akademik" as JenisMapel,
 };
-
 type FormState = typeof emptyForm;
 
 export default function MataPelajaranWorkspace({ initialData, initialQuery }: { initialData: MataPelajaran[]; initialQuery?: string }) {
@@ -57,32 +37,12 @@ export default function MataPelajaranWorkspace({ initialData, initialQuery }: { 
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => setData(initialData), [initialData]);
+  const filtered = data.filter((m) => m.nama.toLowerCase().includes(query.toLowerCase()) || (m.kode ?? "").toLowerCase().includes(query.toLowerCase()));
 
-  const filtered = data.filter(
-    (m) =>
-      m.nama.toLowerCase().includes(query.toLowerCase()) ||
-      (m.kode ?? "").toLowerCase().includes(query.toLowerCase())
-  );
-
-  function openCreate() {
-    setEditing(null);
-    setForm(emptyForm);
-    setFormError(null);
-    setModalOpen(true);
-  }
-
+  function openCreate() { setEditing(null); setForm(emptyForm); setFormError(null); setModalOpen(true); }
   function openEdit(item: MataPelajaran) {
     setEditing(item);
-    setForm({
-      nama: item.nama,
-      kode: item.kode ?? "",
-      status: item.status,
-      targetJpPerRombel: item.targetJpPerRombel != null ? String(item.targetJpPerRombel) : "",
-      kelompok: item.kelompok ?? "",
-      warnaJadwal: item.warnaJadwal ?? WARNA_JADWAL_PRESET[0],
-      prioritasPenjadwalan: item.prioritasPenjadwalan ?? "normal",
-      jenisMapel: item.jenisMapel ?? "akademik",
-    });
+    setForm({ nama: item.nama, kode: item.kode ?? "", status: item.status, kelompok: item.kelompok ?? "", warnaJadwal: item.warnaJadwal ?? WARNA_JADWAL_PRESET[0], prioritasPenjadwalan: item.prioritasPenjadwalan ?? "normal", jenisMapel: item.jenisMapel ?? "akademik" });
     setFormError(null);
     setModalOpen(true);
   }
@@ -93,42 +53,29 @@ export default function MataPelajaranWorkspace({ initialData, initialQuery }: { 
       nama: form.nama,
       kode: form.kode,
       status: form.status,
-      targetJpPerRombel: form.targetJpPerRombel.trim() === "" ? null : Number(form.targetJpPerRombel),
       kelompok: form.kelompok.trim() || undefined,
       warnaJadwal: form.warnaJadwal || undefined,
       prioritasPenjadwalan: form.prioritasPenjadwalan,
       jenisMapel: form.jenisMapel,
     };
-
     startTransition(async () => {
-      const result = editing
-        ? await updateMataPelajaranAction(editing.id, draft)
-        : await createMataPelajaranAction(draft);
-
-      if (!result.ok) {
-        setFormError(result.error);
-        return;
-      }
-      setData((prev) =>
-        editing ? prev.map((m) => (m.id === result.data!.id ? result.data! : m)) : [...prev, result.data!]
-      );
+      const result = editing ? await updateMataPelajaranAction(editing.id, draft) : await createMataPelajaranAction(draft);
+      if (!result.ok) { setFormError(result.error); return; }
+      setData((prev) => editing ? prev.map((m) => (m.id === result.data!.id ? result.data! : m)) : [...prev, result.data!]);
       setModalOpen(false);
     });
   }
 
   function handleDelete(id: string) {
     if (!confirm("Hapus mata pelajaran ini?")) return;
-    startTransition(async () => {
-      const result = await deleteMataPelajaranAction(id);
-      if (result.ok) setData((prev) => prev.filter((m) => m.id !== id));
-    });
+    startTransition(async () => { const result = await deleteMataPelajaranAction(id); if (result.ok) setData((prev) => prev.filter((m) => m.id !== id)); });
   }
 
   async function toggleStatus(m: MataPelajaran) {
     const nextStatus: StatusAktif = m.status === "aktif" ? "nonaktif" : "aktif";
     setTogglingId(m.id);
     setData((prev) => prev.map((x) => (x.id === m.id ? { ...x, status: nextStatus } : x)));
-    const draft: MataPelajaranDraft = { nama: m.nama, kode: m.kode ?? "", status: nextStatus, targetJpPerRombel: m.targetJpPerRombel, kelompok: m.kelompok, warnaJadwal: m.warnaJadwal, prioritasPenjadwalan: m.prioritasPenjadwalan, jenisMapel: m.jenisMapel };
+    const draft: MataPelajaranDraft = { nama: m.nama, kode: m.kode ?? "", status: nextStatus, kelompok: m.kelompok, warnaJadwal: m.warnaJadwal, prioritasPenjadwalan: m.prioritasPenjadwalan, jenisMapel: m.jenisMapel };
     const result = await updateMataPelajaranAction(m.id, draft);
     if (!result.ok) setData((prev) => prev.map((x) => (x.id === m.id ? { ...x, status: m.status } : x)));
     setTogglingId(null);
@@ -137,13 +84,7 @@ export default function MataPelajaranWorkspace({ initialData, initialQuery }: { 
   async function handleValidateImport(rows: Record<string, string>[]): Promise<ImportRowResult[]> {
     const result = await validateMapelImportAction(rows);
     if (!result.ok) return [];
-    return result.data.map((r) => ({
-      rowNumber: r.rowNumber,
-      primaryLabel: r.nama,
-      secondaryLabel: r.kode || undefined,
-      status: r.status,
-      issues: r.issues,
-    }));
+    return result.data.map((r) => ({ rowNumber: r.rowNumber, primaryLabel: r.nama, secondaryLabel: r.kode || undefined, status: r.status, issues: r.issues }));
   }
 
   async function handleCommitImport(rows: Record<string, string>[]) {
@@ -157,77 +98,32 @@ export default function MataPelajaranWorkspace({ initialData, initialQuery }: { 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-[20px] font-bold text-ink-900">Mata Pelajaran</h1>
-          <p className="text-[13px] text-ink-500">Kelola mata pelajaran yang digunakan dalam struktur akademik SAKALA.</p>
+          <p className="text-[13px] text-ink-500">Kelola mata pelajaran. Target JP resmi dikelola terpisah pada Target JP berdasarkan Academic Context + Kelas + Mata Pelajaran.</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="secondary" onClick={() => setImportOpen(true)}>
-            <Upload size={16} /> Import
-          </Button>
-          <Link href="/akademik/generate-kurikulum" className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink-700 hover:border-brand-600/30 hover:text-brand-700" aria-label="Generate Kurikulum">
-            <BrainCircuit size={16} /> Generate Kurikulum
-          </Link>
-          <Button onClick={openCreate}>
-            <Plus size={16} /> Tambah Mata Pelajaran
-          </Button>
+          <Button variant="secondary" onClick={() => setImportOpen(true)}><Upload size={16} /> Import</Button>
+          <Link href="/akademik/generate-kurikulum" className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink-700 hover:border-brand-600/30 hover:text-brand-700" aria-label="Generate Kurikulum"><BrainCircuit size={16} /> Generate Kurikulum</Link>
+          <Button onClick={openCreate}><Plus size={16} /> Tambah Mata Pelajaran</Button>
         </div>
       </div>
 
       <div className="flex items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-ink-400 sm:max-w-xs">
         <Search size={16} />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Cari nama atau kode..."
-          className="flex-1 bg-transparent text-[13px] text-ink-900 outline-none placeholder:text-ink-400"
-        />
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Cari nama atau kode..." className="flex-1 bg-transparent text-[13px] text-ink-900 outline-none placeholder:text-ink-400" />
       </div>
 
       <Card className="p-0">
         {filtered.length === 0 ? (
-          <EmptyState
-            title={data.length === 0 ? "Belum ada mata pelajaran" : "Tidak ditemukan"}
-            description={data.length === 0 ? "Tambahkan mata pelajaran pertama." : "Coba kata kunci lain."}
-            action={
-              data.length === 0 ? (
-                <Button size="sm" onClick={openCreate}>
-                  <Plus size={14} /> Tambah Mata Pelajaran
-                </Button>
-              ) : undefined
-            }
-          />
+          <EmptyState title={data.length === 0 ? "Belum ada mata pelajaran" : "Tidak ditemukan"} description={data.length === 0 ? "Tambahkan mata pelajaran pertama." : "Coba kata kunci lain."} action={data.length === 0 ? <Button size="sm" onClick={openCreate}><Plus size={14} /> Tambah Mata Pelajaran</Button> : undefined} />
         ) : (
-          <table className="w-full text-left text-[13px]">
-            <thead>
-              <tr className="border-b border-border text-[11.5px] uppercase tracking-wide text-ink-400">
-                <th className="px-5 py-3 font-medium">Mata Pelajaran</th>
-                <th className="px-5 py-3 font-medium">Kelompok</th>
-                <th className="px-5 py-3 font-medium">JP / Minggu</th>
-                <th className="px-5 py-3 font-medium">Prioritas</th>
-                <th className="px-5 py-3 font-medium">Status</th>
-                <th className="px-5 py-3 font-medium text-right">Aksi</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((m) => (
-                <tr key={m.id} className="border-b border-border last:border-0 hover:bg-surface-muted/60">
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center gap-2.5">
-                      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: m.warnaJadwal ?? "#C6CAD3" }} aria-hidden="true" />
-                      <div>
-                        <p className="font-medium text-ink-900">{m.nama}</p>
-                        <p className="text-[12px] text-ink-400">{m.kode ?? "—"}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-5 py-3.5 text-ink-500">{m.kelompok ?? "—"}</td>
-                  <td className="px-5 py-3.5 text-ink-500">{m.targetJpPerRombel ?? "—"}</td>
-                  <td className="px-5 py-3.5 text-ink-500">{m.prioritasPenjadwalan ? PRIORITAS_LABEL[m.prioritasPenjadwalan] : "—"}</td>
-                  <td className="px-5 py-3.5"><button onClick={() => void toggleStatus(m)} disabled={togglingId === m.id} aria-label={`Ubah status ${m.nama} jadi ${m.status === "aktif" ? "Nonaktif" : "Aktif"}`} title="Klik untuk ubah status" className="disabled:opacity-50"><Badge tone={m.status === "aktif" ? "success" : "neutral"} className="cursor-pointer transition-opacity hover:opacity-75">{m.status === "aktif" ? "Aktif" : "Nonaktif"}</Badge></button></td>
-                  <td className="px-5 py-3.5"><div className="flex items-center justify-end gap-1"><button onClick={() => openEdit(m)} className="rounded-lg p-1.5 text-ink-400 hover:bg-surface hover:text-ink-900" aria-label="Edit"><Pencil size={15} /></button><button onClick={() => handleDelete(m.id)} className="rounded-lg p-1.5 text-ink-400 hover:bg-rose-50 hover:text-rose" aria-label="Hapus"><Trash2 size={15} /></button></div></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <table className="w-full text-left text-[13px]"><thead><tr className="border-b border-border text-[11.5px] uppercase tracking-wide text-ink-400">
+            <th className="px-5 py-3 font-medium">Mata Pelajaran</th><th className="px-5 py-3 font-medium">Kelompok</th><th className="px-5 py-3 font-medium">Prioritas</th><th className="px-5 py-3 font-medium">Status</th><th className="px-5 py-3 font-medium text-right">Aksi</th>
+          </tr></thead><tbody>{filtered.map((m) => <tr key={m.id} className="border-b border-border last:border-0 hover:bg-surface-muted/60">
+            <td className="px-5 py-3.5"><div className="flex items-center gap-2.5"><span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: m.warnaJadwal ?? "#C6CAD3" }} aria-hidden="true" /><div><p className="font-medium text-ink-900">{m.nama}</p><p className="text-[12px] text-ink-400">{m.kode ?? "—"}</p></div></div></td>
+            <td className="px-5 py-3.5 text-ink-500">{m.kelompok ?? "—"}</td><td className="px-5 py-3.5 text-ink-500">{m.prioritasPenjadwalan ? PRIORITAS_LABEL[m.prioritasPenjadwalan] : "—"}</td>
+            <td className="px-5 py-3.5"><button onClick={() => void toggleStatus(m)} disabled={togglingId === m.id} className="disabled:opacity-50"><Badge tone={m.status === "aktif" ? "success" : "neutral"}>{m.status === "aktif" ? "Aktif" : "Nonaktif"}</Badge></button></td>
+            <td className="px-5 py-3.5"><div className="flex items-center justify-end gap-1"><button onClick={() => openEdit(m)} className="rounded-lg p-1.5 text-ink-400 hover:bg-surface hover:text-ink-900" aria-label="Edit"><Pencil size={15} /></button><button onClick={() => handleDelete(m.id)} className="rounded-lg p-1.5 text-ink-400 hover:bg-rose-50 hover:text-rose" aria-label="Hapus"><Trash2 size={15} /></button></div></td>
+          </tr>)}</tbody></table>
         )}
       </Card>
 
@@ -236,13 +132,13 @@ export default function MataPelajaranWorkspace({ initialData, initialQuery }: { 
           <div className="flex flex-col gap-4">
             <Input label="Nama Mata Pelajaran *" placeholder="cth. Matematika" value={form.nama} onChange={(e) => setForm((f) => ({ ...f, nama: e.target.value }))} error={formError ?? undefined} required autoFocus />
             <Input label="Kode Mapel (opsional)" placeholder="cth. MAT" value={form.kode} onChange={(e) => setForm((f) => ({ ...f, kode: e.target.value }))} />
-            <div className="grid grid-cols-2 gap-4"><div className="flex flex-col gap-1.5"><label className="text-[12.5px] font-medium text-ink-700">Kelompok</label><input value={form.kelompok} onChange={(e) => setForm((f) => ({ ...f, kelompok: e.target.value }))} placeholder="cth. Umum" className="h-11 rounded-xl border border-border bg-surface px-3.5 text-[13.5px] text-ink-900 outline-none focus:border-brand-600/50 focus:ring-2 focus:ring-brand-600/15" /></div><Input label="JP / Minggu" type="number" min={0} placeholder="cth. 4" value={form.targetJpPerRombel} onChange={(e) => setForm((f) => ({ ...f, targetJpPerRombel: e.target.value }))} /></div>
+            <div className="grid grid-cols-2 gap-4"><div className="flex flex-col gap-1.5"><label className="text-[12.5px] font-medium text-ink-700">Kelompok</label><input value={form.kelompok} onChange={(e) => setForm((f) => ({ ...f, kelompok: e.target.value }))} placeholder="cth. Umum" className="h-11 rounded-xl border border-border bg-surface px-3.5 text-[13.5px] text-ink-900 outline-none focus:border-brand-600/50 focus:ring-2 focus:ring-brand-600/15" /></div><div className="rounded-xl border border-border bg-surface-muted px-3.5 py-3 text-[12.5px] text-ink-600">Target JP tidak diatur di sini. Gunakan <span className="font-semibold text-ink-800">Target JP</span> agar nilainya terikat konteks dan kelas.</div></div>
             <div className="flex flex-col gap-1.5"><label className="text-[12.5px] font-medium text-ink-700">Warna Jadwal</label><div className="flex flex-wrap gap-2">{WARNA_JADWAL_PRESET.map((hex) => <button key={hex} type="button" onClick={() => setForm((f) => ({ ...f, warnaJadwal: hex }))} className={`flex h-8 w-8 items-center justify-center rounded-full transition-shadow ${form.warnaJadwal === hex ? "ring-2 ring-ink-900 ring-offset-2 ring-offset-surface" : "hover:opacity-80"}`} style={{ backgroundColor: hex }} aria-label={`Pilih warna ${hex}`}>{form.warnaJadwal === hex && <Check size={14} className="text-white" strokeWidth={3} />}</button>)}</div></div>
-            <div className="grid grid-cols-2 gap-4"><div className="flex flex-col gap-1.5"><label className="text-[12.5px] font-medium text-ink-700">Prioritas Penjadwalan</label><select value={form.prioritasPenjadwalan} onChange={(e) => setForm((f) => ({ ...f, prioritasPenjadwalan: e.target.value as PrioritasPenjadwalan }))} className="h-11 rounded-xl border border-border bg-surface px-3.5 text-[13.5px] text-ink-900 outline-none">{PRIORITAS_OPTIONS.map((p) => <option key={p} value={p}>{PRIORITAS_LABEL[p]}</option>)}</select></div><div className="flex flex-col gap-1.5"><label className="text-[12.5px] font-medium text-ink-700">Jenis Mapel</label><select value={form.jenisMapel} onChange={(e) => setForm((f) => ({ ...f, jenisMapel: e.target.value as JenisMapel }))} className="h-11 rounded-xl border border-border bg-surface px-3.5 text-[13.5px] text-ink-900 outline-none">{JENIS_MAPEL_OPTIONS.map((j) => <option key={j} value={j}>{JENIS_MAPEL_LABEL[j]}</option>)}</select></div></div>
-            <div className="flex flex-col gap-1.5"><label className="text-[12.5px] font-medium text-ink-700">Status</label><select value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as StatusAktif }))} className="h-11 rounded-xl border border-border bg-surface px-3.5 text-[13.5px] text-ink-900 outline-none"><option value="aktif">Aktif</option><option value="nonaktif">Nonaktif</option></select></div>
+            <div className="grid grid-cols-2 gap-4"><div className="flex flex-col gap-1.5"><label className="text-[12.5px] font-medium text-ink-700">Prioritas Penjadwalan</label><select value={form.prioritasPenjadwalan} onChange={(e) => setForm((f) => ({ ...f, prioritasPenjadwalan: e.target.value as PrioritasPenjadwalan }))} className="h-11 rounded-xl border border-border bg-surface px-3.5 text-[13.5px] text-ink-900 outline-none">{PRIORITAS_OPTIONS.map((p) => <option key={p} value={p}>{PRIORITAS_LABEL[p]}</option>)}</select></div><div className="flex flex-col gap-1.5"><label className="text-[12.5px] font-medium text-ink-700">Jenis Mapel</label><select value={form.jenisMapel} onChange={(e) => setForm((f) => ({ ...f, jenisMapel: e.target.value as JenisMapel }))} className="h-11 rounded-xl border border-border bg-surface px-3.5 py-2 text-[13.5px] text-ink-900 outline-none">{JENIS_MAPEL_OPTIONS.map((j) => <option key={j} value={j}>{JENIS_MAPEL_LABEL[j]}</option>)}</select></div></div>
+            <div className="flex flex-col gap-1.5"><label className="text-[12.5px] font-medium text-ink-700">Status</label><select value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as StatusAktif }))} className="h-11 rounded-xl border border-border bg-surface px-3.5 py-2 text-[13.5px] text-ink-900 outline-none"><option value="aktif">Aktif</option><option value="nonaktif">Nonaktif</option></select></div>
             <div className="mt-2 flex justify-end gap-2"><Button type="button" variant="secondary" onClick={() => setModalOpen(false)}>Batal</Button><Button type="submit" loading={isPending}>{editing ? "Simpan Perubahan" : "Simpan"}</Button></div>
           </div>
-          <div className="flex flex-col items-center gap-3 rounded-xl2 border border-border bg-surface-muted p-5"><span className="h-3 w-3 rounded-full" style={{ backgroundColor: form.warnaJadwal || "#C6CAD3" }} aria-hidden="true" /><p className="text-center text-[15px] font-semibold text-ink-900">{form.nama || "Nama Mapel"}</p><p className="text-[12px] text-ink-400">{form.kode || "—"}</p><p className="text-[12.5px] text-ink-500">{form.targetJpPerRombel ? `${form.targetJpPerRombel} JP / Minggu` : "— JP / Minggu"}</p><Badge tone={form.status === "aktif" ? "success" : "neutral"}>{form.status === "aktif" ? "Aktif" : "Nonaktif"}</Badge>{form.kelompok && <Badge tone="info">{form.kelompok}</Badge>}</div>
+          <div className="flex flex-col items-center gap-3 rounded-xl border border-border bg-surface-muted p-5"><span className="h-3 w-3 rounded-full" style={{ backgroundColor: form.warnaJadwal || "#C6CAD3" }} aria-hidden="true" /><p className="text-center text-[15px] font-semibold text-ink-900">{form.nama || "Nama Mapel"}</p><p className="text-[12px] text-ink-400">{form.kode || "—"}</p><Badge tone={form.status === "aktif" ? "success" : "neutral"}>{form.status === "aktif" ? "Aktif" : "Nonaktif"}</Badge>{form.kelompok && <Badge tone="info">{form.kelompok}</Badge>}</div>
         </form>
       </Modal>
 
