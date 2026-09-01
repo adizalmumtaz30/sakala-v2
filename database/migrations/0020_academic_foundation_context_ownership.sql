@@ -7,15 +7,12 @@
 ALTER TABLE public.kelas
   ADD COLUMN IF NOT EXISTS academic_context_id uuid;
 
--- Existing rows are currently for the single active academic context.
 UPDATE public.kelas k
 SET academic_context_id = ac.id
 FROM public.academic_context ac
 WHERE ac.is_active = true
   AND k.academic_context_id IS NULL;
 
--- Do not silently invent a context. If any row remains unmapped, deployment
--- must stop and the operator must resolve it before the NOT NULL constraint.
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM public.kelas WHERE academic_context_id IS NULL) THEN
@@ -45,8 +42,10 @@ END $$;
 CREATE INDEX IF NOT EXISTS idx_kelas_academic_context_id
   ON public.kelas (academic_context_id);
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_kelas_context_rombel
-  ON public.kelas (academic_context_id, nama_rombel);
+-- A/B/C may legitimately repeat across different grade levels. The contextual
+-- identity is therefore (context, tingkat, nama_rombel), not (context, name).
+CREATE UNIQUE INDEX IF NOT EXISTS uq_kelas_context_tingkat_rombel
+  ON public.kelas (academic_context_id, tingkat, nama_rombel);
 
 COMMENT ON COLUMN public.kelas.tahun_ajaran IS
   'LEGACY/DEPRECATED: authoritative academic period is academic_context_id.';
