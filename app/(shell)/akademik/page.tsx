@@ -4,17 +4,13 @@ import { listAcademicContexts } from "@/lib/application/academicContext.usecases
 import { listPeriodeAkademik } from "@/lib/application/periodeAkademik.usecases";
 import { listJamPelajaran } from "@/lib/application/jamPelajaran.usecases";
 import { listScheduleModels } from "@/lib/application/scheduleModel.usecases";
-import AkademikWorkspace from "./AkademikWorkspace";
+import AcademicFoundationWorkspace from "./AcademicFoundationWorkspace";
 import { ErrorState } from "@/components/ui/primitives";
 
 export default async function AkademikPage() {
   try {
     const supabase = await createClient();
     const [profile, contexts] = await Promise.all([getSchoolProfile(supabase), listAcademicContexts(supabase)]);
-
-    // Bagian 19/83 — Periode Akademik, Jam Pelajaran & Schedule Model selalu
-    // dilihat dalam konteks akademik yang sedang aktif (Bagian 8.2/77 —
-    // single source of truth).
     const activeContext = contexts.find((c) => c.isActive) ?? null;
     const [periodeList, jamList, scheduleModels] = activeContext
       ? await Promise.all([
@@ -25,7 +21,7 @@ export default async function AkademikPage() {
       : [[], [], []];
 
     return (
-      <AkademikWorkspace
+      <AcademicFoundationWorkspace
         initialProfile={profile}
         initialContexts={contexts}
         initialPeriodeList={periodeList}
@@ -34,7 +30,6 @@ export default async function AkademikPage() {
       />
     );
   } catch {
-    // Bagian 15.3 — server-side fetch gagal, tetap render UI dengan error state
     return (
       <div className="mx-auto max-w-3xl pt-10">
         <ErrorState message="Gagal memuat data akademik dari Supabase. Cek koneksi dan environment variable kamu." />
