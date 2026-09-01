@@ -9,11 +9,16 @@ import type { GenerationRequirement } from "@/lib/domain/candidateGeneration";
 // SAKALA AI Jadwal — operator-facing contract:
 // 1 klik -> plan -> validate -> atomic publish -> read-back.
 // Candidate/Commit tetap mekanisme internal; operator tidak perlu mengurusnya.
-// Full-week membangun ulang seluruh target resmi hanya bila seluruh kebutuhan
-// punya guru aktif. Jika data dasar belum lengkap, tidak ada mutation sama sekali.
-// Fill/class hanya menambah kekurangan pada active committed version.
+//
+// SEGMENTASI PER KELAS (atas permintaan eksplisit operator, setelah insiden
+// duplikasi & solver "batas 250.000 node tercapai"): SAKALA AI SELALU bekerja
+// pada SATU kelas yang sedang aktif dilihat operator -- tidak pernah lintas
+// kelas sekaligus. Ini menghilangkan risiko solver menyerah karena mencoba
+// menyusun banyak kelas dalam satu pencarian raksasa (search space untuk 1
+// kelas jauh lebih kecil daripada 3+ kelas sekaligus), dan operator selalu
+// tahu persis kelas mana yang baru saja diubah AI.
 
-export type AiFillScope = "class" | "empty" | "full-week";
+export type AiFillScope = "class" | "class-replace";
 
 export interface AiFillResult {
   placedCount: number;
@@ -46,65 +51,57 @@ async function getActiveVersionId(supabase: SupabaseClient, academicContextId: s
   return data?.id ?? null;
 }
 
-async function buildRequirements(
+async function buildClassRequirements(
   supabase: SupabaseClient,
   academicContextId: string,
   scheduleModelId: string,
-  scope: AiFillScope,
-  classId?: string,
-): Promise<{ requirements: GenerationRequirement[]; totalTargetJp: number; currentCommittedJp: number; missingTeacher: string[] }> {
-  const [pembagianList, targetResult, activeVersionId] = await Promise.all([
+  classId: string,
+  treatAsEmpty: boolean
+): Promise<{ requirements: GenerationRequirement[]; missingTeacher: string[] }> {
+  const [pembagianList, targetResult] = await Promise.all([
     listPembagianMengajar(supabase, academicContextId),
     supabase
       .from("target_jp")
       .select("kelas_id,mata_pelajaran_id,target_jp")
-      .eq("academic_context_id", academicContextId),
-    getActiveVersionId(supabase, academicContextId),
+      .eq("academic_context_id", academicContextId)
+      .eq("kelas_id", classId),
   ]);
 
   if (targetResult.error) throw new Error(`Gagal membaca Target JP resmi: ${targetResult.error.message}`);
-  const targets = (targetResult.data ?? []).map((r) => ({
-    classId: r.kelas_id as string,
-    subjectId: r.mata_pelajaran_id as string,
-    targetJp: Number(r.target_jp),
-  })).filter((r) => r.targetJp > 0);
+  const targets = (targetResult.data ?? [])
+    .map((r) => ({ subjectId: r.mata_pelajaran_id as string, targetJp: Number(r.target_jp) }))
+    .filter((r) => r.targetJp > 0);
 
-  if (targets.length === 0) throw new Error("Belum ada Target JP resmi pada konteks akademik aktif.");
+  if (targets.length === 0) throw new Error("Belum ada Target JP resmi untuk kelas ini.");
 
-  const scopedTargets = scope === "class" && classId
-    ? targets.filter((t) => t.classId === classId)
-    : targets;
-  if (scopedTargets.length === 0) throw new Error("Tidak ada Target JP untuk kelas yang dipilih.");
+  const alreadyScheduledMap = new Map<string, number>();
+  if (!treatAsEmpty) {
+    const allAssignments = await scheduleAssignmentRepository.findByContext(supabase, academicContextId);
+    const activeVersionId = await getActiveVersionId(supabase, academicContextId);
+    const activeCommitted = allAssignments.filter(
+      (a) => a.status === "committed" && a.scheduleModelId === scheduleModelId && a.classId === classId && (activeVersionId ? a.versionId === activeVersionId : false)
+    );
+    for (const a of activeCommitted) {
+      const jp = Math.max(1, a.periodEnd - a.periodStart + 1);
+      alreadyScheduledMap.set(a.subjectId, (alreadyScheduledMap.get(a.subjectId) ?? 0) + jp);
+    }
+  }
 
-  const allAssignments = await scheduleAssignmentRepository.findByContext(supabase, academicContextId);
-  const activeCommitted = allAssignments.filter((a) =>
-    a.status === "committed" &&
-    a.scheduleModelId === scheduleModelId &&
-    (scope === "full-week" ? true : (activeVersionId ? a.versionId === activeVersionId : false))
-  );
-
-  const currentCommittedJp = activeCommitted.reduce((sum, a) => sum + Math.max(1, a.periodEnd - a.periodStart + 1), 0);
   const requirements: GenerationRequirement[] = [];
   const missingTeacher: string[] = [];
-  let totalTargetJp = 0;
   let reqIndex = 0;
 
-  for (const target of scopedTargets) {
-    totalTargetJp += target.targetJp;
+  for (const target of targets) {
     const teacherAssignments = pembagianList
-      .filter((p) => p.status === "aktif" && p.kelasId === target.classId && p.mataPelajaranId === target.subjectId)
+      .filter((p) => p.status === "aktif" && p.kelasId === classId && p.mataPelajaranId === target.subjectId)
       .sort((a, b) => (b.jpPerMinggu ?? 0) - (a.jpPerMinggu ?? 0));
 
     if (teacherAssignments.length === 0) {
-      missingTeacher.push(`${target.classId}:${target.subjectId}`);
+      missingTeacher.push(target.subjectId);
       continue;
     }
 
-    const alreadyScheduled = activeCommitted
-      .filter((a) => a.classId === target.classId && a.subjectId === target.subjectId)
-      .reduce((sum, a) => sum + Math.max(1, a.periodEnd - a.periodStart + 1), 0);
-
-    let remaining = scope === "full-week" ? target.targetJp : Math.max(0, target.targetJp - alreadyScheduled);
+    let remaining = Math.max(0, target.targetJp - (alreadyScheduledMap.get(target.subjectId) ?? 0));
     if (remaining <= 0) continue;
 
     for (const assignment of teacherAssignments) {
@@ -114,7 +111,7 @@ async function buildRequirements(
       const allocated = Math.min(remaining, teacherCapacity);
       requirements.push({
         id: `ai_req_${++reqIndex}`,
-        classId: target.classId,
+        classId,
         subjectId: target.subjectId,
         teacherId: assignment.guruId,
         roomId: null,
@@ -125,18 +122,7 @@ async function buildRequirements(
     }
   }
 
-  // Full-week is all-or-nothing at the preflight stage. Never archive or
-  // replace the current schedule when a required teacher mapping is missing.
-  if (missingTeacher.length > 0 && scope === "full-week") {
-    return {
-      requirements: [],
-      totalTargetJp,
-      currentCommittedJp,
-      missingTeacher,
-    };
-  }
-
-  return { requirements, totalTargetJp, currentCommittedJp, missingTeacher };
+  return { requirements, missingTeacher };
 }
 
 export async function runAiScheduleFill(
@@ -144,33 +130,54 @@ export async function runAiScheduleFill(
   params: { academicContextId: string; scheduleModelId: string; scope: AiFillScope; classId?: string }
 ): Promise<AiFillResult> {
   const { academicContextId, scheduleModelId, scope, classId } = params;
+  if (!classId) {
+    throw new Error("SAKALA AI Jadwal wajib dijalankan dalam konteks satu kelas. Pilih kelas dulu di pemilih Kelas.");
+  }
 
-  const built = await buildRequirements(supabase, academicContextId, scheduleModelId, scope, classId);
-  if (scope === "full-week" && built.missingTeacher.length > 0) {
+  // "class-replace": arsipkan dulu jadwal committed kelas ini SAJA (kelas
+  // lain tidak tersentuh sama sekali), baru generate seolah kelas ini kosong.
+  // Publish tetap pakai mode 'fill' (append ke versi aktif) -- setelah
+  // diarsipkan, tidak ada lagi baris kelas ini yang bisa bentrok, dan kelas
+  // lain tetap dipertahankan sebagai constraint solver (guru/ruangan lintas
+  // kelas tetap dicek).
+  if (scope === "class-replace") {
+    const allAssignments = await scheduleAssignmentRepository.findByContext(supabase, academicContextId);
+    const inScope = allAssignments.filter(
+      (a) => a.classId === classId && a.scheduleModelId === scheduleModelId && a.status === "committed"
+    );
+    for (const a of inScope) {
+      await archiveOrDeleteAssignment(supabase, a.id, "ai", "Diarsipkan otomatis sebelum SAKALA AI menyusun ulang jadwal kelas ini");
+    }
+  }
+
+  const built = await buildClassRequirements(supabase, academicContextId, scheduleModelId, classId, scope === "class-replace");
+
+  if (built.missingTeacher.length > 0) {
     return {
       placedCount: 0,
       skippedCount: built.missingTeacher.length,
       versionId: null,
       solverIncomplete: true,
-      message: `Belum bisa menyusun penuh. ${built.missingTeacher.length} kebutuhan belum memiliki guru aktif. Jadwal lama tetap aman.`,
+      message: `Belum bisa dilengkapi. ${built.missingTeacher.length} mata pelajaran di kelas ini belum punya guru aktif di Pembagian Mengajar. Jadwal lama tetap aman.`,
       committedAssignmentIds: [],
     };
   }
 
   if (built.requirements.length === 0) {
-    const label = scope === "class" ? "kelas ini" : "jadwal saat ini";
-    return { placedCount: 0, skippedCount: 0, versionId: null, solverIncomplete: false, message: `Tidak ada kekurangan JP yang perlu diisi di ${label} — semuanya sudah lengkap.`, committedAssignmentIds: [] };
+    return {
+      placedCount: 0,
+      skippedCount: 0,
+      versionId: null,
+      solverIncomplete: false,
+      message: "Tidak ada kekurangan JP yang perlu diisi di kelas ini — semuanya sudah lengkap.",
+      committedAssignmentIds: [],
+    };
   }
 
-  const preview = await generateCandidatePreview(
-    supabase,
-    academicContextId,
-    scheduleModelId,
-    built.requirements,
-    scope === "full-week"
-      ? { includeActiveExisting: false }
-      : { includeActiveExisting: true, committedOnly: true }
-  );
+  const preview = await generateCandidatePreview(supabase, academicContextId, scheduleModelId, built.requirements, {
+    includeActiveExisting: true,
+    committedOnly: true,
+  });
 
   if (!preview.solver.complete || preview.candidates.length === 0) {
     const detail = preview.solver.failures.length > 0
@@ -181,16 +188,16 @@ export async function runAiScheduleFill(
       skippedCount: built.requirements.length,
       versionId: null,
       solverIncomplete: true,
-      message: `SAKALA belum menemukan jadwal valid. Tidak ada perubahan. ${detail}`,
+      message: `SAKALA belum menemukan jadwal valid untuk kelas ini. Tidak ada perubahan. ${detail}`,
       committedAssignmentIds: [],
     };
   }
 
   const drafts = preview.candidates.map((c) => ({ ...c.draft, status: "candidate" as const, versionId: null }));
-  const label = scope === "full-week" ? "SAKALA AI — susun ulang seminggu" : scope === "class" ? "SAKALA AI — lengkapi kelas" : "SAKALA AI — lengkapi semua";
-  const changeSummary = scope === "full-week"
-    ? "Jadwal mingguan baru dipublikasikan oleh SAKALA AI setelah validasi penuh."
-    : "Kekurangan jadwal dilengkapi oleh SAKALA AI setelah validasi penuh.";
+  const label = scope === "class-replace" ? "SAKALA AI — susun ulang kelas" : "SAKALA AI — lengkapi kelas";
+  const changeSummary = scope === "class-replace"
+    ? "Jadwal kelas ini disusun ulang oleh SAKALA AI setelah validasi penuh."
+    : "Kekurangan jadwal kelas ini dilengkapi oleh SAKALA AI setelah validasi penuh.";
 
   const published = await publishAiScheduleAtomic(supabase, {
     academicContextId,
@@ -198,12 +205,10 @@ export async function runAiScheduleFill(
     drafts,
     label,
     changeSummary,
-    mode: scope === "full-week" ? "replace" : "fill",
+    mode: "fill",
   });
 
-  const readBack = await Promise.all(
-    published.assignmentIds.map((id) => scheduleAssignmentRepository.findById(supabase, id))
-  );
+  const readBack = await Promise.all(published.assignmentIds.map((id) => scheduleAssignmentRepository.findById(supabase, id)));
   const verified = published.assignmentIds.length > 0 && readBack.every(
     (a) => a?.status === "committed" && a.versionId === published.versionId && a.scheduleModelId === scheduleModelId
   );
@@ -214,7 +219,7 @@ export async function runAiScheduleFill(
     skippedCount: 0,
     versionId: published.versionId,
     solverIncomplete: false,
-    message: `AI berhasil menyusun ${published.assignmentIds.length} slot dan memverifikasi jadwal resmi.`,
+    message: `AI berhasil menyusun ${published.assignmentIds.length} slot untuk kelas ini dan memverifikasi jadwal resmi.`,
     committedAssignmentIds: published.assignmentIds,
   };
 }
