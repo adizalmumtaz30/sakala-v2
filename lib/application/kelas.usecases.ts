@@ -3,20 +3,21 @@ import { validateKelasDraft, sortKelasByTingkat, type Kelas, type KelasDraft } f
 import { kelasRepository } from "@/lib/data-access/kelas.repository";
 import { recordAuditEvent } from "@/lib/application/auditLog.usecases";
 
-export async function listKelas(supabase: SupabaseClient): Promise<Kelas[]> {
-  const data = await kelasRepository.findAll(supabase);
+export async function listKelas(supabase: SupabaseClient, academicContextId: string): Promise<Kelas[]> {
+  const data = await kelasRepository.findAll(supabase, academicContextId);
   return sortKelasByTingkat(data);
 }
 
-// Kelas tidak terikat Academic Context via kolom relasi (identitas tahun ajaran/
-// semester disimpan sebagai field draft, bukan academic_context_id), jadi audit
-// academicContextId selalu null di sini — konsisten dengan Guru/Mapel/Ruangan.
-export async function createKelas(supabase: SupabaseClient, draft: KelasDraft): Promise<Kelas> {
+export async function createKelas(
+  supabase: SupabaseClient,
+  academicContextId: string,
+  draft: KelasDraft
+): Promise<Kelas> {
   validateKelasDraft(draft);
-  const item = await kelasRepository.create(supabase, draft);
+  const item = await kelasRepository.create(supabase, academicContextId, draft);
   await recordAuditEvent({
     supabase,
-    academicContextId: null,
+    academicContextId,
     action: "create",
     entityType: "kelas",
     entityId: item.id,
@@ -28,15 +29,16 @@ export async function createKelas(supabase: SupabaseClient, draft: KelasDraft): 
 
 export async function updateKelas(
   supabase: SupabaseClient,
+  academicContextId: string,
   id: string,
   draft: KelasDraft
 ): Promise<Kelas> {
   validateKelasDraft(draft);
-  const before = await kelasRepository.findById(supabase, id);
-  const item = await kelasRepository.update(supabase, id, draft);
+  const before = await kelasRepository.findById(supabase, id, academicContextId);
+  const item = await kelasRepository.update(supabase, id, academicContextId, draft);
   await recordAuditEvent({
     supabase,
-    academicContextId: null,
+    academicContextId,
     action: "edit",
     entityType: "kelas",
     entityId: id,
@@ -47,12 +49,12 @@ export async function updateKelas(
   return item;
 }
 
-export async function deleteKelas(supabase: SupabaseClient, id: string): Promise<void> {
-  const before = await kelasRepository.findById(supabase, id);
-  await kelasRepository.remove(supabase, id);
+export async function deleteKelas(supabase: SupabaseClient, academicContextId: string, id: string): Promise<void> {
+  const before = await kelasRepository.findById(supabase, id, academicContextId);
+  await kelasRepository.remove(supabase, id, academicContextId);
   await recordAuditEvent({
     supabase,
-    academicContextId: null,
+    academicContextId,
     action: "delete",
     entityType: "kelas",
     entityId: id,
