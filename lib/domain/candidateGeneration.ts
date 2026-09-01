@@ -1,11 +1,9 @@
 // Domain layer — entity, value object, invariant. TIDAK BOLEH import Supabase atau React.
 // Bagian 24 / 87 — Jadwal Cerdas: "Load Constraints" untuk generator butuh
 // tahu berapa JP yang harus ditempatkan per kombinasi kelas+mapel+guru.
-// Target JP resmi (Bagian 89) BELUM punya sumber data view di baseline ini
-// (menyusul step 21/29 — Target JP View) — sesuai keputusan eksplisit user,
-// jpTarget diisi MANUAL oleh user per run generate (boleh di-pre-fill UI
-// dari targetJpPerRombel Mata Pelajaran kalau tersedia, tapi domain ini
-// tidak tahu soal itu — murni menerima angka yang sudah diputuskan user).
+// Target JP resmi berasal dari canonical Target JP layer di application/data layer.
+// Domain ini tidak membaca source persistence secara langsung — ia menerima
+// jpTarget yang sudah di-resolve oleh consumer dari canonical source.
 
 import type { HariSekolah } from "@/lib/domain/jamPelajaran";
 import type { JenisSlot } from "@/lib/domain/slotTemplate";
