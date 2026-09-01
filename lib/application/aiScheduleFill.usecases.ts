@@ -27,6 +27,7 @@ export interface AiFillResult {
   solverIncomplete: boolean;
   message: string;
   committedAssignmentIds: string[];
+  missingTeacherSubjects: { subjectId: string; subjectName: string }[];
 }
 
 export async function undoAiScheduleFill(supabase: SupabaseClient, assignmentIds: string[]): Promise<{ undone: number }> {
@@ -57,7 +58,7 @@ async function buildClassRequirements(
   scheduleModelId: string,
   classId: string,
   treatAsEmpty: boolean
-): Promise<{ requirements: GenerationRequirement[]; missingTeacherSubjectNames: string[] }> {
+): Promise<{ requirements: GenerationRequirement[]; missingTeacherSubjects: { subjectId: string; subjectName: string }[] }> {
   const [pembagianList, targetResult, subjectResult] = await Promise.all([
     listPembagianMengajar(supabase, academicContextId),
     supabase
@@ -90,7 +91,7 @@ async function buildClassRequirements(
   }
 
   const requirements: GenerationRequirement[] = [];
-  const missingTeacherSubjectNames: string[] = [];
+  const missingTeacherSubjects: { subjectId: string; subjectName: string }[] = [];
   let reqIndex = 0;
 
   for (const target of targets) {
@@ -99,7 +100,7 @@ async function buildClassRequirements(
       .sort((a, b) => (b.jpPerMinggu ?? 0) - (a.jpPerMinggu ?? 0));
 
     if (teacherAssignments.length === 0) {
-      missingTeacherSubjectNames.push(subjectNameMap.get(target.subjectId) ?? target.subjectId);
+      missingTeacherSubjects.push({ subjectId: target.subjectId, subjectName: subjectNameMap.get(target.subjectId) ?? target.subjectId });
       continue;
     }
 
@@ -124,7 +125,7 @@ async function buildClassRequirements(
     }
   }
 
-  return { requirements, missingTeacherSubjectNames };
+  return { requirements, missingTeacherSubjects };
 }
 
 export async function runAiScheduleFill(
@@ -153,8 +154,8 @@ export async function runAiScheduleFill(
   }
 
   const built = await buildClassRequirements(supabase, academicContextId, scheduleModelId, classId, scope === "class-replace");
-  const missingNote = built.missingTeacherSubjectNames.length > 0
-    ? ` Catatan: ${built.missingTeacherSubjectNames.join(", ")} belum punya guru aktif di Pembagian Mengajar — lengkapi dulu di sana supaya AI bisa mengisi mata pelajaran itu juga.`
+  const missingNote = built.missingTeacherSubjects.length > 0
+    ? ` Catatan: ${built.missingTeacherSubjects.length} mata pelajaran belum punya guru aktif di Pembagian Mengajar.`
     : "";
 
   if (built.requirements.length === 0) {
@@ -162,11 +163,12 @@ export async function runAiScheduleFill(
       placedCount: 0,
       skippedCount: 0,
       versionId: null,
-      solverIncomplete: built.missingTeacherSubjectNames.length > 0,
-      message: built.missingTeacherSubjectNames.length > 0
+      solverIncomplete: built.missingTeacherSubjects.length > 0,
+      message: built.missingTeacherSubjects.length > 0
         ? `Tidak ada yang bisa diisi AI untuk kelas ini.${missingNote}`
         : "Tidak ada kekurangan JP yang perlu diisi di kelas ini — semuanya sudah lengkap.",
       committedAssignmentIds: [],
+      missingTeacherSubjects: built.missingTeacherSubjects,
     };
   }
 
@@ -186,6 +188,7 @@ export async function runAiScheduleFill(
       solverIncomplete: true,
       message: `SAKALA belum menemukan jadwal valid untuk kelas ini. Tidak ada perubahan. ${detail}${missingNote}`,
       committedAssignmentIds: [],
+      missingTeacherSubjects: built.missingTeacherSubjects,
     };
   }
 
@@ -217,5 +220,6 @@ export async function runAiScheduleFill(
     solverIncomplete: false,
     message: `AI berhasil menyusun ${published.assignmentIds.length} slot untuk kelas ini dan memverifikasi jadwal resmi.${missingNote}`,
     committedAssignmentIds: published.assignmentIds,
+    missingTeacherSubjects: built.missingTeacherSubjects,
   };
 }

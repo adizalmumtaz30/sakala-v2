@@ -105,7 +105,10 @@ export default function JadwalWorkspace({
   // SAKALA AI -- satu tombol, menu kontekstual (Jadwal Satu Layar tahap 2+3).
   const [aiMenuOpen, setAiMenuOpen] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
-  const [aiUndoHint, setAiUndoHint] = useState<string | null>(null);
+  const [aiResult, setAiResult] = useState<{
+    message: string;
+    missingTeacherSubjects: { subjectId: string; subjectName: string }[];
+  } | null>(null);
   const [aiUndoIds, setAiUndoIds] = useState<string[]>([]);
   const [aiUndoBusy, setAiUndoBusy] = useState(false);
   const [aiConfirmFullWeek, setAiConfirmFullWeek] = useState(false);
@@ -119,10 +122,10 @@ export default function JadwalWorkspace({
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, [aiMenuOpen]);
   useEffect(() => {
-    if (!aiUndoHint) return;
-    const t = setTimeout(() => { setAiUndoHint(null); setAiUndoIds([]); }, 8000);
+    if (!aiResult) return;
+    const t = setTimeout(() => { setAiResult(null); setAiUndoIds([]); }, 10000);
     return () => clearTimeout(t);
-  }, [aiUndoHint]);
+  }, [aiResult]);
 
   async function runAiUndo() {
     if (aiUndoIds.length === 0) return;
@@ -135,7 +138,7 @@ export default function JadwalWorkspace({
       setToast(err instanceof Error ? err.message : "Undo gagal.");
     } finally {
       setAiUndoBusy(false);
-      setAiUndoHint(null);
+      setAiResult(null);
       setAiUndoIds([]);
     }
   }
@@ -186,16 +189,17 @@ export default function JadwalWorkspace({
     setAiMenuOpen(false);
     setAiConfirmFullWeek(false);
     setAiBusy(true);
-    setAiUndoHint(null);
+    setAiResult(null);
     try {
       const res = await aiScheduleFillAction(activeContext.id, selectedModelId, scope, activeEntityId);
       if (!res.ok) {
         setToast(`AI gagal: ${res.error}`);
-      } else if (res.data.placedCount > 0) {
-        setAiUndoHint(`AI mengisi ${res.data.placedCount} slot jadwal${res.data.skippedCount > 0 ? ` (${res.data.skippedCount} dilewati karena bentrok)` : ""}.`);
-        setAiUndoIds(res.data.committedAssignmentIds);
       } else {
-        setToast(res.data.message);
+        const msg = res.data.placedCount > 0
+          ? `AI mengisi ${res.data.placedCount} slot jadwal${res.data.skippedCount > 0 ? ` (${res.data.skippedCount} dilewati karena bentrok)` : ""}.${res.data.missingTeacherSubjects.length > 0 ? " Catatan di bawah." : ""}`
+          : res.data.message;
+        setAiResult({ message: msg, missingTeacherSubjects: res.data.missingTeacherSubjects });
+        setAiUndoIds(res.data.committedAssignmentIds);
       }
     } catch (err) {
       setToast(err instanceof Error ? err.message : "AI gagal memproses.");
@@ -668,17 +672,33 @@ export default function JadwalWorkspace({
         </div>
       )}
 
-      {aiUndoHint && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-violet-100 bg-violet-50/70 px-4 py-2.5 text-[12.5px] text-ink-800">
-          <span className="flex items-center gap-2"><Sparkles size={14} className="text-violet" /> {aiUndoHint}</span>
-          <div className="flex shrink-0 items-center gap-3">
-            {aiUndoIds.length > 0 && (
-              <button type="button" disabled={aiUndoBusy} onClick={() => void runAiUndo()} className="font-semibold text-violet hover:underline disabled:opacity-50">
-                {aiUndoBusy ? "Membatalkan…" : "Undo"}
-              </button>
-            )}
-            <button type="button" onClick={() => { setAiUndoHint(null); setAiUndoIds([]); }} className="font-medium text-ink-400 hover:text-ink-700">Tutup</button>
+      {aiResult && (
+        <div className="flex flex-col gap-2 rounded-xl border border-violet-100 bg-violet-50/70 px-4 py-2.5 text-[12.5px] text-ink-800">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span className="flex items-center gap-2"><Sparkles size={14} className="text-violet" /> {aiResult.message}</span>
+            <div className="flex shrink-0 items-center gap-3">
+              {aiUndoIds.length > 0 && (
+                <button type="button" disabled={aiUndoBusy} onClick={() => void runAiUndo()} className="font-semibold text-violet hover:underline disabled:opacity-50">
+                  {aiUndoBusy ? "Membatalkan…" : "Undo"}
+                </button>
+              )}
+              <button type="button" onClick={() => { setAiResult(null); setAiUndoIds([]); }} className="font-medium text-ink-400 hover:text-ink-700">Tutup</button>
+            </div>
           </div>
+          {aiResult.missingTeacherSubjects.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 border-t border-violet-100 pt-2">
+              <span className="text-[11.5px] text-ink-500">Perlu guru dulu:</span>
+              {aiResult.missingTeacherSubjects.map((s) => (
+                <Link
+                  key={s.subjectId}
+                  href={`/pembagian-mengajar?kelas=${activeEntityId}&mapel=${s.subjectId}`}
+                  className="rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11.5px] font-medium text-amber-800 hover:bg-amber-100"
+                >
+                  {s.subjectName} →
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
