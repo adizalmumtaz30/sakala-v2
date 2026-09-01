@@ -57,17 +57,19 @@ async function buildClassRequirements(
   scheduleModelId: string,
   classId: string,
   treatAsEmpty: boolean
-): Promise<{ requirements: GenerationRequirement[]; missingTeacher: string[] }> {
-  const [pembagianList, targetResult] = await Promise.all([
+): Promise<{ requirements: GenerationRequirement[]; missingTeacherSubjectNames: string[] }> {
+  const [pembagianList, targetResult, subjectResult] = await Promise.all([
     listPembagianMengajar(supabase, academicContextId),
     supabase
       .from("target_jp")
       .select("kelas_id,mata_pelajaran_id,target_jp")
       .eq("academic_context_id", academicContextId)
       .eq("kelas_id", classId),
+    supabase.from("mata_pelajaran").select("id,nama"),
   ]);
 
   if (targetResult.error) throw new Error(`Gagal membaca Target JP resmi: ${targetResult.error.message}`);
+  const subjectNameMap = new Map((subjectResult.data ?? []).map((s) => [s.id as string, s.nama as string]));
   const targets = (targetResult.data ?? [])
     .map((r) => ({ subjectId: r.mata_pelajaran_id as string, targetJp: Number(r.target_jp) }))
     .filter((r) => r.targetJp > 0);
@@ -88,7 +90,7 @@ async function buildClassRequirements(
   }
 
   const requirements: GenerationRequirement[] = [];
-  const missingTeacher: string[] = [];
+  const missingTeacherSubjectNames: string[] = [];
   let reqIndex = 0;
 
   for (const target of targets) {
@@ -97,7 +99,7 @@ async function buildClassRequirements(
       .sort((a, b) => (b.jpPerMinggu ?? 0) - (a.jpPerMinggu ?? 0));
 
     if (teacherAssignments.length === 0) {
-      missingTeacher.push(target.subjectId);
+      missingTeacherSubjectNames.push(subjectNameMap.get(target.subjectId) ?? target.subjectId);
       continue;
     }
 
@@ -122,7 +124,7 @@ async function buildClassRequirements(
     }
   }
 
-  return { requirements, missingTeacher };
+  return { requirements, missingTeacherSubjectNames };
 }
 
 export async function runAiScheduleFill(
@@ -151,25 +153,19 @@ export async function runAiScheduleFill(
   }
 
   const built = await buildClassRequirements(supabase, academicContextId, scheduleModelId, classId, scope === "class-replace");
-
-  if (built.missingTeacher.length > 0) {
-    return {
-      placedCount: 0,
-      skippedCount: built.missingTeacher.length,
-      versionId: null,
-      solverIncomplete: true,
-      message: `Belum bisa dilengkapi. ${built.missingTeacher.length} mata pelajaran di kelas ini belum punya guru aktif di Pembagian Mengajar. Jadwal lama tetap aman.`,
-      committedAssignmentIds: [],
-    };
-  }
+  const missingNote = built.missingTeacherSubjectNames.length > 0
+    ? ` Catatan: ${built.missingTeacherSubjectNames.join(", ")} belum punya guru aktif di Pembagian Mengajar — lengkapi dulu di sana supaya AI bisa mengisi mata pelajaran itu juga.`
+    : "";
 
   if (built.requirements.length === 0) {
     return {
       placedCount: 0,
       skippedCount: 0,
       versionId: null,
-      solverIncomplete: false,
-      message: "Tidak ada kekurangan JP yang perlu diisi di kelas ini — semuanya sudah lengkap.",
+      solverIncomplete: built.missingTeacherSubjectNames.length > 0,
+      message: built.missingTeacherSubjectNames.length > 0
+        ? `Tidak ada yang bisa diisi AI untuk kelas ini.${missingNote}`
+        : "Tidak ada kekurangan JP yang perlu diisi di kelas ini — semuanya sudah lengkap.",
       committedAssignmentIds: [],
     };
   }
@@ -188,7 +184,7 @@ export async function runAiScheduleFill(
       skippedCount: built.requirements.length,
       versionId: null,
       solverIncomplete: true,
-      message: `SAKALA belum menemukan jadwal valid untuk kelas ini. Tidak ada perubahan. ${detail}`,
+      message: `SAKALA belum menemukan jadwal valid untuk kelas ini. Tidak ada perubahan. ${detail}${missingNote}`,
       committedAssignmentIds: [],
     };
   }
@@ -219,7 +215,7 @@ export async function runAiScheduleFill(
     skippedCount: 0,
     versionId: published.versionId,
     solverIncomplete: false,
-    message: `AI berhasil menyusun ${published.assignmentIds.length} slot untuk kelas ini dan memverifikasi jadwal resmi.`,
+    message: `AI berhasil menyusun ${published.assignmentIds.length} slot untuk kelas ini dan memverifikasi jadwal resmi.${missingNote}`,
     committedAssignmentIds: published.assignmentIds,
   };
 }
