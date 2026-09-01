@@ -1,6 +1,7 @@
 // Data Access layer — repository Mata Pelajaran.
 // Target JP bukan milik master Mata Pelajaran. Target kontekstual hanya ditulis
-// melalui target_jp/upsertTargetJp.
+// melalui target_jp/upsertTargetJp. Kolom lama target_jp_per_rombel tidak lagi
+// dibaca atau ditulis sebagai business data.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
@@ -30,6 +31,9 @@ function rowToEntity(row: Row): MataPelajaran {
     nama: row.nama,
     kode: row.kode,
     status: row.status,
+    // Transitional compatibility: old UI can render an empty value while its
+    // JP field is migrated to the contextual Target JP workspace.
+    targetJpPerRombel: null,
     kelompok: row.kelompok ?? undefined,
     warnaJadwal: row.warna_jadwal ?? undefined,
     prioritasPenjadwalan: row.prioritas_penjadwalan ?? undefined,
