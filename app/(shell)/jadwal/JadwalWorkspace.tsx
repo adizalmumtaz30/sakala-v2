@@ -182,14 +182,13 @@ export default function JadwalWorkspace({
   }
 
   async function runAiFill(scope: AiFillScope) {
-    if (!activeContext || !selectedModelId) return;
+    if (!activeContext || !selectedModelId || viewBy !== "kelas" || !activeEntityId) return;
     setAiMenuOpen(false);
     setAiConfirmFullWeek(false);
     setAiBusy(true);
     setAiUndoHint(null);
     try {
-      const classId = scope === "class" ? activeEntityId : undefined;
-      const res = await aiScheduleFillAction(activeContext.id, selectedModelId, scope, classId);
+      const res = await aiScheduleFillAction(activeContext.id, selectedModelId, scope, activeEntityId);
       if (!res.ok) {
         setToast(`AI gagal: ${res.error}`);
       } else if (res.data.placedCount > 0) {
@@ -621,36 +620,36 @@ export default function JadwalWorkspace({
         </div>
 
         <div className="relative" ref={aiMenuRef}>
-          <Button variant="secondary" size="sm" loading={aiBusy} onClick={() => setAiMenuOpen((v) => !v)}>
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={aiBusy}
+            disabled={viewBy !== "kelas" || !activeEntityId}
+            title={viewBy !== "kelas" ? "Pilih tampilan Per Kelas dulu untuk pakai SAKALA AI" : undefined}
+            onClick={() => setAiMenuOpen((v) => !v)}
+          >
             <Sparkles size={15} className="text-violet" /> SAKALA AI
           </Button>
-          {aiMenuOpen && (
+          {aiMenuOpen && viewBy === "kelas" && activeEntityId && (
             <div className="absolute right-0 top-full z-20 mt-1.5 w-72 rounded-xl border border-border bg-surface p-1.5 shadow-lg">
-              {viewBy === "kelas" && activeEntityId && (
-                <button
-                  type="button"
-                  onClick={() => void runAiFill("class")}
-                  className="flex w-full flex-col items-start rounded-lg px-3 py-2 text-left hover:bg-surface-muted"
-                >
-                  <span className="text-[13px] font-semibold text-ink-900">Lengkapi kekurangan kelas ini</span>
-                  <span className="text-[11.5px] text-ink-500">Cuma isi slot kosong untuk {entityOptions.find((o) => o.id === activeEntityId)?.label ?? "kelas ini"}.</span>
-                </button>
-              )}
+              <p className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-400">
+                Untuk {entityOptions.find((o) => o.id === activeEntityId)?.label ?? "kelas ini"}
+              </p>
               <button
                 type="button"
-                onClick={() => void runAiFill("empty")}
+                onClick={() => void runAiFill("class")}
                 className="flex w-full flex-col items-start rounded-lg px-3 py-2 text-left hover:bg-surface-muted"
               >
-                <span className="text-[13px] font-semibold text-ink-900">Lengkapi semua yang kosong</span>
-                <span className="text-[11.5px] text-ink-500">Isi semua slot kosong di seluruh sekolah.</span>
+                <span className="text-[13px] font-semibold text-ink-900">Lengkapi kekurangan kelas ini</span>
+                <span className="text-[11.5px] text-ink-500">Cuma isi slot kosong, jadwal yang sudah ada tidak diubah.</span>
               </button>
               <button
                 type="button"
                 onClick={() => setAiConfirmFullWeek(true)}
                 className="flex w-full flex-col items-start rounded-lg px-3 py-2 text-left hover:bg-surface-muted"
               >
-                <span className="text-[13px] font-semibold text-ink-900">Susun ulang penuh seminggu</span>
-                <span className="text-[11.5px] text-ink-500">Ganti seluruh jadwal model ini dari nol.</span>
+                <span className="text-[13px] font-semibold text-ink-900">Susun ulang jadwal kelas ini</span>
+                <span className="text-[11.5px] text-ink-500">Ganti jadwal kelas ini dari nol (kelas lain tidak tersentuh).</span>
               </button>
             </div>
           )}
@@ -659,10 +658,12 @@ export default function JadwalWorkspace({
 
       {aiConfirmFullWeek && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
-          <p className="text-[12.5px] font-medium text-ink-800">Ini akan menghapus & menyusun ulang SEMUA jadwal di model ini dari nol. Lanjutkan?</p>
+          <p className="text-[12.5px] font-medium text-ink-800">
+            Ini akan mengganti seluruh jadwal {entityOptions.find((o) => o.id === activeEntityId)?.label ?? "kelas ini"} dari nol. Kelas lain tidak terpengaruh. Lanjutkan?
+          </p>
           <div className="flex shrink-0 gap-2">
             <Button variant="ghost" size="sm" onClick={() => setAiConfirmFullWeek(false)}>Batal</Button>
-            <Button variant="primary" size="sm" onClick={() => void runAiFill("full-week")}>Ya, susun ulang</Button>
+            <Button variant="primary" size="sm" onClick={() => void runAiFill("class-replace")}>Ya, susun ulang</Button>
           </div>
         </div>
       )}
