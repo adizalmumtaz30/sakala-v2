@@ -139,6 +139,12 @@ export default function JadwalWorkspace({
     } finally {
       setAiUndoBusy(false);
       setAiResult(null);
+      setNewlyAddedIds((prev) => {
+        if (aiUndoIds.every((id) => !prev.has(id))) return prev;
+        const next = new Map(prev);
+        for (const id of aiUndoIds) next.delete(id);
+        return next;
+      });
       setAiUndoIds([]);
     }
   }
@@ -200,6 +206,7 @@ export default function JadwalWorkspace({
           : res.data.message;
         setAiResult({ message: msg, missingTeacherSubjects: res.data.missingTeacherSubjects });
         setAiUndoIds(res.data.committedAssignmentIds);
+        markNewlyAdded(res.data.committedAssignmentIds);
       }
     } catch (err) {
       setToast(err instanceof Error ? err.message : "AI gagal memproses.");
@@ -356,6 +363,32 @@ export default function JadwalWorkspace({
   const [duplicateSource, setDuplicateSource] = useState<ScheduleAssignment | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
+  // Tanda "Baru" (poin operator): assignment yang baru ditambahkan (manual
+  // atau via SAKALA AI) ditandai selama ~2 menit operator berada di halaman
+  // ini, lalu hilang otomatis -- bukan status permanen, cuma penanda sesaat.
+  const [newlyAddedIds, setNewlyAddedIds] = useState<Map<string, number>>(new Map());
+  const NEW_BADGE_DURATION_MS = 2 * 60 * 1000;
+  function markNewlyAdded(ids: string[]) {
+    if (ids.length === 0) return;
+    setNewlyAddedIds((prev) => {
+      const next = new Map(prev);
+      const now = Date.now();
+      for (const id of ids) next.set(id, now);
+      return next;
+    });
+  }
+  useEffect(() => {
+    if (newlyAddedIds.size === 0) return;
+    const t = setInterval(() => {
+      setNewlyAddedIds((prev) => {
+        const now = Date.now();
+        const next = new Map([...prev].filter(([, addedAt]) => now - addedAt < NEW_BADGE_DURATION_MS));
+        return next.size === prev.size ? prev : next;
+      });
+    }, 5000);
+    return () => clearInterval(t);
+  }, [newlyAddedIds]);
+
   // Item #7 (deep-link dari baris Guru): ➕/👁 di halaman Guru mengarah ke sini
   // lewat query string ?viewBy=guru&entityId=<id>&autoAdd=1. Dibaca via
   // window.location (bukan useSearchParams) supaya tidak menambah kebutuhan
@@ -483,7 +516,8 @@ export default function JadwalWorkspace({
       setAddError(result.error);
       return;
     }
-    setToast(commit ? buildCommitToast("Jadwal berhasil disimpan dan di-commit.", result.data.conflicts) : "Jadwal berhasil disimpan sebagai draft (lihat di Jadwal Cerdas → Review & Commit).");
+    setToast(commit ? buildCommitToast("Jadwal berhasil disimpan.", result.data.conflicts) : "Jadwal berhasil disimpan sebagai draft (lihat di Jadwal Cerdas → Review & Commit).");
+    markNewlyAdded([result.data.assignment.id]);
     closeAdd();
   }
 
@@ -613,51 +647,13 @@ export default function JadwalWorkspace({
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-5 pb-16 pt-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2 text-ink-400">
-            <CalendarClock size={16} />
-            <span className="text-[12.5px]">{formatContextLabel(context)}</span>
-          </div>
-          <h1 className="text-[20px] font-semibold text-ink-900">Jadwal</h1>
-          <p className="text-[13px] text-ink-500">Jadwal operasional/committed — Per Kelas, Per Guru, Per Ruangan, Harian, Mingguan.</p>
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-2 text-ink-400">
+          <CalendarClock size={16} />
+          <span className="text-[12.5px]">{formatContextLabel(context)}</span>
         </div>
-
-        <div className="relative" ref={aiMenuRef}>
-          <Button
-            variant="secondary"
-            size="sm"
-            loading={aiBusy}
-            disabled={viewBy !== "kelas" || !activeEntityId}
-            title={viewBy !== "kelas" ? "Pilih tampilan Per Kelas dulu untuk pakai SAKALA AI" : undefined}
-            onClick={() => setAiMenuOpen((v) => !v)}
-          >
-            <Sparkles size={15} className="text-violet" /> SAKALA AI
-          </Button>
-          {aiMenuOpen && viewBy === "kelas" && activeEntityId && (
-            <div className="absolute right-0 top-full z-20 mt-1.5 w-72 rounded-xl border border-border bg-surface p-1.5 shadow-lg">
-              <p className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-400">
-                Untuk {entityOptions.find((o) => o.id === activeEntityId)?.label ?? "kelas ini"}
-              </p>
-              <button
-                type="button"
-                onClick={() => void runAiFill("class")}
-                className="flex w-full flex-col items-start rounded-lg px-3 py-2 text-left hover:bg-surface-muted"
-              >
-                <span className="text-[13px] font-semibold text-ink-900">Lengkapi kekurangan kelas ini</span>
-                <span className="text-[11.5px] text-ink-500">Cuma isi slot kosong, jadwal yang sudah ada tidak diubah.</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setAiConfirmFullWeek(true)}
-                className="flex w-full flex-col items-start rounded-lg px-3 py-2 text-left hover:bg-surface-muted"
-              >
-                <span className="text-[13px] font-semibold text-ink-900">Susun ulang jadwal kelas ini</span>
-                <span className="text-[11.5px] text-ink-500">Ganti jadwal kelas ini dari nol (kelas lain tidak tersentuh).</span>
-              </button>
-            </div>
-          )}
-        </div>
+        <h1 className="text-[20px] font-semibold text-ink-900">Jadwal</h1>
+        <p className="text-[13px] text-ink-500">Jadwal operasional/committed — Per Kelas, Per Guru, Per Ruangan, Harian, Mingguan.</p>
       </div>
 
       {aiConfirmFullWeek && (
@@ -914,12 +910,44 @@ export default function JadwalWorkspace({
             contextLabel={contextLabel}
             schoolName={schoolName}
           />
-          <Link
-            href="/ai"
-            className="flex h-11 items-center gap-1.5 rounded-xl bg-ink-900 px-3.5 text-[12.5px] font-semibold text-white hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
-          >
-            <Sparkles size={14} /> SAKALA AI
-          </Link>
+
+          <div className="relative" ref={aiMenuRef}>
+            <Button
+              variant="secondary"
+              size="md"
+              loading={aiBusy}
+              disabled={viewBy !== "kelas" || !activeEntityId}
+              title={viewBy !== "kelas" ? "Pilih tampilan Per Kelas dulu untuk pakai SAKALA AI" : undefined}
+              onClick={() => setAiMenuOpen((v) => !v)}
+              className="!bg-ink-900 !text-white hover:!brightness-110 disabled:!bg-ink-900/40"
+            >
+              <Sparkles size={14} /> SAKALA AI
+            </Button>
+            {aiMenuOpen && viewBy === "kelas" && activeEntityId && (
+              <div className="absolute right-0 top-full z-20 mt-1.5 w-72 rounded-xl border border-border bg-surface p-1.5 shadow-lg">
+                <p className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-400">
+                  Untuk {entityOptions.find((o) => o.id === activeEntityId)?.label ?? "kelas ini"}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void runAiFill("class")}
+                  className="flex w-full flex-col items-start rounded-lg px-3 py-2 text-left hover:bg-surface-muted"
+                >
+                  <span className="text-[13px] font-semibold text-ink-900">Lengkapi kekurangan kelas ini</span>
+                  <span className="text-[11.5px] text-ink-500">Cuma isi slot kosong, jadwal yang sudah ada tidak diubah.</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAiConfirmFullWeek(true)}
+                  className="flex w-full flex-col items-start rounded-lg px-3 py-2 text-left hover:bg-surface-muted"
+                >
+                  <span className="text-[13px] font-semibold text-ink-900">Susun ulang jadwal kelas ini</span>
+                  <span className="text-[11.5px] text-ink-500">Ganti jadwal kelas ini dari nol (kelas lain tidak tersentuh).</span>
+                </button>
+              </div>
+            )}
+          </div>
+
           {selectedModel && (
             <span className="text-[11.5px] text-ink-400">Mode ruangan: {formatModeRuangan(selectedModel.modeRuangan)}</span>
           )}
@@ -995,6 +1023,7 @@ export default function JadwalWorkspace({
                             ruanganLabel={cell.assignment?.roomId ? ruanganMap.get(cell.assignment.roomId) : undefined}
                             cardColor={cell.assignment ? mapelColorMap.get(cell.assignment.subjectId) : undefined}
                             hasPendingCandidate={candidateCellKeys.has(cellKey(d, row.nomorUrut))}
+                            isNew={cell.assignment ? newlyAddedIds.has(cell.assignment.id) : false}
                             dimmed={
                               highlightFilter === "conflict"
                                 ? cell.state !== "conflict"
@@ -1319,6 +1348,7 @@ function JadwalCell({
   cardColor,
   hasPendingCandidate,
   dimmed,
+  isNew,
 }: {
   cell: GridCell;
   onClick: () => void;
@@ -1329,6 +1359,7 @@ function JadwalCell({
   cardColor?: { tint: string; accent: string; text: string };
   hasPendingCandidate?: boolean;
   dimmed?: boolean;
+  isNew?: boolean;
 }) {
   if (cell.state === "empty") {
     if (!cell.jamPelajaran) {
@@ -1396,7 +1427,7 @@ function JadwalCell({
           : cardColor
             ? "hover:brightness-95"
             : "border-brand-600/20 bg-brand-50 hover:bg-brand-50/70"
-      } ${hasPendingCandidate ? "ring-2 ring-dashed ring-violet ring-offset-1" : ""} ${dimmed ? "opacity-20" : ""}`}
+      } ${hasPendingCandidate ? "ring-2 ring-dashed ring-violet ring-offset-1" : ""} ${isNew ? "ring-2 ring-emerald-400 ring-offset-1" : ""} ${dimmed ? "opacity-20" : ""}`}
     >
       {hasPendingCandidate && (
         <span className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-violet text-[8px] font-bold text-white" title="Ada kandidat perubahan menunggu review">!</span>
@@ -1412,9 +1443,9 @@ function JadwalCell({
         <Badge tone="danger">
           <AlertTriangle size={10} className="mr-0.5 inline" /> Konflik
         </Badge>
-      ) : (
-        <Badge tone="success">Committed</Badge>
-      )}
+      ) : isNew ? (
+        <Badge tone="success">Baru</Badge>
+      ) : null}
     </button>
   );
 }
