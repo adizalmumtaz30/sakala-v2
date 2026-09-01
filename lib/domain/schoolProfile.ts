@@ -1,7 +1,8 @@
-// Domain layer — entity, value object, invariant. TIDAK BOLEH import Supabase atau React.
-// Kontrak Bagian 3.1: Domain hanya berisi aturan bisnis murni.
-// Bagian 8.1 / 78 — School Profile menyimpan DEFAULT context (Tahun Pelajaran
-// + Semester default). Default context BUKAN active context (dua konsep terpisah).
+// Domain layer — School Profile / Admin Profile.
+// Profile bukan sumber kebenaran Academic Context. Tahun Pelajaran + Semester
+// di bawah ini masih dipertahankan sementara sebagai legacy onboarding
+// preference agar migrasi tidak memutus data lama. Keduanya tidak boleh dipakai
+// untuk menentukan context aktif atau mengikat entity akademik.
 
 import type { Semester } from "./academicContext";
 
@@ -31,10 +32,6 @@ export class SchoolProfileValidationError extends Error {
 
 const TAHUN_PELAJARAN_PATTERN = /^(\d{4})\/(\d{4})$/;
 
-/**
- * Invariant School Profile (Bagian 8.1): Nama, Jabatan, Nama Sekolah, Tahun
- * Pelajaran, dan Semester semua wajib diisi. Domain rule murni.
- */
 export function validateSchoolProfileDraft(draft: SchoolProfileDraft): void {
   const nama = draft.nama.trim();
   if (nama.length < 3) {
