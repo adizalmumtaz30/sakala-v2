@@ -30,13 +30,12 @@ export async function GET(request: Request) {
         ? [{ id: activeContext.id, tahun_pelajaran: activeContext.tahunPelajaran, semester: activeContext.semester, jenjang: activeContext.jenjang, institution: activeContext.institution, is_active: activeContext.isActive }]
         : [];
 
-      let classes: Array<{ id: string; nama_rombel: string; tingkat: string; tahun_ajaran: string; semester: string }> = [];
+      let classes: Array<{ id: string; nama_rombel: string; tingkat: string }> = [];
       if (activeContext) {
         const { data, error } = await supabase
           .from("kelas")
-          .select("id,nama_rombel,tingkat,tahun_ajaran,semester")
-          .eq("tahun_ajaran", activeContext.tahunPelajaran)
-          .eq("semester", activeContext.semester)
+          .select("id,nama_rombel,tingkat")
+          .eq("academic_context_id", activeContext.id)
           .order("tingkat")
           .order("nama_rombel");
         if (error) throw error;
@@ -94,7 +93,7 @@ async function validate(rows: Record<string, unknown>[]) {
   const supabase = await createClient();
   const [{ data: contexts, error: ce }, { data: classes, error: ke }, { data: subjects, error: se }] = await Promise.all([
     supabase.from("academic_context").select("id,tahun_pelajaran,semester"),
-    supabase.from("kelas").select("id,nama_rombel,tingkat,tahun_ajaran,semester"),
+    supabase.from("kelas").select("id,nama_rombel,tingkat"),
     supabase.from("mata_pelajaran").select("id,nama,kode"),
   ]);
   if (ce || ke || se) throw new Error(ce?.message || ke?.message || se?.message || "Gagal membaca master data.");

@@ -242,30 +242,6 @@ export async function promoteCurriculumSourceToOfficialAction(sourceId: string):
   return { ok: true, data: null };
 }
 
-export async function getActiveAcademicContextAction() {
-  const supabase = await createClient();
-  const { data: contexts, error: contextError } = await supabase
-    .from("academic_context")
-    .select("id,tahun_pelajaran,semester,is_active")
-    .order("is_active", { ascending: false })
-    .order("tahun_pelajaran", { ascending: false });
-  if (contextError) return { ok: false as const, error: toPlainDatabaseError(contextError) };
-
-  const active = (contexts ?? []).find((context) => context.is_active) ?? null;
-  if (!active) return { ok: true as const, data: { contexts: contexts ?? [], classes: [] } };
-
-  const { data: classes, error: classError } = await supabase
-    .from("kelas")
-    .select("id,tingkat,nama_rombel,tahun_ajaran,semester")
-    .eq("tahun_ajaran", active.tahun_pelajaran)
-    .eq("semester", active.semester)
-    .order("tingkat")
-    .order("nama_rombel");
-  if (classError) return { ok: false as const, error: toPlainDatabaseError(classError) };
-
-  return { ok: true as const, data: { contexts: contexts ?? [], classes: classes ?? [] } };
-}
-
 export async function listCurriculumIntelligenceAction(institution: CurriculumInstitution | "all" = "all") {
   const supabase = await createClient();
   let sourceQuery = supabase.from("curriculum_source").select("*").order("source_tier").order("name");
