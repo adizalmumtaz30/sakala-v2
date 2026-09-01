@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Plus, Pencil, Trash2, Search } from "lucide-react";
-import type { Kelas, Semester, StatusAktif } from "@/lib/domain/kelas";
+import type { Kelas, StatusAktif } from "@/lib/domain/kelas";
 import { createKelasAction, updateKelasAction, deleteKelasAction } from "./actions";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -11,17 +11,20 @@ import Modal from "@/components/ui/Modal";
 import { Card, Badge, EmptyState } from "@/components/ui/primitives";
 
 const TINGKAT_OPTIONS = ["VII", "VIII", "IX"].map((value) => ({ value, label: value }));
-const YEAR_OPTIONS = ["2025/2026", "2026/2027", "2027/2028"].map((value) => ({ value, label: value }));
-const SEMESTER_OPTIONS = [
-  { value: "ganjil", label: "Ganjil" },
-  { value: "genap", label: "Genap" },
-];
 const STATUS_OPTIONS = [
   { value: "aktif", label: "Aktif" },
   { value: "nonaktif", label: "Tidak Aktif" },
 ];
 
-export default function KelasWorkspace({ initialData, initialQuery }: { initialData: Kelas[]; initialQuery?: string }) {
+export default function KelasWorkspace({
+  initialData,
+  initialQuery,
+  activeContextLabel,
+}: {
+  initialData: Kelas[];
+  initialQuery?: string;
+  activeContextLabel: string;
+}) {
   const [data, setData] = useState<Kelas[]>(initialData);
   const [query, setQuery] = useState(initialQuery ?? "");
   const [modalOpen, setModalOpen] = useState(false);
@@ -39,10 +42,10 @@ export default function KelasWorkspace({ initialData, initialQuery }: { initialD
     const tingkat = String(formData.get("tingkat") ?? "");
     const namaRombel = String(formData.get("namaRombel") ?? "");
     const status = (formData.get("status") as StatusAktif) ?? "aktif";
-    const tahunAjaran = String(formData.get("tahunAjaran") ?? "");
-    const semester = (formData.get("semester") as Semester) ?? "ganjil";
     startTransition(async () => {
-      const result = editing ? await updateKelasAction(editing.id, tingkat, namaRombel, status, tahunAjaran, semester) : await createKelasAction(tingkat, namaRombel, status, tahunAjaran, semester);
+      const result = editing
+        ? await updateKelasAction(editing.id, tingkat, namaRombel, status)
+        : await createKelasAction(tingkat, namaRombel, status);
       if (!result.ok) { setFormError(result.error); return; }
       setData((prev) => editing ? prev.map((k) => (k.id === result.data!.id ? result.data! : k)) : [...prev, result.data!]);
       setModalOpen(false);
@@ -58,7 +61,7 @@ export default function KelasWorkspace({ initialData, initialQuery }: { initialD
     const nextStatus: StatusAktif = k.status === "aktif" ? "nonaktif" : "aktif";
     setTogglingId(k.id);
     setData((prev) => prev.map((x) => (x.id === k.id ? { ...x, status: nextStatus } : x)));
-    const result = await updateKelasAction(k.id, k.tingkat, k.namaRombel, nextStatus, k.tahunAjaran, k.semester);
+    const result = await updateKelasAction(k.id, k.tingkat, k.namaRombel, nextStatus);
     if (!result.ok) setData((prev) => prev.map((x) => (x.id === k.id ? { ...x, status: k.status } : x)));
     setTogglingId(null);
   }
@@ -68,7 +71,7 @@ export default function KelasWorkspace({ initialData, initialQuery }: { initialD
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-[20px] font-bold text-ink-900">Kelas</h1>
-          <p className="text-[13px] text-ink-500">Kelola kelas untuk tahun ajaran dan semester yang aktif.</p>
+          <p className="text-[13px] text-ink-500">Kelas pada konteks aktif: <span className="font-semibold text-ink-700">{activeContextLabel}</span></p>
         </div>
         <Button onClick={openCreate}><Plus size={16} /> Tambah Kelas</Button>
       </div>
@@ -96,9 +99,10 @@ export default function KelasWorkspace({ initialData, initialQuery }: { initialD
         <form action={handleSubmit} className="flex flex-col gap-4">
           <SelectField name="tingkat" label="Tingkat *" defaultValue={editing?.tingkat ?? ""} options={TINGKAT_OPTIONS} placeholder="Klik untuk memilih tingkat" required error={formError ?? undefined} />
           <Input name="namaRombel" label="Nama Kelas *" placeholder="cth. VIII-A" defaultValue={editing?.namaRombel} required />
-          <SelectField name="tahunAjaran" label="Tahun Ajaran *" defaultValue={editing?.tahunAjaran ?? ""} options={YEAR_OPTIONS} placeholder="Klik untuk memilih tahun ajaran" required />
-          <SelectField name="semester" label="Semester *" defaultValue={editing?.semester ?? "ganjil"} options={SEMESTER_OPTIONS} required />
           <SelectField name="status" label="Status *" defaultValue={editing?.status ?? "aktif"} options={STATUS_OPTIONS} required />
+          <div className="rounded-xl border border-border bg-surface-muted px-3.5 py-3 text-[12.5px] text-ink-600">
+            Tahun Ajaran & Semester mengikuti <span className="font-semibold text-ink-800">Academic Context aktif</span>: {activeContextLabel}.
+          </div>
           <div className="mt-2 flex justify-end gap-2"><Button type="button" variant="secondary" onClick={() => setModalOpen(false)}>Batal</Button><Button type="submit" loading={isPending}>{editing ? "Simpan Perubahan" : "Simpan"}</Button></div>
         </form>
       </Modal>
