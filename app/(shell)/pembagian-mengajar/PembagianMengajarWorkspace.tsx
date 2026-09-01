@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Plus, Pencil, Trash2, Search, Upload, Target } from "lucide-react";
 import type { Guru } from "@/lib/domain/guru";
@@ -54,6 +54,32 @@ export default function PembagianMengajarWorkspace({
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => setData(initialData), [initialData]);
+
+  // SAKALA MASTER RULE (rekomendasi solutif): kalau operator diarahkan ke sini
+  // dari catatan "mapel X belum ada guru" di SAKALA AI Jadwal (?kelas=..&mapel=..),
+  // langsung buka form Tambah dengan Kelas & Mata Pelajaran sudah terisi --
+  // operator tinggal pilih Guru. Highlight sesaat sebagai konfirmasi visual
+  // (meredup otomatis, bukan berkedip -- lebih nyaman dilihat & tidak melanggar
+  // prinsip aksesibilitas soal blinking content).
+  const searchParams = useSearchParams();
+  const [highlightHint, setHighlightHint] = useState<{ kelasLabel: string; mapelLabel: string } | null>(null);
+  useEffect(() => {
+    const kelasId = searchParams.get("kelas");
+    const mapelId = searchParams.get("mapel");
+    if (!kelasId || !mapelId) return;
+    const kelas = kelasList.find((k) => k.id === kelasId);
+    const mapel = mapelList.find((m) => m.id === mapelId);
+    if (!kelas || !mapel) return;
+    setForm({ guruId: "", mataPelajaranId: mapelId, kelasIds: [kelasId], jpPerMinggu: "" });
+    setEditing(null);
+    setFormError(null);
+    setModalOpen(true);
+    setHighlightHint({ kelasLabel: `${kelas.tingkat} ${kelas.namaRombel}`, mapelLabel: mapel.nama });
+    const t = setTimeout(() => setHighlightHint(null), 4000);
+    router.replace("/pembagian-mengajar");
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const filtered = data.filter((item) => {
     const haystack = `${item.guruNama ?? ""} ${item.mataPelajaranNama ?? ""} ${item.kelasLabel ?? ""}`.toLowerCase();
@@ -296,6 +322,11 @@ export default function PembagianMengajarWorkspace({
         title={editing ? "Edit Pembagian Mengajar" : "Tambah Pembagian Mengajar"}
       >
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {highlightHint && (
+            <div className="animate-[fadeHighlight_4s_ease-out_forwards] rounded-xl border border-brand-600/30 bg-brand-50 px-3.5 py-2.5 text-[12.5px] text-brand-800">
+              Diarahkan dari SAKALA AI Jadwal — kelas <b>{highlightHint.kelasLabel}</b> butuh guru untuk <b>{highlightHint.mapelLabel}</b>. Pilih gurunya di bawah.
+            </div>
+          )}
           {formError && <p className="text-[12.5px] text-rose">{formError}</p>}
 
           <div className="flex flex-col gap-1.5">

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { Suspense } from "react";
 import { getActiveAcademicContext } from "@/lib/application/academicContext.usecases";
 import { listPembagianMengajar } from "@/lib/application/pembagianMengajar.usecases";
 import { listGuru } from "@/lib/application/guru.usecases";
@@ -33,14 +34,16 @@ export default async function PembagianMengajarPage() {
     ]);
 
     return (
-      <PembagianMengajarWorkspace
-        activeContextId={activeContext.id}
-        activeContextLabel={`${activeContext.tahunPelajaran} · ${activeContext.semester === "ganjil" ? "Ganjil" : "Genap"}`}
-        initialData={items}
-        guruList={guruList.filter((g) => g.status === "aktif")}
-        mapelList={mapelList.filter((m) => m.status === "aktif")}
-        kelasList={kelasList.filter((k) => k.status === "aktif")}
-      />
+      <Suspense fallback={null}>
+        <PembagianMengajarWorkspace
+          activeContextId={activeContext.id}
+          activeContextLabel={`${activeContext.tahunPelajaran} · ${activeContext.semester === "ganjil" ? "Ganjil" : "Genap"}`}
+          initialData={items}
+          guruList={guruList.filter((g) => g.status === "aktif")}
+          mapelList={mapelList.filter((m) => m.status === "aktif")}
+          kelasList={kelasList.filter((k) => k.status === "aktif")}
+        />
+      </Suspense>
     );
   } catch {
     return (
