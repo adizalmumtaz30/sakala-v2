@@ -1,7 +1,6 @@
 // Data Access layer — repository Mata Pelajaran.
-// Pack 09b (lanjutan): kolom baru (kelompok, warna_jadwal, prioritas_penjadwalan,
-// jenis_mapel) ditambahkan mengikuti migration 0007 — semua nullable, dikirim
-// null saat kosong (bukan string kosong), sama pola dengan guru.repository.ts.
+// Target JP bukan milik master Mata Pelajaran. Target kontekstual hanya ditulis
+// melalui target_jp/upsertTargetJp.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
@@ -16,7 +15,6 @@ type Row = {
   nama: string;
   kode: string | null;
   status: "aktif" | "nonaktif";
-  target_jp_per_rombel: number | null;
   kelompok: string | null;
   warna_jadwal: string | null;
   prioritas_penjadwalan: PrioritasPenjadwalan | null;
@@ -24,7 +22,7 @@ type Row = {
 };
 
 const SELECT_COLUMNS =
-  "id, nama, kode, status, target_jp_per_rombel, kelompok, warna_jadwal, prioritas_penjadwalan, jenis_mapel";
+  "id, nama, kode, status, kelompok, warna_jadwal, prioritas_penjadwalan, jenis_mapel";
 
 function rowToEntity(row: Row): MataPelajaran {
   return {
@@ -32,7 +30,6 @@ function rowToEntity(row: Row): MataPelajaran {
     nama: row.nama,
     kode: row.kode,
     status: row.status,
-    targetJpPerRombel: row.target_jp_per_rombel,
     kelompok: row.kelompok ?? undefined,
     warnaJadwal: row.warna_jadwal ?? undefined,
     prioritasPenjadwalan: row.prioritas_penjadwalan ?? undefined,
@@ -40,7 +37,6 @@ function rowToEntity(row: Row): MataPelajaran {
   };
 }
 
-/** Optional text field: string kosong disimpan sebagai NULL, bukan "" (Bagian 22). */
 function optionalText(value: string | undefined): string | null {
   const trimmed = value?.trim();
   return trimmed && trimmed.length > 0 ? trimmed : null;
@@ -51,7 +47,6 @@ function toRowPayload(draft: MataPelajaranDraft) {
     nama: draft.nama.trim(),
     kode: draft.kode.trim() || null,
     status: draft.status,
-    target_jp_per_rombel: draft.targetJpPerRombel,
     kelompok: optionalText(draft.kelompok),
     warna_jadwal: optionalText(draft.warnaJadwal),
     prioritas_penjadwalan: draft.prioritasPenjadwalan ?? null,
