@@ -1,9 +1,7 @@
-// Domain layer — validasi baris import Mata Pelajaran. Fungsi murni, sama pola
-// dengan guru-import.ts (Bagian 33-34: import Mapel mengikuti pola Guru).
-//
-// Pack 09b (lanjutan): kolom baru Kelompok/WarnaJadwal/PrioritasPenjadwalan/
-// JenisMapel ikut divalidasi — semua optional, tidak memblokir baris jika kosong
-// atau tidak ada di file (Bagian 22-23).
+// Domain layer — validasi baris import Mata Pelajaran.
+// Target JP tidak diimpor di sini. Target JP resmi dibuat melalui target_jp
+// pada workflow Generate Kurikulum / Target JP, karena nilainya bergantung
+// Academic Context + Kelas + Mata Pelajaran.
 
 import type {
   StatusAktif,
@@ -40,7 +38,7 @@ function parseJenis(raw: string): { value?: JenisMapel; invalid: boolean } {
   const trimmed = raw.trim().toLowerCase().replace(/\s+/g, "_");
   if (!trimmed) return { invalid: false };
   const match = JENIS_MAPEL_OPTIONS.find((j) => j === trimmed);
-  return match ? { value: match, invalid: false } : { invalid: true };
+  return match ? { value: match, invalid: true } : { invalid: true };
 }
 
 export function validateMapelImportRows(
@@ -57,27 +55,13 @@ export function validateMapelImportRows(
     const kode = (raw["KodeMapel"] ?? raw["Kode"] ?? "").trim();
     const statusRaw = (raw["StatusAktif"] ?? "aktif").trim().toLowerCase();
     const status: StatusAktif = statusRaw === "nonaktif" ? "nonaktif" : "aktif";
-    const targetJpRaw = (raw["TargetJPPerRombel"] ?? raw["JP"] ?? "").trim();
     const kelompok = (raw["Kelompok"] ?? "").trim();
     const warnaJadwal = (raw["WarnaJadwal"] ?? "").trim();
     const prioritasRaw = (raw["PrioritasPenjadwalan"] ?? "").trim();
     const jenisRaw = (raw["JenisMapel"] ?? "").trim();
 
     const issues: MapelImportIssue[] = [];
-
-    if (nama.length < 2) {
-      issues.push({ column: "NamaMapel", message: "Wajib diisi, minimal 2 karakter." });
-    }
-
-    let targetJpPerRombel: number | null = null;
-    if (targetJpRaw) {
-      const parsed = Number(targetJpRaw);
-      if (!Number.isFinite(parsed) || parsed < 0) {
-        issues.push({ column: "TargetJPPerRombel", message: `"${targetJpRaw}" bukan angka yang valid.` });
-      } else {
-        targetJpPerRombel = parsed;
-      }
-    }
+    if (nama.length < 2) issues.push({ column: "NamaMapel", message: "Wajib diisi, minimal 2 karakter." });
 
     if (warnaJadwal && !HEX_COLOR_PATTERN.test(warnaJadwal)) {
       issues.push({ column: "WarnaJadwal", message: `"${warnaJadwal}" harus format hex, mis. #6366F1.` });
@@ -85,43 +69,27 @@ export function validateMapelImportRows(
 
     const prioritas = parsePrioritas(prioritasRaw);
     if (prioritas.invalid) {
-      issues.push({
-        column: "PrioritasPenjadwalan",
-        message: `"${prioritasRaw}" tidak dikenali. Gunakan: tinggi, normal, atau rendah.`,
-      });
+      issues.push({ column: "PrioritasPenjadwalan", message: `"${prioritasRaw}" tidak dikenali. Gunakan: tinggi, normal, atau rendah.` });
     }
 
     const jenis = parseJenis(jenisRaw);
     if (jenis.invalid) {
-      issues.push({
-        column: "JenisMapel",
-        message: `"${jenisRaw}" tidak dikenali. Lihat sheet REFERENSI untuk nilai yang valid.`,
-      });
+      issues.push({ column: "JenisMapel", message: `"${jenisRaw}" tidak dikenali. Lihat sheet REFERENSI untuk nilai yang valid.` });
     }
 
     if (kode) {
       const key = kode.toUpperCase();
-      if (existingKodes.has(key)) {
-        issues.push({ column: "KodeMapel", message: `"${kode}" sudah digunakan mapel lain di database.` });
-      } else if (seenKodes.has(key)) {
-        issues.push({ column: "KodeMapel", message: `"${kode}" duplikat pada baris lain di file ini.` });
-      } else {
-        seenKodes.add(key);
-      }
+      if (existingKodes.has(key)) issues.push({ column: "KodeMapel", message: `"${kode}" sudah digunakan mapel lain di database.` });
+      else if (seenKodes.has(key)) issues.push({ column: "KodeMapel", message: `"${kode}" duplikat pada baris lain di file ini.` });
+      else seenKodes.add(key);
     }
 
     if (nama) {
       const nameKey = nama.toLowerCase();
-      if (seenNames.has(nameKey)) {
-        issues.push({ column: "NamaMapel", message: `"${nama}" duplikat pada baris lain di file ini.` });
-      } else {
+      if (seenNames.has(nameKey)) issues.push({ column: "NamaMapel", message: `"${nama}" duplikat pada baris lain di file ini.` });
+      else {
         seenNames.add(nameKey);
-        if (existingNames.has(nameKey)) {
-          issues.push({
-            column: "NamaMapel",
-            message: `Mapel "${nama}" kemungkinan sudah terdaftar. Periksa dulu sebelum impor.`,
-          });
-        }
+        if (existingNames.has(nameKey)) issues.push({ column: "NamaMapel", message: `Mapel "${nama}" kemungkinan sudah terdaftar. Periksa dulu sebelum impor.` });
       }
     }
 
@@ -135,7 +103,6 @@ export function validateMapelImportRows(
         nama,
         kode,
         status,
-        targetJpPerRombel,
         kelompok: kelompok || undefined,
         warnaJadwal: warnaJadwal || undefined,
         prioritasPenjadwalan: prioritas.value,
