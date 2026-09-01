@@ -1,0 +1,55 @@
+name: Canonical Consumer Autofix
+
+on:
+  push:
+    branches:
+      - 'refactor/canonical-source-consumer-migration-01'
+
+permissions:
+  contents: write
+
+jobs:
+  autofix:
+    if: ${{ !contains(github.event.head_commit.message, '[canonical-autofix]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Remove remaining legacy Target JP consumer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/(shell)/jadwal-cerdas/JadwalCerdasWorkspace.tsx')
+          s = p.read_text()
+          old = '''        const merged = { ...r, ...patch };
+        // Pre-fill jpTarget dari targetJpPerRombel Mata Pelajaran kalau user belum pernah ubah manual.
+        if (patch.subjectId !== undefined && !r.jpTouched) {
+          const mapel = mapelList.find((m) => m.id === patch.subjectId);
+          if (mapel?.targetJpPerRombel != null) merged.jpTarget = mapel.targetJpPerRombel;
+        }
+        return merged;'''
+          new = '''        return { ...r, ...patch };'''
+          if old not in s:
+              raise SystemExit('Expected legacy target-JP consumer block not found')
+          s = s.replace(old, new)
+          p.write_text(s)
+
+          p = Path('lib/domain/candidateGeneration.ts')
+          s = p.read_text()
+          s = s.replace('targetJpPerRombel', 'canonical Target JP')
+          p.write_text(s)
+          PY
+
+          git diff --check
+          if grep -RInE --exclude-dir=node_modules --exclude-dir=.next --exclude-dir=.git --exclude='*.lock' 'targetJpPerRombel|target_jp_per_rombel|kelas\.tahun_ajaran|school_profile\.tahun_pelajaran_default|school_profile\.semester_default' app lib components scripts 2>/dev/null; then
+            echo 'Legacy references still remain after autofix.'
+            exit 1
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add 'app/(shell)/jadwal-cerdas/JadwalCerdasWorkspace.tsx' 'lib/domain/candidateGeneration.ts'
+          git commit -m 'fix: remove remaining legacy target JP consumer [canonical-autofix]'
+          git push
