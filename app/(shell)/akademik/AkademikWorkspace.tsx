@@ -50,6 +50,7 @@ import Input from "@/components/ui/Input";
 import Modal from "@/components/ui/Modal";
 import { Card, Badge, EmptyState } from "@/components/ui/primitives";
 import JamPelajaranManager from "./JamPelajaranManager";
+import { Sparkles } from "lucide-react";
 
 type Tab = "profil" | "periode" | "jam";
 
@@ -59,12 +60,14 @@ export default function AkademikWorkspace({
   initialPeriodeList,
   initialJamList,
   initialScheduleModels,
+  curriculumAvailable,
 }: {
   initialProfile: SchoolProfile | null;
   initialContexts: AcademicContext[];
   initialPeriodeList: PeriodeAkademik[];
   initialJamList: JamPelajaran[];
   initialScheduleModels: ScheduleModel[];
+  curriculumAvailable: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("profil");
 
@@ -525,6 +528,28 @@ export default function AkademikWorkspace({
               </div>
             )}
           </Card>
+
+          {!curriculumAvailable && (
+            <Card className="border-brand-600/30 bg-brand-50/40">
+              <div className="flex items-start gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-600/10 text-brand-700">
+                  <Sparkles size={16} />
+                </div>
+                <div className="flex-1">
+                  <p className="text-[13.5px] font-semibold text-ink-900">Kurikulum belum tersedia untuk konteks ini</p>
+                  <p className="mt-0.5 text-[12.5px] text-ink-600">
+                    Sistem belum menemukan struktur kurikulum resmi terverifikasi yang cocok dengan kelas-kelas di konteks aktif.
+                  </p>
+                  <Link
+                    href="/akademik/generate-kurikulum"
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-2 text-[12.5px] font-semibold text-white hover:bg-brand-700"
+                  >
+                    <Sparkles size={13} /> Siapkan Kurikulum
+                  </Link>
+                </div>
+              </div>
+            </Card>
+          )}
 
           {/* Bagian 8.2 / 77 — Active Academic Context */}
           <Card className="p-0">
