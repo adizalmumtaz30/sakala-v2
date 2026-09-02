@@ -269,7 +269,18 @@ export async function adoptCurriculumItemsAction(input: {
   academicContextId: string;
   classIds: string[];
   items: Array<{ id: string; weeklyTarget: number | null }>;
-}): Promise<CurriculumActionResult<{ adopted: number }>> {
+  /**
+   * Nama mata pelajaran baru yang SUDAH dikonfirmasi operator untuk dibuat.
+   * CANDIDATE-before-COMMIT (lihat prinsip UI Curriculum Intelligence):
+   * kalau ada nama mata pelajaran baru yang BELUM masuk daftar ini, action
+   * berhenti sebelum menulis apa pun dan mengembalikan needsConfirmation
+   * berikut daftarnya, supaya client bisa menampilkan preview eksplisit
+   * dulu — bukan diam-diam membuat Master Data baru di dalam Commit.
+   */
+  confirmedNewSubjects?: string[];
+}): Promise<
+  CurriculumActionResult<{ adopted: number }> | { ok: false; needsConfirmation: true; newSubjects: string[] }
+> {
   if (!input.academicContextId || input.classIds.length === 0 || input.items.length === 0) {
     return { ok: false, error: "Academic Context, kelas, dan item kurikulum wajib dipilih." };
   }
@@ -341,7 +352,22 @@ export async function adoptCurriculumItemsAction(input: {
   const classMap = new Map(classes.map((item) => [item.id, item]));
   const itemMap = new Map(sourceItems.map((item) => [item.id, item]));
   const selectionMap = new Map(input.items.map((item) => [item.id, item]));
-  const rows: Array<Record<string, unknown>> = [];
+
+  // Lookup nama subjek Master Data yang sudah ada, satu query untuk semua
+  // subject_name yang relevan — supaya kita tahu mana yang BARU sebelum
+  // menulis apa pun (CANDIDATE-before-COMMIT untuk Master Data juga, bukan
+  // cuma untuk Target JP).
+  const relevantSubjectNames = Array.from(new Set(sourceItems.map((item) => item.subject_name)));
+  const { data: existingSubjects, error: subjectLookupError } = await supabase
+    .from("mata_pelajaran")
+    .select("id,nama")
+    .in("nama", relevantSubjectNames);
+  if (subjectLookupError) return { ok: false, error: toPlainDatabaseError(subjectLookupError) };
+  const subjectIdByName = new Map((existingSubjects ?? []).map((s) => [s.nama, s.id]));
+
+  type PendingRow = { classId: string; item: (typeof sourceItems)[number]; schoolTarget: number };
+  const pending: PendingRow[] = [];
+  const newSubjectNames = new Set<string>();
 
   for (const classId of input.classIds) {
     const kelas = classMap.get(classId);
@@ -358,42 +384,65 @@ export async function adoptCurriculumItemsAction(input: {
         return { ok: false, error: `Regulasi untuk ${item.subject_name} belum verified.` };
       }
 
-      const { data: existingSubject, error: subjectLookupError } = await supabase
-        .from("mata_pelajaran")
-        .select("id,nama,kode")
-        .eq("nama", item.subject_name)
-        .maybeSingle();
-      if (subjectLookupError) return { ok: false, error: toPlainDatabaseError(subjectLookupError) };
-
-      let subjectId = existingSubject?.id;
-      if (!subjectId) {
-        const { data: createdSubject, error: subjectError } = await supabase
-          .from("mata_pelajaran")
-          .insert({ nama: item.subject_name, kode: item.subject_code, status: "aktif" })
-          .select("id")
-          .single();
-        if (subjectError) return { ok: false, error: toPlainDatabaseError(subjectError) };
-        subjectId = createdSubject.id;
-      }
+      if (!subjectIdByName.has(item.subject_name)) newSubjectNames.add(item.subject_name);
 
       const selectedTarget = selectionMap.get(item.id)?.weeklyTarget;
       const schoolTarget = selectedTarget ?? item.weekly_target;
-
-      rows.push({
-        academic_context_id: input.academicContextId,
-        kelas_id: classId,
-        mata_pelajaran_id: subjectId,
-        curriculum_item_id: item.id,
-        status: "selected",
-        official_target_jp: item.weekly_target,
-        school_target_jp: schoolTarget,
-      });
+      pending.push({ classId, item, schoolTarget });
     }
   }
 
-  if (!rows.length) {
+  if (!pending.length) {
     return { ok: false, error: "Tidak ada item valid untuk kelas yang dipilih. Pastikan jenjang kelas sesuai dengan curriculum item dan target mingguan tervalidasi." };
   }
+
+  // CANDIDATE-before-COMMIT untuk Master Data: kalau ada mata pelajaran baru
+  // yang belum dikonfirmasi operator, berhenti di sini — TIDAK ada
+  // mata_pelajaran/curriculum_adoption/target_jp yang ditulis. Client
+  // menampilkan daftar ini, operator meninjau, baru submit ulang dengan
+  // confirmedNewSubjects terisi.
+  const confirmed = new Set(input.confirmedNewSubjects ?? []);
+  const stillUnconfirmed = Array.from(newSubjectNames).filter((name) => !confirmed.has(name));
+  if (stillUnconfirmed.length > 0) {
+    return { ok: false, needsConfirmation: true, newSubjects: stillUnconfirmed.sort() };
+  }
+
+  // Semua mata pelajaran baru sudah dikonfirmasi — buat dengan default yang
+  // SAMA seperti halaman Mata Pelajaran (bukan minimal nama+kode saja),
+  // supaya kualitas Master Data tidak berbeda tergantung pintu masuknya.
+  for (const name of newSubjectNames) {
+    const item = pending.find((p) => p.item.subject_name === name)!.item;
+    const { data: createdSubject, error: subjectError } = await supabase
+      .from("mata_pelajaran")
+      .insert({
+        nama: item.subject_name,
+        kode: item.subject_code,
+        status: "aktif",
+        jenis_mapel: "akademik",
+        prioritas_penjadwalan: "normal",
+      })
+      .select("id")
+      .single();
+    if (subjectError) return { ok: false, error: toPlainDatabaseError(subjectError) };
+    subjectIdByName.set(name, createdSubject.id);
+  }
+
+  const rows: Array<Record<string, unknown>> = pending.map(({ classId, item, schoolTarget }) => ({
+    academic_context_id: input.academicContextId,
+    kelas_id: classId,
+    mata_pelajaran_id: subjectIdByName.get(item.subject_name),
+    curriculum_item_id: item.id,
+    status: "selected",
+    official_target_jp: item.weekly_target,
+    // CATATAN ARSITEKTUR: school_target_jp di sini adalah SNAPSHOT
+    // point-in-time (apa yang direkomendasikan saat commit), BUKAN otoritas
+    // nilai target yang sedang berlaku. target_jp adalah satu-satunya
+    // sumber kebenaran untuk "berapa target saat ini" — kolom ini tidak
+    // pernah dibaca balik oleh kode manapun (diverifikasi lewat audit
+    // consumer) justru supaya tidak ada yang tergoda memperlakukannya
+    // sebagai nilai hidup yang bisa basi begitu Target JP diedit manual.
+    school_target_jp: schoolTarget,
+  }));
 
   const { error: adoptionError } = await supabase.from("curriculum_adoption").upsert(rows, {
     onConflict: "academic_context_id,kelas_id,mata_pelajaran_id,curriculum_item_id",
