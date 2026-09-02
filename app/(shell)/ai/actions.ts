@@ -9,6 +9,7 @@ import { listKelas } from "@/lib/application/kelas.usecases";
 import { listMataPelajaran } from "@/lib/application/mata-pelajaran.usecases";
 import { listPembagianMengajar, createPembagianMengajar } from "@/lib/application/pembagianMengajar.usecases";
 import { getTargetJpView } from "@/lib/application/targetJp.usecases";
+import { getCurriculumJpMismatches, type CurriculumJpMismatch } from "@/lib/application/curriculumJpDiagnosis.usecases";
 import { listGuru } from "@/lib/application/guru.usecases";
 import { listRuangan } from "@/lib/application/ruangan.usecases";
 import { getSchoolProfile } from "@/lib/application/schoolProfile.usecases";
@@ -41,6 +42,11 @@ export interface AiCopilotContext {
   subjectNames: Record<string, string>;
   teacherNames: Record<string, string>;
   roomNames: Record<string, string>;
+  // §10 PRACTICAL UI & OPERATOR EXPERIENCE: "Kenapa Target JP saya tidak
+  // sesuai kurikulum?" — diagnosa read-only, reuse capability yang sama
+  // dipakai Konteks Akademik/Mata Pelajaran/Dashboard. AI belum mengubah
+  // apa pun; penyesuaian tetap lewat Target JP.
+  curriculumMismatches: CurriculumJpMismatch[];
 }
 
 async function getActiveContext() {
@@ -121,7 +127,8 @@ export async function getAiCopilotContextAction(): Promise<AiActionResult<AiCopi
     const subjectNames = Object.fromEntries(mapel.map((m) => [m.id, m.nama]));
     const teacherNames = Object.fromEntries(guru.map((g) => [g.id, g.namaGuru]));
     const roomNames = Object.fromEntries(ruangan.map((r) => [r.id, r.nama]));
-    return { ok: true, data: { academicContextId: active.id, schoolName: schoolProfile?.namaSekolah ?? "Sekolah", contextLabel: formatContextLabel(active), classes, activeClassId: classes[0]?.id ?? null, subjectNames, teacherNames, roomNames } };
+    const curriculumMismatches = await getCurriculumJpMismatches(kelas, targetJpView.rows).catch(() => []);
+    return { ok: true, data: { academicContextId: active.id, schoolName: schoolProfile?.namaSekolah ?? "Sekolah", contextLabel: formatContextLabel(active), classes, activeClassId: classes[0]?.id ?? null, subjectNames, teacherNames, roomNames, curriculumMismatches } };
   } catch (err) {
     return { ok: false, error: toPlainErrorMessage(err, "Gagal membaca kondisi jadwal AI.") };
   }
