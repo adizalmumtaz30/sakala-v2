@@ -3,14 +3,19 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, GraduationCap, BrainCircuit, Target, BookOpen, School2, DoorOpen, Split, CalendarDays, BarChart3, History, Bell, Bot, Compass, ChevronLeft, ChevronRight, LifeBuoy, ArrowUpRight } from "lucide-react";
+import { LayoutDashboard, Users, GraduationCap, Target, BookOpen, School2, DoorOpen, Split, CalendarDays, BarChart3, History, Bell, Bot, Compass, ChevronLeft, ChevronRight, LifeBuoy, ArrowUpRight } from "lucide-react";
 
 type NavItem = { label: string; href: string; icon: typeof LayoutDashboard; match?: (path: string) => boolean };
 type NavSection = { section: string; items: NavItem[] };
 
-// Urutan & pengelompokan mengikuti alur kerja operator sekolah: siapkan konteks akademik & kurikulum dulu,
-// baru isi data master, lalu susun jadwal, lalu pantau lewat analitik. Generate Kurikulum dipromosikan
-// jadi item inti (bukan subnav tersembunyi) karena ini fitur utama, bukan pelengkap.
+// Urutan & pengelompokan mengikuti alur kerja operator sekolah: siapkan konteks akademik dulu,
+// baru isi data master, lalu susun jadwal, lalu pantau lewat analitik.
+//
+// SAKALA V2 MASTER FINAL §03/§32: Generate Kurikulum BUKAN menu utama — ia adalah
+// capability yang dipanggil secara kontekstual dari Core yang membutuhkan (mis. Target JP
+// -> "Siapkan dari Kurikulum", Mata Pelajaran -> "Periksa Mapping"), bukan destinasi sidebar
+// tersendiri. Route /akademik/generate-kurikulum tetap ada (tidak dihapus) supaya semua
+// entry point kontekstual masih bisa mengarah ke sana; yang dihapus hanya tautan sidebar-nya.
 const sections: NavSection[] = [
   {
     section: "Utama",
@@ -20,7 +25,6 @@ const sections: NavSection[] = [
     section: "Akademik",
     items: [
       { label: "Konteks Akademik", href: "/akademik", icon: GraduationCap, match: (p) => p === "/akademik" },
-      { label: "Generate Kurikulum", href: "/akademik/generate-kurikulum", icon: BrainCircuit, match: (p) => p.startsWith("/akademik/generate-kurikulum") },
       { label: "Target JP", href: "/pembagian-mengajar/target-jp", icon: Target, match: (p) => p.startsWith("/akademik/target-jp") || p.startsWith("/pembagian-mengajar/target-jp") },
     ],
   },

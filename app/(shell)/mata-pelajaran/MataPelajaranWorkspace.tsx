@@ -3,8 +3,9 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Plus, Pencil, Trash2, Search, Upload, Check, BrainCircuit } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Upload, Check, AlertTriangle } from "lucide-react";
 import type { MataPelajaran, MataPelajaranDraft, StatusAktif, PrioritasPenjadwalan, JenisMapel } from "@/lib/domain/mata-pelajaran";
+import type { CurriculumMappingStatus } from "@/lib/application/curriculumMapping.usecases";
 import { PRIORITAS_OPTIONS, PRIORITAS_LABEL, JENIS_MAPEL_OPTIONS, JENIS_MAPEL_LABEL, WARNA_JADWAL_PRESET } from "@/lib/domain/mata-pelajaran";
 import { createMataPelajaranAction, updateMataPelajaranAction, deleteMataPelajaranAction, validateMapelImportAction, commitMapelImportAction } from "./actions";
 import Button from "@/components/ui/Button";
@@ -24,7 +25,7 @@ const emptyForm = {
 };
 type FormState = typeof emptyForm;
 
-export default function MataPelajaranWorkspace({ initialData, initialQuery }: { initialData: MataPelajaran[]; initialQuery?: string }) {
+export default function MataPelajaranWorkspace({ initialData, initialQuery, mappingStatus }: { initialData: MataPelajaran[]; initialQuery?: string; mappingStatus: CurriculumMappingStatus }) {
   const router = useRouter();
   const [data, setData] = useState<MataPelajaran[]>(initialData);
   const [query, setQuery] = useState(initialQuery ?? "");
@@ -102,10 +103,26 @@ export default function MataPelajaranWorkspace({ initialData, initialQuery }: { 
         </div>
         <div className="flex items-center gap-2">
           <Button variant="secondary" onClick={() => setImportOpen(true)}><Upload size={16} /> Import</Button>
-          <Link href="/akademik/generate-kurikulum" className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink-700 hover:border-brand-600/30 hover:text-brand-700" aria-label="Generate Kurikulum"><BrainCircuit size={16} /> Generate Kurikulum</Link>
           <Button onClick={openCreate}><Plus size={16} /> Tambah Mata Pelajaran</Button>
         </div>
       </div>
+
+      {/* PRACTICAL UI & OPERATOR EXPERIENCE §8/§11/§15: Contextual Action —
+          diam total kalau tidak ada kurikulum untuk dibandingkan atau semua
+          mapel sudah terhubung; hanya muncul saat memang perlu keputusan
+          operator. Reuse capability curriculum_adoption yang sama dengan
+          Target JP & Generate Kurikulum (§13), bukan validator baru. */}
+      {mappingStatus.hasCurriculumAvailable && mappingStatus.unmappedCount > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-600/30 bg-amber-50 px-4 py-3">
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle size={16} className="mt-0.5 shrink-0 text-amber-700" />
+            <p className="text-[13px] text-amber-900">
+              <span className="font-semibold">{mappingStatus.unmappedCount} mata pelajaran</span> belum terhubung dengan kurikulum aktif.
+            </p>
+          </div>
+          <Link href="/akademik/generate-kurikulum" className="inline-flex items-center gap-1.5 rounded-lg border border-amber-600/40 bg-white px-3 py-1.5 text-[12.5px] font-semibold text-amber-800 hover:bg-amber-100" aria-label="Periksa Mapping Kurikulum">Periksa Mapping</Link>
+        </div>
+      )}
 
       <div className="flex items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-ink-400 sm:max-w-xs">
         <Search size={16} />

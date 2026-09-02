@@ -1,14 +1,18 @@
 import { createClient } from "@/lib/supabase/server";
 import { listMataPelajaran } from "@/lib/application/mata-pelajaran.usecases";
+import { getMataPelajaranCurriculumMappingStatus } from "@/lib/application/curriculumMapping.usecases";
 import MataPelajaranWorkspace from "./MataPelajaranWorkspace";
 import { ErrorState } from "@/components/ui/primitives";
 
 export default async function MataPelajaranPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   try {
     const supabase = await createClient();
-    const data = await listMataPelajaran(supabase);
+    const [data, mappingStatus] = await Promise.all([
+      listMataPelajaran(supabase),
+      getMataPelajaranCurriculumMappingStatus(supabase),
+    ]);
     const { q } = await searchParams;
-    return <MataPelajaranWorkspace initialData={data} initialQuery={q ?? ""} />;
+    return <MataPelajaranWorkspace initialData={data} initialQuery={q ?? ""} mappingStatus={mappingStatus} />;
   } catch {
     return (
       <div className="mx-auto max-w-3xl pt-10">
