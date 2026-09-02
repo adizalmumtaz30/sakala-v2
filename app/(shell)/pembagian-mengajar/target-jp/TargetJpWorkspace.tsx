@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ChevronDown, ChevronRight } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronRight, Sparkles } from "lucide-react";
 import type { TargetJpView, TargetJpRow, TargetJpStatus } from "@/lib/application/targetJp.usecases";
 import { formatHari } from "@/lib/domain/jamPelajaran";
 import { Card, Badge, EmptyState } from "@/components/ui/primitives";
@@ -11,6 +11,7 @@ import TargetJpImportPanel from "./TargetJpImportPanel";
 interface Props {
   activeContextLabel: string;
   view: TargetJpView;
+  curriculumAvailable: boolean;
 }
 
 // Kontrak §53-54 — bahasa operator, bukan istilah teknis.
@@ -28,7 +29,7 @@ const STATUS_TONE: Record<TargetJpStatus, "neutral" | "warning" | "success" | "d
 };
 const STATUS_FILTERS: (TargetJpStatus | "semua")[] = ["semua", "belum_siap", "siap_belum_terjadwal", "sebagian_terjadwal", "lengkap"];
 
-export default function TargetJpWorkspace({ activeContextLabel, view }: Props) {
+export default function TargetJpWorkspace({ activeContextLabel, view, curriculumAvailable }: Props) {
   const [filter, setFilter] = useState<TargetJpStatus | "semua">("semua");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showManage, setShowManage] = useState(false);
@@ -58,6 +59,28 @@ export default function TargetJpWorkspace({ activeContextLabel, view }: Props) {
       </div>
 
       {showManage && <TargetJpImportPanel onSaved={() => setShowManage(false)} />}
+
+      {view.overallTargetJp === 0 && curriculumAvailable && (
+        <Card className="border-brand-600/30 bg-brand-50/40">
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-600/10 text-brand-700">
+              <Sparkles size={16} />
+            </div>
+            <div className="flex-1">
+              <p className="text-[13.5px] font-semibold text-ink-900">Belum ada Target JP untuk konteks aktif</p>
+              <p className="mt-0.5 text-[12.5px] text-ink-600">
+                Kurikulum resmi terverifikasi tersedia untuk konteks ini dan dapat dipakai untuk menyusun Target JP secara otomatis.
+              </p>
+              <Link
+                href="/akademik/generate-kurikulum"
+                className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-2 text-[12.5px] font-semibold text-white hover:bg-brand-700"
+              >
+                <Sparkles size={13} /> Generate dari Kurikulum
+              </Link>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Empat angka wajib beda (kontrak §7): Target, Siap, Terjadwal, Belum Siap. */}
       <Card>
