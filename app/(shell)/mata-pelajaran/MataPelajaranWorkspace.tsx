@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Plus, Pencil, Trash2, Search, Upload, Check, BrainCircuit } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Upload, Check, Sparkles } from "lucide-react";
 import type { MataPelajaran, MataPelajaranDraft, StatusAktif, PrioritasPenjadwalan, JenisMapel } from "@/lib/domain/mata-pelajaran";
 import { PRIORITAS_OPTIONS, PRIORITAS_LABEL, JENIS_MAPEL_OPTIONS, JENIS_MAPEL_LABEL, WARNA_JADWAL_PRESET } from "@/lib/domain/mata-pelajaran";
 import { createMataPelajaranAction, updateMataPelajaranAction, deleteMataPelajaranAction, validateMapelImportAction, commitMapelImportAction } from "./actions";
@@ -24,7 +24,7 @@ const emptyForm = {
 };
 type FormState = typeof emptyForm;
 
-export default function MataPelajaranWorkspace({ initialData, initialQuery }: { initialData: MataPelajaran[]; initialQuery?: string }) {
+export default function MataPelajaranWorkspace({ initialData, initialQuery, unmatchedCurriculumSubjects }: { initialData: MataPelajaran[]; initialQuery?: string; unmatchedCurriculumSubjects: string[] }) {
   const router = useRouter();
   const [data, setData] = useState<MataPelajaran[]>(initialData);
   const [query, setQuery] = useState(initialQuery ?? "");
@@ -102,10 +102,35 @@ export default function MataPelajaranWorkspace({ initialData, initialQuery }: { 
         </div>
         <div className="flex items-center gap-2">
           <Button variant="secondary" onClick={() => setImportOpen(true)}><Upload size={16} /> Import</Button>
-          <Link href="/akademik/generate-kurikulum" className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink-700 hover:border-brand-600/30 hover:text-brand-700" aria-label="Generate Kurikulum"><BrainCircuit size={16} /> Generate Kurikulum</Link>
           <Button onClick={openCreate}><Plus size={16} /> Tambah Mata Pelajaran</Button>
         </div>
       </div>
+
+      {unmatchedCurriculumSubjects.length > 0 && (
+        <Card className="border-brand-600/30 bg-brand-50/40">
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-600/10 text-brand-700">
+              <Sparkles size={16} />
+            </div>
+            <div className="flex-1">
+              <p className="text-[13.5px] font-semibold text-ink-900">
+                {unmatchedCurriculumSubjects.length} mata pelajaran belum terhubung dengan kurikulum aktif
+              </p>
+              <p className="mt-0.5 text-[12.5px] text-ink-600">
+                {unmatchedCurriculumSubjects.slice(0, 5).join(", ")}
+                {unmatchedCurriculumSubjects.length > 5 ? `, dan ${unmatchedCurriculumSubjects.length - 5} lainnya` : ""} ada di kurikulum
+                resmi tapi belum ada di data Mata Pelajaran.
+              </p>
+              <Link
+                href="/akademik/generate-kurikulum"
+                className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-2 text-[12.5px] font-semibold text-white hover:bg-brand-700"
+              >
+                <Sparkles size={13} /> Periksa Mapping
+              </Link>
+            </div>
+          </div>
+        </Card>
+      )}
 
       <div className="flex items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-ink-400 sm:max-w-xs">
         <Search size={16} />
