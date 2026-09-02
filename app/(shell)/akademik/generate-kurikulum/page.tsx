@@ -54,6 +54,7 @@ export default function GenerateKurikulumPage() {
   const [progress, setProgress] = useState(0);
   const [syncStep, setSyncStep] = useState(0);
   const [compareOpen, setCompareOpen] = useState(false);
+  const [newSubjectsToConfirm, setNewSubjectsToConfirm] = useState<string[] | null>(null);
   const [success, setSuccess] = useState(false);
   // V4 poin 3 — Status Konteks: "↻ Konteks berubah" dideteksi dari sinyal
   // nyata (localStorage tahun/semester terakhir dibuka di halaman ini),
@@ -371,7 +372,7 @@ export default function GenerateKurikulumPage() {
     setEditingDraftValue(item.manualTarget != null ? String(item.manualTarget) : "");
   }
 
-  async function commitCandidate() {
+  async function commitCandidate(confirmedNewSubjects?: string[]) {
     if (validation.status !== "valid" || !activeContext) return;
     setCompareOpen(false); setCommitting(true); setMessage("Menyinkronkan…");
     // V4 poin 32 — step progress ringan, bukan cuma spinner. Step 1-2 mewakili
@@ -381,7 +382,20 @@ export default function GenerateKurikulumPage() {
     setSyncStep(1);
     await new Promise((resolve) => setTimeout(resolve, 200));
     setSyncStep(2);
-    const result = await adoptCurriculumItemsAction({ academicContextId: activeContext.id, classIds, items: candidate.map((item) => ({ id: item.id, weeklyTarget: item.manualTarget })) });
+    const result = await adoptCurriculumItemsAction({
+      academicContextId: activeContext.id,
+      classIds,
+      items: candidate.map((item) => ({ id: item.id, weeklyTarget: item.manualTarget })),
+      confirmedNewSubjects,
+    });
+    if (!result.ok && "needsConfirmation" in result && result.needsConfirmation) {
+      // CANDIDATE-before-COMMIT untuk Master Data: belum menulis apa pun.
+      // Tampilkan daftar mata pelajaran baru, minta konfirmasi eksplisit
+      // sebelum submit ulang dengan confirmedNewSubjects terisi.
+      setCommitting(false); setSyncStep(0); setMessage("");
+      setNewSubjectsToConfirm(result.newSubjects);
+      return;
+    }
     if (result.ok) {
       setSyncStep(3);
       setSuccess(true); setMessage(`Kurikulum tersimpan: ${result.data.adopted} kombinasi.`);
@@ -389,7 +403,7 @@ export default function GenerateKurikulumPage() {
       // bukan merehidrasi candidate yang sudah di-commit.
       void clearCurriculumDraftAction(activeContext.id);
     }
-    else { setMessage(""); setErrorMessage(result.error); setErrorRetry("commit"); }
+    else if (!("needsConfirmation" in result)) { setMessage(""); setErrorMessage(result.error); setErrorRetry("commit"); }
     setCommitting(false); setSyncStep(0);
   }
 
@@ -595,6 +609,39 @@ export default function GenerateKurikulumPage() {
       </div></div>}
 
       {compareOpen && <div className="fixed inset-0 z-[60] bg-black/20 p-4" onClick={() => setCompareOpen(false)}><div role="dialog" aria-modal="true" className="mx-auto mt-[12vh] w-full max-w-lg rounded-2xl border border-border bg-surface p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}><p className="text-xs font-bold uppercase tracking-wider text-brand-700">Automatic Compare</p><h2 className="mt-1 text-xl font-bold">Perubahan ditemukan</h2><p className="mt-1 text-sm text-ink-600">{changedIds.length} perubahan perlu ditinjau sebelum sinkronisasi.</p><div className="mt-4 space-y-2 rounded-xl bg-surface-muted p-4 text-sm">{changedIds.slice(0, 8).map((id) => { const item = candidate.find((x) => x.id === id); return item ? <div key={id} className="flex justify-between gap-3"><span>{item.subject_name}</span><strong>{baseline[id] ?? "—"} → {item.manualTarget ?? "—"}</strong></div> : null; })}{changedIds.length > 8 && <p className="text-xs text-ink-500">+ {changedIds.length - 8} perubahan lainnya</p>}{newIds.length > 0 && <p className="pt-2 text-sm font-semibold text-brand-700">{newIds.length} mata pelajaran baru ditemukan.</p>}</div><p className="mt-4 text-sm text-ink-600">Saran: gunakan hasil terbaru. Data yang tidak berubah tidak perlu ditinjau satu per satu.</p><div className="mt-5 flex flex-wrap justify-end gap-2"><button onClick={() => setCompareOpen(false)} className="rounded-xl border border-border px-4 py-2.5 text-sm font-semibold">Tinjau perbedaan</button><button onClick={() => void commitCandidate()} className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white">Gunakan hasil terbaru</button></div></div></div>}
+
+      {newSubjectsToConfirm && (
+        <div className="fixed inset-0 z-[60] bg-black/20 p-4" onClick={() => setNewSubjectsToConfirm(null)}>
+          <div role="dialog" aria-modal="true" className="mx-auto mt-[12vh] w-full max-w-lg rounded-2xl border border-border bg-surface p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <p className="text-xs font-bold uppercase tracking-wider text-brand-700">Master Data Baru</p>
+            <h2 className="mt-1 text-xl font-bold">{newSubjectsToConfirm.length} mata pelajaran baru akan dibuat</h2>
+            <p className="mt-1 text-sm text-ink-600">
+              Kurikulum ini memuat mata pelajaran yang belum ada di data Mata Pelajaran sekolah. SAKALA akan membuatnya
+              (kategori: Akademik, prioritas: Normal — bisa disesuaikan nanti di halaman Mata Pelajaran).
+            </p>
+            <div className="mt-4 space-y-1.5 rounded-xl bg-surface-muted p-4 text-sm">
+              {newSubjectsToConfirm.map((name) => (
+                <div key={name} className="font-medium text-ink-900">{name}</div>
+              ))}
+            </div>
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button onClick={() => setNewSubjectsToConfirm(null)} className="rounded-xl border border-border px-4 py-2.5 text-sm font-semibold">
+                Batal
+              </button>
+              <button
+                onClick={() => {
+                  const confirmed = newSubjectsToConfirm;
+                  setNewSubjectsToConfirm(null);
+                  void commitCandidate(confirmed);
+                }}
+                className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white"
+              >
+                Buat & Lanjutkan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
