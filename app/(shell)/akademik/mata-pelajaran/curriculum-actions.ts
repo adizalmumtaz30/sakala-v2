@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { CurriculumInstitution } from "@/lib/domain/curriculumIntelligence";
 import { recordAuditEvent } from "@/lib/application/auditLog.usecases";
 import { toPlainDatabaseError } from "@/lib/utils/databaseError";
-import { upsertTargetJp } from "@/lib/application/targetJp.usecases";
+import { upsertTargetJp, getTargetJpView } from "@/lib/application/targetJp.usecases";
 
 export type CurriculumActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -279,7 +279,7 @@ export async function adoptCurriculumItemsAction(input: {
    */
   confirmedNewSubjects?: string[];
 }): Promise<
-  CurriculumActionResult<{ adopted: number }> | { ok: false; needsConfirmation: true; newSubjects: string[] }
+  CurriculumActionResult<{ adopted: number; belumSiapCount: number }> | { ok: false; needsConfirmation: true; newSubjects: string[] }
 > {
   if (!input.academicContextId || input.classIds.length === 0 || input.items.length === 0) {
     return { ok: false, error: "Academic Context, kelas, dan item kurikulum wajib dipilih." };
@@ -496,7 +496,19 @@ export async function adoptCurriculumItemsAction(input: {
   revalidatePath("/akademik/mata-pelajaran");
   revalidatePath("/akademik/target-jp");
   revalidatePath("/pembagian-mengajar/target-jp");
-  return { ok: true, data: { adopted: rows.length } };
+
+  // Rule 14 — perubahan dengan dampak ke Core lain wajib memicu follow-up
+  // kontekstual, bukan diam-diam dianggap "selesai". Target JP baru belum
+  // tentu langsung punya guru; operator perlu tahu itu di titik ini, bukan
+  // menemukannya sendiri nanti di Pembagian Mengajar. Reuse getTargetJpView
+  // (rule 17: jangan duplikat logic coverage — sudah ada di sana).
+  const committedKeys = new Set(rows.map((r) => `${r.kelas_id}:${r.mata_pelajaran_id}`));
+  const view = await getTargetJpView(supabase, input.academicContextId);
+  const belumSiapCount = view.rows.filter(
+    (r) => committedKeys.has(`${r.kelasId}:${r.mataPelajaranId}`) && r.status === "belum_siap"
+  ).length;
+
+  return { ok: true, data: { adopted: rows.length, belumSiapCount } };
 }
 
 // GENERATE-KURIKULUM-MASTER-UX-FLOW poin 17 (Audit Trail) — Generate tidak

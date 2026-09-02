@@ -56,6 +56,7 @@ export default function GenerateKurikulumPage() {
   const [compareOpen, setCompareOpen] = useState(false);
   const [newSubjectsToConfirm, setNewSubjectsToConfirm] = useState<string[] | null>(null);
   const [success, setSuccess] = useState(false);
+  const [belumSiapCount, setBelumSiapCount] = useState(0);
   // V4 poin 3 — Status Konteks: "↻ Konteks berubah" dideteksi dari sinyal
   // nyata (localStorage tahun/semester terakhir dibuka di halaman ini),
   // bukan status buatan.
@@ -399,6 +400,7 @@ export default function GenerateKurikulumPage() {
     if (result.ok) {
       setSyncStep(3);
       setSuccess(true); setMessage(`Kurikulum tersimpan: ${result.data.adopted} kombinasi.`);
+      setBelumSiapCount(result.data.belumSiapCount);
       // Draft sudah "terpakai" — hapus supaya sesi berikutnya mulai bersih,
       // bukan merehidrasi candidate yang sudah di-commit.
       void clearCurriculumDraftAction(activeContext.id);
@@ -554,6 +556,22 @@ export default function GenerateKurikulumPage() {
             bukan ringkasan terpisah yang bisa berbeda dari yang benar-benar tersimpan. */}
         {changedOnlyIds.length > 0 && <div className="mt-3 text-sm text-emerald-700"><p className="font-semibold">Diperbarui:</p><ul className="mt-1 list-inside list-disc space-y-0.5">{candidate.filter((c) => changedOnlyIds.includes(c.id)).map((c) => <li key={c.id}>{c.subject_name}: {baseline[c.id] ?? "—"} → {c.manualTarget ?? "—"} JP</li>)}</ul></div>}
         {newIds.length > 0 && <div className="mt-3 text-sm text-emerald-700"><p className="font-semibold">Ditambahkan:</p><ul className="mt-1 list-inside list-disc space-y-0.5">{candidate.filter((c) => newIds.includes(c.id)).map((c) => <li key={c.id}>{c.subject_name} — {c.manualTarget ?? "—"} JP</li>)}</ul></div>}
+        {belumSiapCount > 0 && (
+          <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3">
+            <p className="text-sm font-semibold text-amber-800">
+              ⚠ {belumSiapCount} kombinasi Kelas × Mata Pelajaran belum punya guru.
+            </p>
+            <p className="mt-1 text-[12.5px] text-amber-700">
+              Target JP sudah tersimpan, tapi belum bisa dijadwalkan sampai gurunya ditentukan.
+            </p>
+            <Link
+              href="/pembagian-mengajar"
+              className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-[12.5px] font-semibold text-white hover:bg-amber-700"
+            >
+              Periksa Pembagian Mengajar
+            </Link>
+          </div>
+        )}
         <div className="mt-3 flex gap-2"><Link href="/akademik/mata-pelajaran" className="rounded-lg bg-surface px-3 py-2 text-sm font-semibold">Lihat Mata Pelajaran</Link><Link href="/pembagian-mengajar/target-jp" className="rounded-lg bg-surface px-3 py-2 text-sm font-semibold">Lihat Target JP</Link></div></div></div></section>}
 
       {candidate.length === 0 && !busy && <section className="rounded-2xl border border-dashed border-border p-8 text-center"><p className="font-semibold text-ink-900">Belum ada hasil kurikulum.</p><p className="mt-1 text-sm text-ink-500">Pilih kurikulum dan sumber untuk mulai.</p></section>}
