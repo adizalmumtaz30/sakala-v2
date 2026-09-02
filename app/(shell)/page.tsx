@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getDashboardSummary } from "@/lib/application/dashboard.usecases";
 import { getDashboardIntelligence } from "@/lib/application/dashboard.intelligence";
+import { getDashboardCurriculumStatus } from "@/lib/application/dashboardCurriculumStatus.usecases";
 import { getRecentNotifications } from "@/lib/application/notifications.usecases";
 import { formatContextLabel } from "@/lib/domain/academicContext";
 import { EmptyState, ErrorState, Card } from "@/components/ui/primitives";
@@ -18,15 +19,20 @@ export default async function DashboardPage() {
     }
     const guruList = await guruRepository.findAll(supabase).catch(() => []);
     const kelasList = await kelasRepository.findAll(supabase).catch(() => []);
+    const mapelRows = await getSafeList(supabase, "mata_pelajaran");
     const intelligence = await getDashboardIntelligence(
       supabase,
       summary.activeContext.id,
       guruList,
-      await getSafeList(supabase, "mata_pelajaran"),
+      mapelRows,
       kelasList,
       await getSafeList(supabase, "ruangan"),
     );
     const notifications = await getRecentNotifications(supabase, summary.activeContext.id).catch(() => []);
+    const curriculumStatus = await getDashboardCurriculumStatus(
+      new Set(kelasList.map((k) => k.tingkat)),
+      new Set(mapelRows.map((m: { nama?: string }) => (m.nama ?? "").trim().toLowerCase()))
+    ).catch(() => ({ curriculumAvailable: true, unmatchedSubjectCount: 0 }));
     return <DashboardExperience
       schoolName={summary.schoolProfile?.namaSekolah ?? "Sekolah"}
       adminName={summary.schoolProfile?.nama ?? null}
@@ -35,6 +41,7 @@ export default async function DashboardPage() {
       metricTrends={summary.metricTrends}
       jpInsight={summary.jpInsight}
       scheduleConflicts={summary.scheduleConflicts}
+      curriculumStatus={curriculumStatus}
       workload={summary.workloadTop}
       heatmap={intelligence.heatmap}
       heatmapGrid={intelligence.heatmapGrid}

@@ -208,6 +208,28 @@ export default function AiPage() {
               </div>
             </div>
 
+            {/* §7/§10 PRACTICAL UI & OPERATOR EXPERIENCE: diagnosa kurikulum,
+                read-only, diam kalau tidak ada ketidaksesuaian. Reuse capability
+                yang sama dipakai Konteks Akademik/Mata Pelajaran/Dashboard. */}
+            {(() => {
+              const classMismatches = context.curriculumMismatches.filter((m) => m.kelasId === selectedClassId);
+              if (classMismatches.length === 0) return null;
+              return (
+                <section className="rounded-xl border border-violet/25 bg-violet-50/30 p-4">
+                  <p className="text-[12.5px] font-semibold text-ink-900">Target JP kelas ini berbeda dari kurikulum aktif.</p>
+                  <ul className="mt-2 space-y-1">
+                    {classMismatches.map((m) => (
+                      <li key={m.mataPelajaranNama} className="text-[12px] text-ink-600">
+                        <span className="font-medium text-ink-800">{m.mataPelajaranNama}</span>: Target JP sekolah {m.currentTargetJp} JP, kurikulum {m.curriculumTargetJp} JP ({m.diffJp > 0 ? "+" : ""}{m.diffJp} JP)
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-2.5 text-[11px] text-ink-500">Saya belum mengubah data.</p>
+                  <a href="/pembagian-mengajar/target-jp" className="mt-2.5 inline-flex items-center gap-1.5 text-[12px] font-semibold text-violet hover:text-violet/80">Sesuaikan Target JP →</a>
+                </section>
+              );
+            })()}
+
             {summary && <section>
               <p className="mb-3 text-[9.5px] font-bold uppercase tracking-[.14em] text-ink-400">RINGKASAN INTELLIGENCE</p>
               <div className="grid gap-3 sm:grid-cols-3">
