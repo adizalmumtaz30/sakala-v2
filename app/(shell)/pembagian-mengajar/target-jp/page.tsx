@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getActiveAcademicContext } from "@/lib/application/academicContext.usecases";
 import { getTargetJpView } from "@/lib/application/targetJp.usecases";
+import { listCurriculumIntelligenceAction } from "../../akademik/mata-pelajaran/curriculum-actions";
 import TargetJpWorkspace from "./TargetJpWorkspace";
 import { ErrorState, EmptyState } from "@/components/ui/primitives";
 
@@ -25,10 +26,29 @@ export default async function TargetJpPage() {
 
     const view = await getTargetJpView(supabase, activeContext.id);
 
+    // Curriculum Intelligence sebagai capability, bukan destinasi — Target JP
+    // hanya perlu tahu APAKAH ada kurikulum resmi terverifikasi yang bisa
+    // dipakai, supaya bisa menawarkan [Generate dari Kurikulum] secara
+    // kontekstual saat memang dibutuhkan (Target JP kosong).
+    let curriculumAvailable = false;
+    if (view.overallTargetJp === 0) {
+      const intelligence = await listCurriculumIntelligenceAction("all");
+      if (intelligence.ok) {
+        const officialVersionIds = new Set(
+          intelligence.data.versions
+            .filter((v) => v.verification_status === "verified")
+            .filter((v) => intelligence.data.sources.some((s) => s.id === v.source_id && s.status === "official" && s.source_tier === 1))
+            .map((v) => v.id)
+        );
+        curriculumAvailable = intelligence.data.items.some((item) => officialVersionIds.has(item.curriculum_version_id));
+      }
+    }
+
     return (
       <TargetJpWorkspace
         activeContextLabel={`${activeContext.tahunPelajaran} · ${activeContext.semester === "ganjil" ? "Ganjil" : "Genap"}`}
         view={view}
+        curriculumAvailable={curriculumAvailable}
       />
     );
   } catch {
