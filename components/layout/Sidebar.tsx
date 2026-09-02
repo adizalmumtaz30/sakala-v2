@@ -3,14 +3,18 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, GraduationCap, BrainCircuit, Target, BookOpen, School2, DoorOpen, Split, CalendarDays, BarChart3, History, Bell, Bot, Compass, ChevronLeft, ChevronRight, LifeBuoy, ArrowUpRight } from "lucide-react";
+import { LayoutDashboard, Users, GraduationCap, Target, BookOpen, School2, DoorOpen, Split, CalendarDays, BarChart3, History, Bell, Bot, Compass, ChevronLeft, ChevronRight, LifeBuoy, ArrowUpRight } from "lucide-react";
 
 type NavItem = { label: string; href: string; icon: typeof LayoutDashboard; match?: (path: string) => boolean };
 type NavSection = { section: string; items: NavItem[] };
 
 // Urutan & pengelompokan mengikuti alur kerja operator sekolah: siapkan konteks akademik & kurikulum dulu,
-// baru isi data master, lalu susun jadwal, lalu pantau lewat analitik. Generate Kurikulum dipromosikan
-// jadi item inti (bukan subnav tersembunyi) karena ini fitur utama, bukan pelengkap.
+// baru isi data master, lalu susun jadwal, lalu pantau lewat analitik.
+// Generate Kurikulum SENGAJA tidak ada di sini — ia adalah capability, bukan
+// destinasi. Muncul kontekstual di Konteks Akademik, Target JP, dan Mata
+// Pelajaran saat memang dibutuhkan, plus lewat Dashboard, Command Palette,
+// dan AI Copilot. Tetap reachable langsung via /akademik/generate-kurikulum
+// untuk siapa pun yang tahu URL-nya, cuma tidak dipromosikan sebagai menu.
 const sections: NavSection[] = [
   {
     section: "Utama",
@@ -20,7 +24,6 @@ const sections: NavSection[] = [
     section: "Akademik",
     items: [
       { label: "Konteks Akademik", href: "/akademik", icon: GraduationCap, match: (p) => p === "/akademik" },
-      { label: "Generate Kurikulum", href: "/akademik/generate-kurikulum", icon: BrainCircuit, match: (p) => p.startsWith("/akademik/generate-kurikulum") },
       { label: "Target JP", href: "/pembagian-mengajar/target-jp", icon: Target, match: (p) => p.startsWith("/akademik/target-jp") || p.startsWith("/pembagian-mengajar/target-jp") },
     ],
   },
