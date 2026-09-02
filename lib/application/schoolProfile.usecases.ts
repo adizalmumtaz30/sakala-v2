@@ -16,10 +16,14 @@ export async function getSchoolProfile(supabase: SupabaseClient): Promise<School
 
 /**
  * Bagian 78 save flow: Validate → Persist → Update Cache → Success.
- * Setelah persist, pastikan default context (Tahun Pelajaran + Semester) punya
- * baris di academic_context — dibuat kalau belum ada, TAPI tidak dipaksa aktif
- * (default context ≠ active context), kecuali ini context pertama di sistem
- * (aturan bootstrap yang sama seperti createAcademicContext).
+ *
+ * Bootstrap context (Tahun Pelajaran + Semester dari profil) HANYA terjadi saat
+ * benar-benar belum ada academic_context sama sekali (onboarding sekolah baru).
+ * Begitu satu context sudah ada, Profil TIDAK LAGI boleh membuat atau mencari
+ * context — Akademik Context adalah satu-satunya gerbang untuk itu. Ini mencegah
+ * Profil menjadi authority akademik kedua yang bisa diam-diam membuat context
+ * duplikat/orphan (jenjang/institution hardcode) setiap kali admin sekadar
+ * mengedit nama/jabatan.
  */
 export async function saveSchoolProfile(
   supabase: SupabaseClient,
@@ -30,24 +34,16 @@ export async function saveSchoolProfile(
 
   const profile = await schoolProfileRepository.upsert(supabase, existingId, draft);
 
-  const defaultContext = await academicContextRepository.findByPair(
-    supabase,
-    draft.tahunPelajaranDefault.trim(),
-    draft.semesterDefault
-  );
-
-  if (!defaultContext) {
-    const all = await academicContextRepository.findAll(supabase);
-    const isFirstEver = all.length === 0;
+  const existingContexts = await academicContextRepository.findAll(supabase);
+  if (existingContexts.length === 0) {
+    // Onboarding sekolah baru: belum ada satu pun Academic Context, jadi profil
+    // boleh membuat yang pertama. Jenjang/institution pakai default (backfill
+    // lama MTs/Kemenag) — operator bisa mengubahnya lewat "Tambah Konteks
+    // Akademik" setelah ini.
     await academicContextRepository.create(
       supabase,
-      // Bootstrap otomatis saat School Profile pertama kali diisi — belum ada
-      // form untuk pilih jenjang/institution di titik ini, jadi pakai default
-      // yang sama dengan backfill data lama (MTs/Kemenag). Operator tetap bisa
-      // menambah context lain dengan jenjang/institution yang benar lewat
-      // "Tambah Konteks Akademik" di halaman Akademik.
       { tahunPelajaran: draft.tahunPelajaranDefault, semester: draft.semesterDefault, jenjang: "MTs", institution: "Kemenag" },
-      isFirstEver
+      true
     );
   }
 

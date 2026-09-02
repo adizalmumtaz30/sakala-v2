@@ -51,7 +51,7 @@ import Modal from "@/components/ui/Modal";
 import { Card, Badge, EmptyState } from "@/components/ui/primitives";
 import JamPelajaranManager from "./JamPelajaranManager";
 
-type Tab = "profil" | "periode" | "jam" | "model";
+type Tab = "profil" | "periode" | "jam";
 
 export default function AkademikWorkspace({
   initialProfile,
@@ -112,8 +112,15 @@ export default function AkademikWorkspace({
     const nama = String(formData.get("nama") ?? "");
     const jabatan = String(formData.get("jabatan") ?? "");
     const namaSekolah = String(formData.get("namaSekolah") ?? "");
-    const tahunPelajaranDefault = String(formData.get("tahunPelajaranDefault") ?? "");
-    const semesterDefault = (formData.get("semesterDefault") as Semester) ?? "ganjil";
+    // Kalau sudah ada Academic Context, itu satu-satunya sumber tahun/semester —
+    // Profil hanya boleh menentukan default ini saat benar-benar belum ada context
+    // (onboarding pertama kali).
+    const tahunPelajaranDefault = activeContext
+      ? activeContext.tahunPelajaran
+      : String(formData.get("tahunPelajaranDefault") ?? "");
+    const semesterDefault: Semester = activeContext
+      ? activeContext.semester
+      : ((formData.get("semesterDefault") as Semester) ?? "ganjil");
 
     startTransition(async () => {
       const result = await saveSchoolProfileAction(
@@ -335,11 +342,24 @@ export default function AkademikWorkspace({
       .map((s) => s.trim())
       .filter(Boolean);
 
+    // waktuMulai/durasiStandarMenit BUKAN lagi input yang diedit user di sini —
+    // Jam Pelajaran adalah satu-satunya sumber waktu sebenarnya. Nilai ini hanya
+    // dipertahankan sebagai compatibility bridge untuk skema lama, diturunkan
+    // otomatis dari Jam Ke-1 yang aktif (kalau ada), atau nilai lama saat edit.
+    const earliestJam = [...jamList]
+      .filter((j) => j.jenis === "pembelajaran")
+      .sort((a, b) => a.waktuMulai.localeCompare(b.waktuMulai))[0];
+    const waktuMulai = earliestJam?.waktuMulai ?? modelEditing?.waktuMulai ?? "07:00";
+    const durasiStandarMenit =
+      (earliestJam ? calculateDurationMinutes(earliestJam.waktuMulai, earliestJam.waktuSelesai) : undefined) ??
+      modelEditing?.durasiStandarMenit ??
+      45;
+
     const draft: ScheduleModelDraft = {
       academicContextId: activeContext.id,
       namaModel: String(formData.get("namaModel") ?? ""),
-      waktuMulai: String(formData.get("waktuMulai") ?? ""),
-      durasiStandarMenit: Number(formData.get("durasiStandarMenit") ?? 0),
+      waktuMulai,
+      durasiStandarMenit,
       maksJamPerHari: Number(formData.get("maksJamPerHari") ?? 0),
       hariAktif,
       hariLibur,
@@ -458,10 +478,7 @@ export default function AkademikWorkspace({
           Periode Akademik
         </TabButton>
         <TabButton active={tab === "jam"} onClick={() => setTab("jam")} icon={<Clock size={14} />}>
-          Jam Pelajaran
-        </TabButton>
-        <TabButton active={tab === "model"} onClick={() => setTab("model")} icon={<CalendarClock size={14} />}>
-          Model Jadwal
+          Jadwal & Waktu
         </TabButton>
       </div>
 
@@ -622,179 +639,184 @@ export default function AkademikWorkspace({
       )}
 
       {tab === "periode" && (
-        <Card className="p-0">
-          <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-3">
-            <div>
-              <p className="text-[14px] font-semibold text-ink-900">Periode Akademik</p>
-              <p className="text-[12.5px] text-ink-500">
-                {activeContext
-                  ? `Rentang tanggal dalam konteks ${formatContextLabel(activeContext)} — mis. Periode 1, UTS, UAS.`
-                  : "Aktifkan satu konteks akademik dulu di tab Profil & Konteks."}
-              </p>
-            </div>
-            {activeContext && (
-              <Button size="sm" onClick={openCreatePeriode}>
-                <Plus size={14} /> Tambah Periode
-              </Button>
-            )}
-          </div>
-
-          {!activeContext ? (
-            <EmptyState title="Belum ada konteks akademik aktif" description="Aktifkan konteks di tab Profil & Konteks terlebih dulu." />
-          ) : periodeList.length === 0 ? (
-            <EmptyState
-              title="Belum ada periode akademik"
-              description="Tambahkan periode pertama untuk konteks ini."
-              action={
+        <div className="flex flex-col gap-6">
+          <Card className="p-0">
+            <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-3">
+              <div>
+                <p className="text-[14px] font-semibold text-ink-900">Periode Akademik</p>
+                <p className="text-[12.5px] text-ink-500">
+                  {activeContext
+                    ? `Rentang tanggal dalam konteks ${formatContextLabel(activeContext)} — mis. Periode 1, UTS, UAS.`
+                    : "Aktifkan satu konteks akademik dulu di tab Profil & Konteks."}
+                </p>
+              </div>
+              {activeContext && (
                 <Button size="sm" onClick={openCreatePeriode}>
                   <Plus size={14} /> Tambah Periode
                 </Button>
-              }
-            />
-          ) : (
-            <table className="w-full text-left text-[13px]">
-              <thead>
-                <tr className="border-b border-border text-[11.5px] uppercase tracking-wide text-ink-400">
-                  <th className="px-5 py-3 font-medium">Urutan</th>
-                  <th className="px-5 py-3 font-medium">Nama</th>
-                  <th className="px-5 py-3 font-medium">Tanggal Mulai</th>
-                  <th className="px-5 py-3 font-medium">Tanggal Selesai</th>
-                  <th className="px-5 py-3 font-medium">Status</th>
-                  <th className="px-5 py-3 font-medium text-right">Aksi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {periodeList.map((periode) => (
-                  <tr key={periode.id} className="border-b border-border last:border-0 hover:bg-surface-muted/60">
-                    <td className="px-5 py-3.5 text-ink-500">{periode.urutan}</td>
-                    <td className="px-5 py-3.5 font-medium text-ink-900">{periode.nama}</td>
-                    <td className="px-5 py-3.5 text-ink-700">{periode.tanggalMulai}</td>
-                    <td className="px-5 py-3.5 text-ink-700">{periode.tanggalSelesai}</td>
-                    <td className="px-5 py-3.5">
-                      <Badge tone={periode.status === "aktif" ? "success" : "neutral"}>
-                        {periode.status === "aktif" ? "Aktif" : "Nonaktif"}
-                      </Badge>
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => openEditPeriode(periode)}
-                          className="rounded-lg p-1.5 text-ink-400 hover:bg-brand-50 hover:text-brand-600"
-                          aria-label="Edit"
-                        >
-                          <Pencil size={15} />
-                        </button>
-                        <button
-                          onClick={() => handleDeletePeriode(periode)}
-                          disabled={isPending}
-                          className="rounded-lg p-1.5 text-ink-400 hover:bg-rose-50 hover:text-rose disabled:opacity-30"
-                          aria-label="Hapus"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    </td>
+              )}
+            </div>
+
+            {!activeContext ? (
+              <EmptyState title="Belum ada konteks akademik aktif" description="Aktifkan konteks di tab Profil & Konteks terlebih dulu." />
+            ) : periodeList.length === 0 ? (
+              <EmptyState
+                title="Belum ada periode akademik"
+                description="Tambahkan periode pertama untuk konteks ini."
+                action={
+                  <Button size="sm" onClick={openCreatePeriode}>
+                    <Plus size={14} /> Tambah Periode
+                  </Button>
+                }
+              />
+            ) : (
+              <table className="w-full text-left text-[13px]">
+                <thead>
+                  <tr className="border-b border-border text-[11.5px] uppercase tracking-wide text-ink-400">
+                    <th className="px-5 py-3 font-medium">Urutan</th>
+                    <th className="px-5 py-3 font-medium">Nama</th>
+                    <th className="px-5 py-3 font-medium">Tanggal Mulai</th>
+                    <th className="px-5 py-3 font-medium">Tanggal Selesai</th>
+                    <th className="px-5 py-3 font-medium">Status</th>
+                    <th className="px-5 py-3 font-medium text-right">Aksi</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </Card>
+                </thead>
+                <tbody>
+                  {periodeList.map((periode) => (
+                    <tr key={periode.id} className="border-b border-border last:border-0 hover:bg-surface-muted/60">
+                      <td className="px-5 py-3.5 text-ink-500">{periode.urutan}</td>
+                      <td className="px-5 py-3.5 font-medium text-ink-900">{periode.nama}</td>
+                      <td className="px-5 py-3.5 text-ink-700">{periode.tanggalMulai}</td>
+                      <td className="px-5 py-3.5 text-ink-700">{periode.tanggalSelesai}</td>
+                      <td className="px-5 py-3.5">
+                        <Badge tone={periode.status === "aktif" ? "success" : "neutral"}>
+                          {periode.status === "aktif" ? "Aktif" : "Nonaktif"}
+                        </Badge>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => openEditPeriode(periode)}
+                            className="rounded-lg p-1.5 text-ink-400 hover:bg-brand-50 hover:text-brand-600"
+                            aria-label="Edit"
+                          >
+                            <Pencil size={15} />
+                          </button>
+                          <button
+                            onClick={() => handleDeletePeriode(periode)}
+                            disabled={isPending}
+                            className="rounded-lg p-1.5 text-ink-400 hover:bg-rose-50 hover:text-rose disabled:opacity-30"
+                            aria-label="Hapus"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </Card>
+        </div>
       )}
 
-      {tab === "jam" && <JamPelajaranManager activeContext={activeContext} initialJamList={jamList} />}
+      {tab === "jam" && (
+        <div className="flex flex-col gap-6">
+          <JamPelajaranManager activeContext={activeContext} initialJamList={jamList} />
 
-      {tab === "model" && (
-        <Card className="p-0">
-          <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-3">
-            <div>
-              <p className="text-[14px] font-semibold text-ink-900">Model Jadwal (Schedule Model)</p>
-              <p className="text-[12.5px] text-ink-500">
-                {activeContext
-                  ? `Konfigurasi jadwal untuk konteks ${formatContextLabel(activeContext)} — bukan timetable, dasar untuk Jadwal Cerdas nanti.`
-                  : "Aktifkan satu konteks akademik dulu di tab Profil & Konteks."}
-              </p>
-            </div>
-            {activeContext && (
-              <Button size="sm" onClick={openCreateModel}>
-                <Plus size={14} /> Tambah Model
-              </Button>
-            )}
-          </div>
-
-          {!activeContext ? (
-            <EmptyState title="Belum ada konteks akademik aktif" description="Aktifkan konteks di tab Profil & Konteks terlebih dulu." />
-          ) : modelList.length === 0 ? (
-            <EmptyState
-              title="Belum ada Schedule Model"
-              description="Tambahkan model jadwal pertama untuk konteks ini."
-              action={
+          <Card className="p-0">
+            <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-50 text-brand-700">
+                  <CalendarClock size={18} />
+                </div>
+                <div>
+                  <p className="text-[14px] font-semibold text-ink-900">Model Jadwal (Schedule Model)</p>
+                  <p className="text-[12.5px] text-ink-500">
+                    {activeContext
+                      ? `Aturan penjadwalan untuk konteks ${formatContextLabel(activeContext)} — waktu diambil dari Jam Pelajaran di atas, dasar untuk Jadwal Cerdas nanti.`
+                      : "Aktifkan satu konteks akademik dulu di tab Profil & Konteks."}
+                  </p>
+                </div>
+              </div>
+              {activeContext && (
                 <Button size="sm" onClick={openCreateModel}>
                   <Plus size={14} /> Tambah Model
                 </Button>
-              }
-            />
-          ) : (
-            <table className="w-full text-left text-[13px]">
-              <thead>
-                <tr className="border-b border-border text-[11.5px] uppercase tracking-wide text-ink-400">
-                  <th className="px-5 py-3 font-medium">Nama Model</th>
-                  <th className="px-5 py-3 font-medium">Mulai</th>
-                  <th className="px-5 py-3 font-medium">Durasi</th>
-                  <th className="px-5 py-3 font-medium">Maks JP/Hari</th>
-                  <th className="px-5 py-3 font-medium">Room Mode</th>
-                  <th className="px-5 py-3 font-medium">Status</th>
-                  <th className="px-5 py-3 font-medium text-right">Aksi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {modelList.map((model) => (
-                  <tr key={model.id} className="border-b border-border last:border-0 hover:bg-surface-muted/60">
-                    <td className="px-5 py-3.5 font-medium text-ink-900">{model.namaModel}</td>
-                    <td className="px-5 py-3.5 text-ink-700">{model.waktuMulai}</td>
-                    <td className="px-5 py-3.5 text-ink-500">{model.durasiStandarMenit} mnt</td>
-                    <td className="px-5 py-3.5 text-ink-500">{model.maksJamPerHari}</td>
-                    <td className="px-5 py-3.5">
-                      <Badge tone={model.modeRuangan === "wajib" ? "info" : model.modeRuangan === "opsional" ? "neutral" : "warning"}>
-                        {formatModeRuangan(model.modeRuangan)}
-                      </Badge>
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <Badge tone={model.status === "aktif" ? "success" : "neutral"}>
-                        {model.status === "aktif" ? "Aktif" : "Nonaktif"}
-                      </Badge>
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => openSlotManager(model)}
-                          className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-[12px] font-medium text-brand-600 hover:bg-brand-50"
-                        >
-                          <ListChecks size={14} /> Kelola Slot
-                        </button>
-                        <button
-                          onClick={() => openEditModel(model)}
-                          className="rounded-lg p-1.5 text-ink-400 hover:bg-brand-50 hover:text-brand-600"
-                          aria-label="Edit"
-                        >
-                          <Pencil size={15} />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteModel(model)}
-                          disabled={isPending}
-                          className="rounded-lg p-1.5 text-ink-400 hover:bg-rose-50 hover:text-rose disabled:opacity-30"
-                          aria-label="Hapus"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    </td>
+              )}
+            </div>
+
+            {!activeContext ? (
+              <EmptyState title="Belum ada konteks akademik aktif" description="Aktifkan konteks di tab Profil & Konteks terlebih dulu." />
+            ) : modelList.length === 0 ? (
+              <EmptyState
+                title="Belum ada Schedule Model"
+                description="Tambahkan model jadwal pertama untuk konteks ini."
+                action={
+                  <Button size="sm" onClick={openCreateModel}>
+                    <Plus size={14} /> Tambah Model
+                  </Button>
+                }
+              />
+            ) : (
+              <table className="w-full text-left text-[13px]">
+                <thead>
+                  <tr className="border-b border-border text-[11.5px] uppercase tracking-wide text-ink-400">
+                    <th className="px-5 py-3 font-medium">Nama Model</th>
+                    <th className="px-5 py-3 font-medium">Maks JP/Hari</th>
+                    <th className="px-5 py-3 font-medium">Room Mode</th>
+                    <th className="px-5 py-3 font-medium">Status</th>
+                    <th className="px-5 py-3 font-medium text-right">Aksi</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </Card>
+                </thead>
+                <tbody>
+                  {modelList.map((model) => (
+                    <tr key={model.id} className="border-b border-border last:border-0 hover:bg-surface-muted/60">
+                      <td className="px-5 py-3.5 font-medium text-ink-900">{model.namaModel}</td>
+                      <td className="px-5 py-3.5 text-ink-500">{model.maksJamPerHari}</td>
+                      <td className="px-5 py-3.5">
+                        <Badge tone={model.modeRuangan === "wajib" ? "info" : model.modeRuangan === "opsional" ? "neutral" : "warning"}>
+                          {formatModeRuangan(model.modeRuangan)}
+                        </Badge>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <Badge tone={model.status === "aktif" ? "success" : "neutral"}>
+                          {model.status === "aktif" ? "Aktif" : "Nonaktif"}
+                        </Badge>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => openSlotManager(model)}
+                            className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-[12px] font-medium text-brand-600 hover:bg-brand-50"
+                          >
+                            <ListChecks size={14} /> Kelola Slot
+                          </button>
+                          <button
+                            onClick={() => openEditModel(model)}
+                            className="rounded-lg p-1.5 text-ink-400 hover:bg-brand-50 hover:text-brand-600"
+                            aria-label="Edit"
+                          >
+                            <Pencil size={15} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteModel(model)}
+                            disabled={isPending}
+                            className="rounded-lg p-1.5 text-ink-400 hover:bg-rose-50 hover:text-rose disabled:opacity-30"
+                            aria-label="Hapus"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </Card>
+        </div>
       )}
 
       {/* ================= Modal: Profil Admin ================= */}
@@ -807,19 +829,29 @@ export default function AkademikWorkspace({
           <Input name="nama" label="Nama" placeholder="cth. Siti Rahma, S.Pd" defaultValue={profile?.nama} required />
           <Input name="jabatan" label="Jabatan" placeholder="cth. Wakil Kepala Sekolah Kurikulum" defaultValue={profile?.jabatan} required />
           <Input name="namaSekolah" label="Nama Sekolah" placeholder="cth. SMA Negeri 1 Contoh" defaultValue={profile?.namaSekolah} required />
-          <div className="grid grid-cols-2 gap-3">
-            <Input
-              name="tahunPelajaranDefault"
-              label="Tahun Pelajaran Default"
-              placeholder="2025/2026"
-              defaultValue={profile?.tahunPelajaranDefault}
-              required
-            />
-            <SelectField name="semesterDefault" label="Semester Default" defaultValue={profile?.semesterDefault ?? "ganjil"}>
-              <option value="ganjil">Ganjil</option>
-              <option value="genap">Genap</option>
-            </SelectField>
-          </div>
+          {activeContext ? (
+            <div className="rounded-xl border border-border bg-surface-muted/40 px-4 py-3">
+              <p className="text-[11.5px] font-medium uppercase tracking-wide text-ink-400">Tahun Pelajaran & Semester</p>
+              <p className="mt-1 text-[13.5px] font-medium text-ink-900">{formatContextLabel(activeContext)}</p>
+              <p className="mt-1 text-[11.5px] text-ink-500">
+                Diambil dari Konteks Akademik aktif — ubah lewat tabel Konteks Akademik di bawah, bukan di sini.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                name="tahunPelajaranDefault"
+                label="Tahun Pelajaran Default"
+                placeholder="2025/2026"
+                defaultValue={profile?.tahunPelajaranDefault}
+                required
+              />
+              <SelectField name="semesterDefault" label="Semester Default" defaultValue={profile?.semesterDefault ?? "ganjil"}>
+                <option value="ganjil">Ganjil</option>
+                <option value="genap">Genap</option>
+              </SelectField>
+            </div>
+          )}
           {profileError && <p className="text-[11.5px] text-rose">{profileError}</p>}
           <div className="mt-2 flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setProfileModalOpen(false)}>
@@ -942,18 +974,9 @@ export default function AkademikWorkspace({
       >
         <form action={handleSaveModel} className="flex flex-col gap-4">
           <Input name="namaModel" label="Nama Model" placeholder="cth. Model Reguler" defaultValue={modelEditing?.namaModel} required />
-          <div className="grid grid-cols-2 gap-3">
-            <Input name="waktuMulai" label="Waktu Mulai" type="time" defaultValue={modelEditing?.waktuMulai} required />
-            <Input
-              name="durasiStandarMenit"
-              label="Durasi Standar (menit)"
-              type="number"
-              min={1}
-              max={300}
-              defaultValue={modelEditing?.durasiStandarMenit ?? 45}
-              required
-            />
-          </div>
+          <p className="text-[11.5px] text-ink-400">
+            Waktu mulai & durasi tidak diatur di sini — otomatis mengikuti jam pertama di tab Jam Pelajaran. Atur di sana kalau perlu diubah.
+          </p>
           <Input
             name="maksJamPerHari"
             label="Maks Jam Pelajaran / Hari"
