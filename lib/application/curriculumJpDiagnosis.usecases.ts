@@ -9,6 +9,7 @@
 
 import { listCurriculumIntelligenceAction } from "@/app/(shell)/akademik/mata-pelajaran/curriculum-actions";
 import { deriveWeeklyTarget } from "@/lib/domain/curriculumIntelligence";
+import { tingkatsMatch } from "@/lib/domain/kelas";
 import type { TargetJpRow } from "@/lib/application/targetJp.usecases";
 
 export type CurriculumJpMismatch = {
@@ -45,7 +46,7 @@ export async function getCurriculumJpMismatches(
     const tingkat = tingkatByKelasId.get(row.kelasId);
     if (!tingkat) continue;
     const item = officialItems.find(
-      (it) => it.class_level === tingkat && it.subject_name.trim().toLowerCase() === row.mataPelajaranNama.trim().toLowerCase()
+      (it) => tingkatsMatch(it.class_level, tingkat) && it.subject_name.trim().toLowerCase() === row.mataPelajaranNama.trim().toLowerCase()
     );
     if (!item) continue; // tidak ada padanan resmi — bukan mismatch, tapi "belum terhubung" (sudah ditangani di Mata Pelajaran/Dashboard)
     const curriculumTargetRaw = item.weekly_target ?? deriveWeeklyTarget(item.official_allocation, item.allocation_type, item.effective_weeks);

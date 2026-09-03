@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { CurriculumInstitution } from "@/lib/domain/curriculumIntelligence";
 import { recordAuditEvent } from "@/lib/application/auditLog.usecases";
 import { toPlainDatabaseError } from "@/lib/utils/databaseError";
+import { tingkatsMatch } from "@/lib/domain/kelas";
 import { upsertTargetJp, getTargetJpView } from "@/lib/application/targetJp.usecases";
 
 export type CurriculumActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -376,7 +377,7 @@ export async function adoptCurriculumItemsAction(input: {
     for (const itemId of selectedIds) {
       const item = itemMap.get(itemId);
       if (!item) return { ok: false, error: "Item kurikulum tidak ditemukan." };
-      if (item.class_level !== kelas.tingkat) continue;
+      if (!tingkatsMatch(item.class_level, kelas.tingkat)) continue;
       if (item.derivation_status === "blocked" || item.weekly_target == null) continue;
 
       const version = versionMap.get(item.curriculum_version_id);

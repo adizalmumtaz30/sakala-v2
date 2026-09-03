@@ -8,6 +8,7 @@
 // supaya tidak pernah ada dua jawaban berbeda untuk pertanyaan yang sama.
 
 import { listCurriculumIntelligenceAction } from "@/app/(shell)/akademik/mata-pelajaran/curriculum-actions";
+import { tingkatsMatch } from "@/lib/domain/kelas";
 
 export type DashboardCurriculumStatus = {
   curriculumAvailable: boolean;
@@ -15,10 +16,10 @@ export type DashboardCurriculumStatus = {
 };
 
 export async function getDashboardCurriculumStatus(
-  classLevels: Set<string>,
+  classLevels: string[],
   existingMapelNames: Set<string>
 ): Promise<DashboardCurriculumStatus> {
-  if (classLevels.size === 0) return { curriculumAvailable: true, unmatchedSubjectCount: 0 };
+  if (classLevels.length === 0) return { curriculumAvailable: true, unmatchedSubjectCount: 0 };
 
   const intelligence = await listCurriculumIntelligenceAction("all");
   if (!intelligence.ok) {
@@ -34,12 +35,12 @@ export async function getDashboardCurriculumStatus(
   );
 
   const curriculumAvailable = intelligence.data.items.some(
-    (item) => officialVersionIds.has(item.curriculum_version_id) && classLevels.has(item.class_level)
+    (item) => officialVersionIds.has(item.curriculum_version_id) && classLevels.some((t) => tingkatsMatch(t, item.class_level))
   );
 
   const relevantNames = new Set(
     intelligence.data.items
-      .filter((item) => officialVersionIds.has(item.curriculum_version_id) && classLevels.has(item.class_level))
+      .filter((item) => officialVersionIds.has(item.curriculum_version_id) && classLevels.some((t) => tingkatsMatch(t, item.class_level)))
       .map((item) => item.subject_name)
   );
   const unmatchedSubjectCount = Array.from(relevantNames).filter((name) => !existingMapelNames.has(name.trim().toLowerCase())).length;
