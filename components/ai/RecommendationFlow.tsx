@@ -36,7 +36,7 @@ import { Sparkles, ArrowRight, CheckCircle2, Circle, X, Lightbulb, HelpCircle, T
 
 type FlowStep = "finding" | "solution" | "preview" | "done";
 const STAGE_ORDER: FlowStep[] = ["finding", "solution", "preview", "done"];
-const STAGE_TITLE: Record<FlowStep, string> = { finding: "Temuan", solution: "Solusi", preview: "Preview", done: "Diterapkan" };
+const STAGE_TITLE: Record<FlowStep, string> = { finding: "Temuan", solution: "Solusi", preview: "Pratinjau", done: "Diterapkan" };
 
 const INTENT_LABEL: Record<AiCopilotIntent, string> = {
   complete_remaining_jp: "Lengkapi JP yang kurang",

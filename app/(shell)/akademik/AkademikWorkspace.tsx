@@ -1173,7 +1173,7 @@ function SlotJenisField({ defaultValue, defaultNamaCustom }: { defaultValue: Jen
         <option value="religi">Religi</option>
         <option value="istirahat">Istirahat</option>
         <option value="libur">Libur</option>
-        <option value="custom">Custom</option>
+        <option value="custom">Lainnya</option>
       </SelectField>
       {jenis === "custom" && (
         <Input name="namaCustom" label="Nama Custom" placeholder="cth. Ekstrakurikuler" defaultValue={defaultNamaCustom} required />

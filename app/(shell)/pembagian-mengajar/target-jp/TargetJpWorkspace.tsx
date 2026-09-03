@@ -81,8 +81,8 @@ export default function TargetJpWorkspace({ activeContextLabel, view, curriculum
           operator tidak tahu sama sekali. */}
       {hasManualOverrideHistory && (
         <p className="text-[12px] text-ink-400">
-          Sebagian Target JP di konteks ini pernah dikoreksi lewat jalur manual/import (bukan murni dari Generate Kurikulum) —{" "}
-          <Link href="/riwayat" className="font-medium text-ink-600 underline hover:text-ink-800">lihat Riwayat</Link> untuk detail lama/baru.
+          Sebagian Target JP di sini pernah diubah manual, bukan dari Generate Kurikulum —{" "}
+          <Link href="/riwayat" className="font-medium text-ink-600 underline hover:text-ink-800">lihat Riwayat</Link>.
         </p>
       )}
 
