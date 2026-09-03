@@ -1107,7 +1107,7 @@ export default function JadwalWorkspace({
               label="Jenis Aktivitas"
               value={addForm.activityType}
               onChange={(v) => setAddForm((f) => ({ ...f, activityType: v as JenisSlot }))}
-              options={ACTIVITY_OPTIONS.map((a) => ({ id: a, label: formatJenisSlot({ jenisSlot: a, namaCustom: "Custom" }) }))}
+              options={ACTIVITY_OPTIONS.map((a) => ({ id: a, label: formatJenisSlot({ jenisSlot: a, namaCustom: "Lainnya" }) }))}
             />
 
             {addForm.classId && addForm.teacherId && <ConflictList conflicts={addRealtimeConflicts} />}
@@ -1138,7 +1138,7 @@ export default function JadwalWorkspace({
             <DetailRow label="Ruangan" value={detailAssignment.roomId ? ruanganMap.get(detailAssignment.roomId) ?? "-" : "-"} />
             <DetailRow label="Hari" value={formatHari(detailAssignment.day)} />
             <DetailRow label="Jam" value={`Ke-${detailAssignment.periodStart}${detailAssignment.periodEnd !== detailAssignment.periodStart ? `–${detailAssignment.periodEnd}` : ""}`} />
-            <DetailRow label="Aktivitas" value={formatJenisSlot({ jenisSlot: detailAssignment.activityType, namaCustom: "Custom" })} />
+            <DetailRow label="Aktivitas" value={formatJenisSlot({ jenisSlot: detailAssignment.activityType, namaCustom: "Lainnya" })} />
             <div className="flex flex-wrap gap-2 pt-1">
               <Button variant="secondary" size="sm" onClick={() => openEdit(detailAssignment)}>
                 <Pencil size={14} /> Edit / Pindahkan

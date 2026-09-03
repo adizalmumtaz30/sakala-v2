@@ -170,7 +170,7 @@ export async function PUT(request: Request) {
         before: { targetJp: beforeMap.get(k) ?? null },
         after: { targetJp: p.target_jp },
         source: "import",
-        reason: "Import/edit manual Target JP (bypass rantai verifikasi Generate Kurikulum)",
+        reason: "Diubah manual dari halaman Target JP, bukan lewat Generate Kurikulum",
       });
     }
 

@@ -512,7 +512,7 @@ export default function JadwalCerdasWorkspace({
                             <option value="belajar_mengajar">Belajar Mengajar</option>
                             <option value="upacara">Upacara</option>
                             <option value="religi">Religi</option>
-                            <option value="custom">Custom</option>
+                            <option value="custom">Lainnya</option>
                           </select>
                         </div>
                         <div className="col-span-1">
