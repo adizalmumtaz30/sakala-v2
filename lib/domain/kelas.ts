@@ -51,6 +51,22 @@ export function tingkatSortValue(tingkat: string): number {
 }
 
 /**
+ * Normalisasi tulis: apa pun bentuk yang dimasukkan (Arab "7" atau Romawi
+ * "VII", dengan spasi/kapital apa pun), selalu disimpan dalam SATU bentuk
+ * kanonik — angka Arab, karena itu yang dipakai `kelas.tingkat` di seluruh
+ * inti aplikasi (Jadwal, Pembagian Mengajar, dsb). Dipakai di titik TULIS
+ * (mis. saat curriculum_item dibuat dari ekstraksi/import kurikulum),
+ * supaya tingkatsMatch() di titik BACA lama-lama tidak perlu lagi menebak —
+ * datanya sendiri sudah konsisten sejak masuk. UI tetap boleh menampilkan
+ * label Romawi (konvensi dokumen kurikulum resmi); ini cuma soal apa yang
+ * disimpan.
+ */
+export function normalizeTingkat(input: string): string {
+  const value = tingkatSortValue(input);
+  return Number.isFinite(value) ? String(value) : input.trim();
+}
+
+/**
  * Root fix: `kelas.tingkat` disimpan angka Arab ("7","8","9"), sementara
  * `curriculum_item.class_level` (dari data kurikulum resmi/impor) disimpan
  * angka Romawi ("VII","VIII","IX"). Perbandingan string langsung (`===`)
@@ -59,7 +75,10 @@ export function tingkatSortValue(tingkat: string): number {
  * Kurikulum, kartu kontekstual Konteks Akademik/Mata Pelajaran/Dashboard,
  * diagnosa AI) selalu menganggap "tidak ada yang cocok", padahal datanya ada.
  * Satu fungsi ini dipakai di semua titik itu — jangan buat perbandingan
- * manual baru di tempat lain.
+ * manual baru di tempat lain. Sekarang jadi lapis pertahanan kedua: titik
+ * tulis baru (normalizeTingkat di atas) sudah mencegah masalahnya dari awal,
+ * ini tetap dipertahankan untuk data lama/dari sumber lain yang belum lewat
+ * normalizeTingkat.
  */
 export function tingkatsMatch(a: string, b: string): boolean {
   const av = tingkatSortValue(a);

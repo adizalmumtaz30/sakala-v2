@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { CurriculumInstitution } from "@/lib/domain/curriculumIntelligence";
 import { recordAuditEvent } from "@/lib/application/auditLog.usecases";
 import { toPlainDatabaseError } from "@/lib/utils/databaseError";
-import { tingkatsMatch } from "@/lib/domain/kelas";
+import { tingkatsMatch, normalizeTingkat } from "@/lib/domain/kelas";
 import { upsertTargetJp, getTargetJpView } from "@/lib/application/targetJp.usecases";
 
 export type CurriculumActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -206,7 +206,7 @@ export async function saveExtractedCurriculumSourceAction(input: {
   const itemRows = input.rows.map((row) => ({
     curriculum_version_id: version.id,
     subject_name: row.subjectName,
-    class_level: input.classLevel,
+    class_level: normalizeTingkat(input.classLevel),
     allocation_type: "weekly" as const,
     official_allocation: row.weeklyTarget,
     weekly_target: row.weeklyTarget,
