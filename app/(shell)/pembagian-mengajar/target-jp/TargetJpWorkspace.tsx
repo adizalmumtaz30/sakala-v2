@@ -12,6 +12,7 @@ interface Props {
   activeContextLabel: string;
   view: TargetJpView;
   curriculumAvailable: boolean;
+  hasManualOverrideHistory: boolean;
 }
 
 // Kontrak §53-54 — bahasa operator, bukan istilah teknis.
@@ -28,9 +29,23 @@ const STATUS_TONE: Record<TargetJpStatus, "neutral" | "warning" | "success" | "d
   lengkap: "success",
 };
 const STATUS_FILTERS: (TargetJpStatus | "semua")[] = ["semua", "belum_siap", "siap_belum_terjadwal", "sebagian_terjadwal", "lengkap"];
+// §3 analisis mendalam: status jadwal internal (draft/candidate/committed/dst)
+// tidak boleh tampil mentah ke operator.
+const SCHEDULE_STATUS_LABEL: Record<string, string> = {
+  draft: "draf",
+  candidate: "usulan",
+  committed: "final",
+  archived: "diarsipkan",
+  cancelled: "dibatalkan",
+};
 
-export default function TargetJpWorkspace({ activeContextLabel, view, curriculumAvailable }: Props) {
-  const [filter, setFilter] = useState<TargetJpStatus | "semua">("semua");
+export default function TargetJpWorkspace({ activeContextLabel, view, curriculumAvailable, hasManualOverrideHistory }: Props) {
+  // §1 analisis mendalam: default filter jangan tenggelamkan masalah di antara
+  // baris sehat — kalau ada kombinasi yang guru-nya belum ditentukan, itu yang
+  // langsung ditampilkan duluan. Cuma default ke "semua" kalau memang semuanya
+  // sehat, supaya operator tidak perlu klik apa-apa untuk lihat rincian.
+  const hasProblem = view.rows.some((r) => r.status === "belum_siap");
+  const [filter, setFilter] = useState<TargetJpStatus | "semua">(hasProblem ? "belum_siap" : "semua");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showManage, setShowManage] = useState(false);
 
@@ -59,6 +74,33 @@ export default function TargetJpWorkspace({ activeContextLabel, view, curriculum
       </div>
 
       {showManage && <TargetJpImportPanel onSaved={() => setShowManage(false)} />}
+
+      {/* §5 analisis mendalam: audit_log jalur manual/import tidak menyimpan
+          id baris (lihat catatan di TargetJpImportPanel), jadi indikator ini
+          global per-konteks, bukan per-baris — tapi tetap lebih baik daripada
+          operator tidak tahu sama sekali. */}
+      {hasManualOverrideHistory && (
+        <p className="text-[12px] text-ink-400">
+          Sebagian Target JP di konteks ini pernah dikoreksi lewat jalur manual/import (bukan murni dari Generate Kurikulum) —{" "}
+          <Link href="/riwayat" className="font-medium text-ink-600 underline hover:text-ink-800">lihat Riwayat</Link> untuk detail lama/baru.
+        </p>
+      )}
+
+      {/* §4 analisis mendalam: root-cause yang berbeda butuh pesan berbeda —
+          jangan salahkan Target JP kalau akar masalahnya kurikulum belum ada
+          sama sekali (beda kasus dari "kurikulum ada, Target JP belum dibuat"
+          di bawah). */}
+      {view.overallTargetJp === 0 && !curriculumAvailable && (
+        <Card className="border-border bg-surface-muted/40">
+          <p className="text-[13.5px] font-semibold text-ink-900">Target JP belum bisa disiapkan</p>
+          <p className="mt-0.5 text-[12.5px] text-ink-600">
+            Penyebabnya: belum ada kurikulum resmi terverifikasi untuk konteks ini. Siapkan kurikulumnya dulu di Konteks Akademik, baru Target JP bisa dibuat otomatis dari sana.
+          </p>
+          <Link href="/akademik" className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-border bg-surface px-3.5 py-2 text-[12.5px] font-semibold text-ink-700 hover:border-brand-600/30 hover:text-brand-700">
+            Buka Konteks Akademik →
+          </Link>
+        </Card>
+      )}
 
       {view.overallTargetJp === 0 && curriculumAvailable && (
         <Card className="border-brand-600/30 bg-brand-50/40">
@@ -152,10 +194,7 @@ export default function TargetJpWorkspace({ activeContextLabel, view, curriculum
       {/* Per Kelas+Mapel detail */}
       <Card className="p-0">
         {filteredRows.length === 0 ? (
-          <EmptyState
-            title={view.rows.length === 0 ? "Belum ada Target JP resmi" : "Tidak ada yang cocok filter ini"}
-            description={view.rows.length === 0 ? "Isi Target JP lewat Generate Kurikulum terlebih dahulu." : undefined}
-          />
+          <EmptyState title={view.rows.length === 0 ? "Belum ada data untuk ditampilkan" : "Tidak ada yang cocok filter ini"} />
         ) : (
           <ul>
             {filteredRows.map((row) => (
@@ -192,13 +231,13 @@ function TargetJpRowItem({ row, expanded, onToggle }: { row: TargetJpRow; expand
             Target {row.targetJp} JP · Siap {row.siapJp} JP · Terjadwal {row.terjadwalJp} JP · Belum Siap {row.belumSiapJp} JP
           </p>
           {row.schedules.length === 0 ? (
-            <p className="mt-2 text-[12px] text-ink-400">Belum ada jadwal (draft/candidate/committed) untuk kombinasi ini.</p>
+            <p className="mt-2 text-[12px] text-ink-400">Belum ada jadwal untuk kombinasi ini.</p>
           ) : (
             <div className="mt-2 flex flex-wrap gap-1.5">
               {row.schedules.map((s, i) => (
                 <span key={i} className="rounded-lg border border-border bg-surface px-2 py-1 text-[11.5px] text-ink-700">
                   {formatHari(s.day)} · Jam {s.periodStart === s.periodEnd ? s.periodStart : `${s.periodStart}-${s.periodEnd}`}
-                  <span className="ml-1 text-ink-400">({s.status})</span>
+                  <span className="ml-1 text-ink-400">({SCHEDULE_STATUS_LABEL[s.status] ?? s.status})</span>
                 </span>
               ))}
             </div>

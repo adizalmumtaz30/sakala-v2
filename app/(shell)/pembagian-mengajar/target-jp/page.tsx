@@ -44,11 +44,25 @@ export default async function TargetJpPage() {
       }
     }
 
+    // §5 analisis mendalam: tandai (secara global, bukan per-baris — audit_log
+    // untuk jalur ini tidak menyimpan entity_id per baris) kalau konteks ini
+    // pernah dikoreksi lewat jalur manual/import, supaya operator tahu ada
+    // kemungkinan sebagian angka bukan murni dari Generate Kurikulum.
+    const { data: overrideLog } = await supabase
+      .from("audit_log")
+      .select("id")
+      .eq("entity_type", "target_jp")
+      .eq("academic_context_id", activeContext.id)
+      .eq("source", "import")
+      .limit(1);
+    const hasManualOverrideHistory = (overrideLog?.length ?? 0) > 0;
+
     return (
       <TargetJpWorkspace
         activeContextLabel={`${activeContext.tahunPelajaran} · ${activeContext.semester === "ganjil" ? "Ganjil" : "Genap"}`}
         view={view}
         curriculumAvailable={curriculumAvailable}
+        hasManualOverrideHistory={hasManualOverrideHistory}
       />
     );
   } catch {
