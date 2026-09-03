@@ -30,6 +30,11 @@ interface Props {
   guruList: Guru[];
   mapelList: MataPelajaran[];
   kelasList: Kelas[];
+  // §01 SAKALA V2 MASTER FINAL: JP belum-ada-guru resmi per kelas+mapel
+  // (dari Target JP), key `${kelasId}::${mataPelajaranId}`. Dipakai untuk
+  // mengusulkan JP otomatis saat operator menambah guru baru, supaya tidak
+  // perlu mengetik ulang angka yang sistem sudah tahu.
+  targetJpLookup: Record<string, number>;
 }
 
 const emptyForm = { guruId: "", mataPelajaranId: "", kelasIds: [] as string[], jpPerMinggu: "" };
@@ -42,6 +47,7 @@ export default function PembagianMengajarWorkspace({
   guruList,
   mapelList,
   kelasList,
+  targetJpLookup,
 }: Props) {
   const router = useRouter();
   const [data, setData] = useState<PembagianMengajar[]>(initialData);
@@ -50,6 +56,7 @@ export default function PembagianMengajarWorkspace({
   const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState<PembagianMengajar | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [jpTouched, setJpTouched] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -72,6 +79,7 @@ export default function PembagianMengajarWorkspace({
     if (!kelas || !mapel) return;
     setForm({ guruId: "", mataPelajaranId: mapelId, kelasIds: [kelasId], jpPerMinggu: "" });
     setEditing(null);
+    setJpTouched(false);
     setFormError(null);
     setModalOpen(true);
     setHighlightHint({ kelasLabel: `${kelas.tingkat} ${kelas.namaRombel}`, mapelLabel: mapel.nama });
@@ -81,6 +89,22 @@ export default function PembagianMengajarWorkspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // §01: usulkan JP otomatis dari Target JP resmi ("belum ada guru") begitu
+  // Mata Pelajaran + Kelas terpilih — hanya saat menambah baru (bukan edit,
+  // karena edit sudah punya nilai tersimpan) dan hanya kalau operator belum
+  // mengetik manual (jpTouched). Kalau kelas terpilih lebih dari satu dan
+  // nilainya beda-beda, tetap ambil dari kelas pertama; sisanya tetap dipakai
+  // per-kelas saat submit (lihat handleSubmit), bukan dipukul rata.
+  useEffect(() => {
+    if (editing || jpTouched) return;
+    if (!form.mataPelajaranId || form.kelasIds.length === 0) return;
+    const suggested = targetJpLookup[`${form.kelasIds[0]}::${form.mataPelajaranId}`];
+    if (suggested !== undefined && suggested > 0) {
+      setForm((f) => ({ ...f, jpPerMinggu: String(suggested) }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.mataPelajaranId, form.kelasIds, editing, jpTouched]);
+
   const filtered = data.filter((item) => {
     const haystack = `${item.guruNama ?? ""} ${item.mataPelajaranNama ?? ""} ${item.kelasLabel ?? ""}`.toLowerCase();
     return haystack.includes(query.toLowerCase());
@@ -89,6 +113,7 @@ export default function PembagianMengajarWorkspace({
   function openCreate() {
     setEditing(null);
     setForm(emptyForm);
+    setJpTouched(false);
     setFormError(null);
     setModalOpen(true);
   }
@@ -101,6 +126,7 @@ export default function PembagianMengajarWorkspace({
       kelasIds: [item.kelasId],
       jpPerMinggu: String(item.jpPerMinggu),
     });
+    setJpTouched(true);
     setFormError(null);
     setModalOpen(true);
   }
@@ -143,16 +169,20 @@ export default function PembagianMengajarWorkspace({
       }
 
       // Create: satu guru+mapel bisa langsung dipasang ke beberapa kelas sekaligus
-      // (Bagian "Pemilihan Kelas") — kirim satu draft per kelas terpilih, JP sama untuk semua.
+      // (Bagian "Pemilihan Kelas") — kirim satu draft per kelas terpilih.
+      // §01: kalau operator belum mengedit manual, JP tiap kelas diambil dari
+      // Target JP resmi kelas itu sendiri (bisa beda per kelas), bukan angka
+      // yang sama dipukul rata ke semua kelas.
       const failures: string[] = [];
       for (const kelasId of form.kelasIds) {
         const kelasLabel = kelasList.find((k) => k.id === kelasId);
+        const perKelasJp = jpTouched ? jpPerMinggu : (targetJpLookup[`${kelasId}::${form.mataPelajaranId}`] ?? jpPerMinggu);
         const draft: PembagianMengajarDraft = {
           academicContextId: activeContextId,
           guruId: form.guruId,
           mataPelajaranId: form.mataPelajaranId,
           kelasId,
-          jpPerMinggu,
+          jpPerMinggu: perKelasJp,
           status: "aktif" as StatusAktif,
         };
         const result = await createPembagianMengajarAction(draft);
@@ -397,13 +427,18 @@ export default function PembagianMengajarWorkspace({
               min={1}
               required
               value={form.jpPerMinggu}
-              onChange={(e) => setForm((f) => ({ ...f, jpPerMinggu: e.target.value }))}
+              onChange={(e) => { setJpTouched(true); setForm((f) => ({ ...f, jpPerMinggu: e.target.value })); }}
               placeholder="cth. 4"
               className="h-11 w-full rounded-xl border border-border bg-surface px-3.5 text-[13.5px] text-ink-900 outline-none focus:border-brand-600/50 focus:ring-2 focus:ring-brand-600/15 sm:w-40"
             />
+            {!editing && !jpTouched && form.jpPerMinggu && (
+              <p className="text-[12px] text-emerald-600">Diusulkan otomatis dari Target JP resmi — bisa diubah kalau perlu.</p>
+            )}
             {!editing && form.kelasIds.length > 1 && (
               <p className="text-[12px] text-ink-400">
-                Berlaku sama untuk {form.kelasIds.length} kelas terpilih — bisa diubah satu-satu lewat Edit nanti.
+                {jpTouched
+                  ? `Berlaku sama untuk ${form.kelasIds.length} kelas terpilih — bisa diubah satu-satu lewat Edit nanti.`
+                  : `Tiap kelas otomatis pakai JP Target JP resmi masing-masing — bisa beda per kelas.`}
               </p>
             )}
           </div>
