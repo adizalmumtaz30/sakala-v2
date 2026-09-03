@@ -50,6 +50,23 @@ export function tingkatSortValue(tingkat: string): number {
   return Number.POSITIVE_INFINITY;
 }
 
+/**
+ * Root fix: `kelas.tingkat` disimpan angka Arab ("7","8","9"), sementara
+ * `curriculum_item.class_level` (dari data kurikulum resmi/impor) disimpan
+ * angka Romawi ("VII","VIII","IX"). Perbandingan string langsung (`===`)
+ * SELALU gagal walau keduanya sama-sama "kelas 7" — ini menyebabkan setiap
+ * capability yang mencocokkan kelas ke item kurikulum (Commit Generate
+ * Kurikulum, kartu kontekstual Konteks Akademik/Mata Pelajaran/Dashboard,
+ * diagnosa AI) selalu menganggap "tidak ada yang cocok", padahal datanya ada.
+ * Satu fungsi ini dipakai di semua titik itu — jangan buat perbandingan
+ * manual baru di tempat lain.
+ */
+export function tingkatsMatch(a: string, b: string): boolean {
+  const av = tingkatSortValue(a);
+  const bv = tingkatSortValue(b);
+  return Number.isFinite(av) && av === bv;
+}
+
 export function sortKelasByTingkat(kelasList: Kelas[]): Kelas[] {
   return [...kelasList].sort((a, b) => {
     const diff = tingkatSortValue(a.tingkat) - tingkatSortValue(b.tingkat);

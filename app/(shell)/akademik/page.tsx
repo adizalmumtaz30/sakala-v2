@@ -6,6 +6,7 @@ import { listJamPelajaran } from "@/lib/application/jamPelajaran.usecases";
 import { listScheduleModels } from "@/lib/application/scheduleModel.usecases";
 import { listKelas } from "@/lib/application/kelas.usecases";
 import { listCurriculumIntelligenceAction } from "./mata-pelajaran/curriculum-actions";
+import { tingkatsMatch } from "@/lib/domain/kelas";
 import AkademikWorkspace from "./AkademikWorkspace";
 import { ErrorState } from "@/components/ui/primitives";
 
@@ -33,8 +34,8 @@ export default async function AkademikPage() {
     // [Siapkan Kurikulum] hanya saat memang belum ada (silent kalau sudah).
     let curriculumAvailable = true;
     if (activeContext) {
-      const classLevels = new Set(kelasList.map((k) => k.tingkat));
-      if (classLevels.size > 0) {
+      const classLevels = kelasList.map((k) => k.tingkat);
+      if (classLevels.length > 0) {
         const intelligence = await listCurriculumIntelligenceAction("all");
         curriculumAvailable = intelligence.ok
           ? intelligence.data.items.some((item) => {
@@ -42,7 +43,7 @@ export default async function AkademikPage() {
               if (!version || version.verification_status !== "verified") return false;
               const source = intelligence.data.sources.find((s) => s.id === version.source_id);
               if (!source || source.status !== "official" || source.source_tier !== 1) return false;
-              return classLevels.has(item.class_level);
+              return classLevels.some((t) => tingkatsMatch(t, item.class_level));
             })
           : true; // gagal cek → jangan tampilkan klaim "belum tersedia" yang keliru
       }

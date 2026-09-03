@@ -30,7 +30,7 @@ export default async function DashboardPage() {
     );
     const notifications = await getRecentNotifications(supabase, summary.activeContext.id).catch(() => []);
     const curriculumStatus = await getDashboardCurriculumStatus(
-      new Set(kelasList.map((k) => k.tingkat)),
+      kelasList.map((k) => k.tingkat),
       new Set(mapelRows.map((m: { nama?: string }) => (m.nama ?? "").trim().toLowerCase()))
     ).catch(() => ({ curriculumAvailable: true, unmatchedSubjectCount: 0 }));
     return <DashboardExperience

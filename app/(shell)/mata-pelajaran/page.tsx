@@ -3,6 +3,7 @@ import { listMataPelajaran } from "@/lib/application/mata-pelajaran.usecases";
 import { getActiveAcademicContext } from "@/lib/application/academicContext.usecases";
 import { listKelas } from "@/lib/application/kelas.usecases";
 import { listCurriculumIntelligenceAction } from "../akademik/mata-pelajaran/curriculum-actions";
+import { tingkatsMatch } from "@/lib/domain/kelas";
 import MataPelajaranWorkspace from "./MataPelajaranWorkspace";
 import { ErrorState } from "@/components/ui/primitives";
 
@@ -20,9 +21,9 @@ export default async function MataPelajaranPage({ searchParams }: { searchParams
     const activeContext = await getActiveAcademicContext(supabase);
     if (activeContext) {
       const kelasList = await listKelas(supabase, activeContext.id);
-      const classLevels = new Set(kelasList.map((k) => k.tingkat));
+      const classLevels = kelasList.map((k) => k.tingkat);
       const intelligence = await listCurriculumIntelligenceAction("all");
-      if (intelligence.ok && classLevels.size > 0) {
+      if (intelligence.ok && classLevels.length > 0) {
         const officialVersionIds = new Set(
           intelligence.data.versions
             .filter((v) => v.verification_status === "verified")
@@ -32,7 +33,7 @@ export default async function MataPelajaranPage({ searchParams }: { searchParams
         const existingNames = new Set(data.map((m) => m.nama.trim().toLowerCase()));
         const relevantNames = new Set(
           intelligence.data.items
-            .filter((item) => officialVersionIds.has(item.curriculum_version_id) && classLevels.has(item.class_level))
+            .filter((item) => officialVersionIds.has(item.curriculum_version_id) && classLevels.some((t) => tingkatsMatch(t, item.class_level)))
             .map((item) => item.subject_name)
         );
         unmatchedCurriculumSubjects = Array.from(relevantNames).filter((name) => !existingNames.has(name.trim().toLowerCase()));
