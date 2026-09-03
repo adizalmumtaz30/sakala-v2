@@ -225,7 +225,7 @@ export default function AiPage() {
                     ))}
                   </ul>
                   <p className="mt-2.5 text-[11px] text-ink-500">Saya belum mengubah data.</p>
-                  <a href="/pembagian-mengajar/target-jp" className="mt-2.5 inline-flex items-center gap-1.5 text-[12px] font-semibold text-violet hover:text-violet/80">Sesuaikan Target JP →</a>
+                  <a href="/akademik/generate-kurikulum" className="mt-2.5 inline-flex items-center gap-1.5 text-[12px] font-semibold text-violet hover:text-violet/80">Sesuaikan lewat Generate Kurikulum →</a>
                 </section>
               );
             })()}

@@ -5,6 +5,7 @@ import { listPembagianMengajar } from "@/lib/application/pembagianMengajar.useca
 import { listGuru } from "@/lib/application/guru.usecases";
 import { listMataPelajaran } from "@/lib/application/mata-pelajaran.usecases";
 import { listKelas } from "@/lib/application/kelas.usecases";
+import { getTargetJpView } from "@/lib/application/targetJp.usecases";
 import PembagianMengajarWorkspace from "./PembagianMengajarWorkspace";
 import { ErrorState, EmptyState } from "@/components/ui/primitives";
 
@@ -26,12 +27,22 @@ export default async function PembagianMengajarPage() {
       );
     }
 
-    const [items, guruList, mapelList, kelasList] = await Promise.all([
+    const [items, guruList, mapelList, kelasList, targetJpView] = await Promise.all([
       listPembagianMengajar(supabase, activeContext.id),
       listGuru(supabase),
       listMataPelajaran(supabase),
       listKelas(supabase),
+      getTargetJpView(supabase, activeContext.id).catch(() => ({ rows: [] })),
     ]);
+
+    // §01 SAKALA V2 MASTER FINAL: "tidak meminta input yang sebenarnya sudah
+    // diketahui sistem" — Target JP resmi per kelas+mapel sudah ada, jadi JP
+    // untuk penugasan guru baru bisa diusulkan otomatis (operator tetap bisa
+    // override manual), bukan selalu diketik dari nol.
+    const targetJpLookup: Record<string, number> = {};
+    for (const row of targetJpView.rows) {
+      targetJpLookup[`${row.kelasId}::${row.mataPelajaranId}`] = row.belumSiapJp;
+    }
 
     return (
       <Suspense fallback={null}>
@@ -42,6 +53,7 @@ export default async function PembagianMengajarPage() {
           guruList={guruList.filter((g) => g.status === "aktif")}
           mapelList={mapelList.filter((m) => m.status === "aktif")}
           kelasList={kelasList.filter((k) => k.status === "aktif")}
+          targetJpLookup={targetJpLookup}
         />
       </Suspense>
     );
