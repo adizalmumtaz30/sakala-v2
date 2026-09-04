@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import * as usecases from "@/lib/application/mata-pelajaran.usecases";
+import { toPlainDatabaseError } from "@/lib/utils/databaseError";
 import {
   MataPelajaranValidationError,
   type MataPelajaran,
@@ -94,6 +95,10 @@ export async function commitMapelImportAction(
 
 function toMessage(err: unknown): string {
   if (err instanceof MataPelajaranValidationError) return err.message;
+  // §1 temuan operator: hapus mapel gagal diam-diam karena error Postgres
+  // mentah (foreign key) tidak diterjemahkan — pakai penerjemah yang sudah
+  // ada di seluruh app, jangan buat terjemahan baru di sini.
+  if (err && typeof err === "object" && "code" in err) return toPlainDatabaseError(err);
   if (err instanceof Error) return err.message;
   return "Terjadi kesalahan yang tidak diketahui.";
 }

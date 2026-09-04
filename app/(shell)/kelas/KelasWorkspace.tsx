@@ -31,6 +31,7 @@ export default function KelasWorkspace({
   const [editing, setEditing] = useState<Kelas | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<{ id: string; nama: string; message: string } | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const filtered = data.filter((k) => k.namaRombel.toLowerCase().includes(query.toLowerCase()) || k.tingkat.toLowerCase().includes(query.toLowerCase()));
@@ -54,7 +55,13 @@ export default function KelasWorkspace({
 
   function handleDelete(id: string) {
     if (!confirm("Hapus kelas ini? Tindakan ini tidak dapat dibatalkan.")) return;
-    startTransition(async () => { const result = await deleteKelasAction(id); if (result.ok) setData((prev) => prev.filter((k) => k.id !== id)); });
+    setDeleteError(null);
+    const item = data.find((k) => k.id === id);
+    startTransition(async () => {
+      const result = await deleteKelasAction(id);
+      if (result.ok) setData((prev) => prev.filter((k) => k.id !== id));
+      else setDeleteError({ id, nama: item ? `${item.tingkat} ${item.namaRombel}` : "Kelas ini", message: result.error });
+    });
   }
 
   async function toggleStatus(k: Kelas) {
@@ -75,6 +82,16 @@ export default function KelasWorkspace({
         </div>
         <Button onClick={openCreate}><Plus size={16} /> Tambah Kelas</Button>
       </div>
+
+      {deleteError && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose/30 bg-rose-50 px-4 py-3">
+          <p className="text-[13px] text-rose-900"><span className="font-semibold">{deleteError.nama}</span> belum bisa dihapus — {deleteError.message}</p>
+          <div className="flex items-center gap-2">
+            <button onClick={() => { const k = data.find((x) => x.id === deleteError.id); if (k) void toggleStatus(k); setDeleteError(null); }} className="rounded-lg border border-rose/40 bg-white px-3 py-1.5 text-[12.5px] font-semibold text-rose-800 hover:bg-rose-100">Nonaktifkan saja</button>
+            <button onClick={() => setDeleteError(null)} className="text-[12.5px] text-rose-700 hover:underline">Tutup</button>
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-ink-400 sm:max-w-xs">
         <Search size={16} />

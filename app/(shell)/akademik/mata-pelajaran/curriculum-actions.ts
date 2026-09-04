@@ -271,16 +271,18 @@ export async function adoptCurriculumItemsAction(input: {
   classIds: string[];
   items: Array<{ id: string; weeklyTarget: number | null }>;
   /**
-   * Nama mata pelajaran baru yang SUDAH dikonfirmasi operator untuk dibuat.
-   * CANDIDATE-before-COMMIT (lihat prinsip UI Curriculum Intelligence):
-   * kalau ada nama mata pelajaran baru yang BELUM masuk daftar ini, action
-   * berhenti sebelum menulis apa pun dan mengembalikan needsConfirmation
-   * berikut daftarnya, supaya client bisa menampilkan preview eksplisit
-   * dulu — bukan diam-diam membuat Master Data baru di dalam Commit.
+   * Keputusan operator per nama mata pelajaran baru yang ditemukan, dari
+   * modal konfirmasi (lihat needsConfirmation di bawah): value "new" berarti
+   * "buat mapel terpisah", value lain adalah id mata_pelajaran yang sudah ada
+   * untuk "pakai yang itu saja, jangan buat dobel". CANDIDATE-before-COMMIT:
+   * kalau ada nama yang belum punya keputusan, action berhenti sebelum
+   * menulis apa pun dan mengembalikan needsConfirmation + saran kemiripan,
+   * supaya client bisa menampilkan pilihan eksplisit dulu.
    */
-  confirmedNewSubjects?: string[];
+  subjectDecisions?: Record<string, string>;
 }): Promise<
-  CurriculumActionResult<{ adopted: number; belumSiapCount: number }> | { ok: false; needsConfirmation: true; newSubjects: string[] }
+  | CurriculumActionResult<{ adopted: number; belumSiapCount: number }>
+  | { ok: false; needsConfirmation: true; newSubjects: Array<{ name: string; suggestion: { id: string; nama: string; kode: string | null } | null }> }
 > {
   if (!input.academicContextId || input.classIds.length === 0 || input.items.length === 0) {
     return { ok: false, error: "Academic Context, kelas, dan item kurikulum wajib dipilih." };
@@ -354,17 +356,58 @@ export async function adoptCurriculumItemsAction(input: {
   const itemMap = new Map(sourceItems.map((item) => [item.id, item]));
   const selectionMap = new Map(input.items.map((item) => [item.id, item]));
 
-  // Lookup nama subjek Master Data yang sudah ada, satu query untuk semua
-  // subject_name yang relevan — supaya kita tahu mana yang BARU sebelum
-  // menulis apa pun (CANDIDATE-before-COMMIT untuk Master Data juga, bukan
-  // cuma untuk Target JP).
-  const relevantSubjectNames = Array.from(new Set(sourceItems.map((item) => item.subject_name)));
-  const { data: existingSubjects, error: subjectLookupError } = await supabase
+  // Lookup nama subjek Master Data yang sudah ada. §2 temuan operator: sebelumnya
+  // ini cuma exact-match nama (.in("nama", ...)) — beda spasi/huruf besar-kecil
+  // dianggap mapel baru, bikin data dobel dan JP kesplit. Sekarang: (1) cocokkan
+  // nama yang dinormalisasi (tanpa peduli spasi/huruf besar-kecil) terhadap
+  // SEMUA mapel (termasuk yang nonaktif — mapel lama sering dinonaktifkan tapi
+  // datanya masih relevan untuk dicocokkan), lalu (2) kalau belum cocok juga,
+  // coba cocokkan singkatan dari nama kurikulum (mis. "Ilmu Pengetahuan Alam"
+  // -> "IPA") dengan Kode mapel yang sudah ada.
+  const normalizeSubjectName = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+  const SKIP_WORDS = new Set(["dan", "atau", "di", "ke", "dari", "yang", "untuk", "dengan", "dan/atau"]);
+  const significantWords = (s: string) => s.toLowerCase().replace(/[,/]/g, " ").split(/\s+/).filter((w) => w && !SKIP_WORDS.has(w));
+  const toAcronym = (s: string) => significantWords(s).map((w) => w[0]?.toUpperCase() ?? "").join("");
+  // Kontraksi suku kata ala "Muatan Lokal" -> "Mulok" (2-3 huruf pertama tiap
+  // kata signifikan digabung) — pola singkatan umum di sekolah/madrasah yang
+  // bukan akronim huruf-depan biasa.
+  const toContraction = (s: string) => significantWords(s).map((w) => w.slice(0, 3)).join("").toLowerCase();
+
+  const { data: allSubjects, error: subjectLookupError } = await supabase
     .from("mata_pelajaran")
-    .select("id,nama")
-    .in("nama", relevantSubjectNames);
+    .select("id,nama,kode,status");
   if (subjectLookupError) return { ok: false, error: toPlainDatabaseError(subjectLookupError) };
-  const subjectIdByName = new Map((existingSubjects ?? []).map((s) => [s.nama, s.id]));
+  const byNormalizedName = new Map((allSubjects ?? []).map((s) => [normalizeSubjectName(s.nama), s.id]));
+  const byKode = new Map((allSubjects ?? []).filter((s) => s.kode).map((s) => [s.kode!.trim().toUpperCase(), s.id]));
+  const relevantSubjectNames = Array.from(new Set(sourceItems.map((item) => item.subject_name)));
+  const subjectIdByName = new Map<string, string>();
+  for (const name of relevantSubjectNames) {
+    const matchId = byNormalizedName.get(normalizeSubjectName(name)) ?? byKode.get(toAcronym(name));
+    if (matchId) subjectIdByName.set(name, matchId);
+  }
+
+  // §3 masukan operator: kalau mirip/serupa/tujuannya sama/cuma singkatan,
+  // jangan langsung diam-diam anggap baru — cari kandidat kemiripan supaya
+  // modal konfirmasi bisa menawarkan "pakai yang sudah ada" sebagai pilihan
+  // (bukan cuma "ya, buat baru" seperti sebelumnya). Ini SARAN, bukan
+  // auto-link — operator yang memutuskan.
+  function findSimilar(name: string): { id: string; nama: string; kode: string | null } | null {
+    const acronym = toAcronym(name);
+    const contraction = toContraction(name);
+    const words = new Set(significantWords(name));
+    let best: { id: string; nama: string; kode: string | null; score: number } | null = null;
+    for (const s of allSubjects ?? []) {
+      let score = 0;
+      if (s.kode && s.kode.trim().toUpperCase() === acronym) score = Math.max(score, 0.95);
+      if (s.kode && s.kode.trim().toLowerCase() === contraction) score = Math.max(score, 0.9);
+      const otherWords = new Set(significantWords(s.nama));
+      const overlap = Array.from(words).filter((w) => otherWords.has(w)).length;
+      const jaccard = overlap / Math.min(words.size, otherWords.size || 1);
+      if (jaccard >= 0.5) score = Math.max(score, jaccard);
+      if (score > 0 && (!best || score > best.score)) best = { id: s.id, nama: s.nama, kode: s.kode, score };
+    }
+    return best && best.score >= 0.5 ? { id: best.id, nama: best.nama, kode: best.kode } : null;
+  }
 
   type PendingRow = { classId: string; item: (typeof sourceItems)[number]; schoolTarget: number };
   const pending: PendingRow[] = [];
@@ -398,14 +441,36 @@ export async function adoptCurriculumItemsAction(input: {
   }
 
   // CANDIDATE-before-COMMIT untuk Master Data: kalau ada mata pelajaran baru
-  // yang belum dikonfirmasi operator, berhenti di sini — TIDAK ada
+  // yang belum ada keputusan operator, berhenti di sini — TIDAK ada
   // mata_pelajaran/curriculum_adoption/target_jp yang ditulis. Client
-  // menampilkan daftar ini, operator meninjau, baru submit ulang dengan
-  // confirmedNewSubjects terisi.
-  const confirmed = new Set(input.confirmedNewSubjects ?? []);
-  const stillUnconfirmed = Array.from(newSubjectNames).filter((name) => !confirmed.has(name));
-  if (stillUnconfirmed.length > 0) {
-    return { ok: false, needsConfirmation: true, newSubjects: stillUnconfirmed.sort() };
+  // menampilkan pilihan (pakai yang sudah ada / buat baru) per nama, operator
+  // memutuskan, baru submit ulang dengan subjectDecisions terisi.
+  const decisions = input.subjectDecisions ?? {};
+  const stillUndecided = Array.from(newSubjectNames).filter((name) => !(name in decisions));
+  if (stillUndecided.length > 0) {
+    return {
+      ok: false,
+      needsConfirmation: true,
+      newSubjects: stillUndecided.sort().map((name) => ({ name, suggestion: findSimilar(name) })),
+    };
+  }
+  // Terapkan keputusan "pakai yang sudah ada" — nama itu jadi sudah cocok,
+  // tidak lagi dianggap mata pelajaran baru.
+  for (const [name, decision] of Object.entries(decisions)) {
+    if (decision !== "new" && newSubjectNames.has(name)) {
+      subjectIdByName.set(name, decision);
+      newSubjectNames.delete(name);
+    }
+  }
+
+  // Mapel yang cocok tapi statusnya nonaktif (mis. peninggalan data lama yang
+  // sempat dinonaktifkan) diaktifkan lagi — kalau kurikulum resmi masih
+  // mengajarkannya, tidak masuk akal datanya tetap nonaktif dan hilang dari
+  // pilihan di halaman lain.
+  const matchedIds = Array.from(new Set(subjectIdByName.values()));
+  const idsToReactivate = (allSubjects ?? []).filter((s) => matchedIds.includes(s.id) && s.status === "nonaktif").map((s) => s.id);
+  if (idsToReactivate.length > 0) {
+    await supabase.from("mata_pelajaran").update({ status: "aktif" }).in("id", idsToReactivate);
   }
 
   // Semua mata pelajaran baru sudah dikonfirmasi — buat dengan default yang

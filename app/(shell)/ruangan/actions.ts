@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { toPlainDatabaseError } from "@/lib/utils/databaseError";
 import * as usecases from "@/lib/application/ruangan.usecases";
 import { RuanganValidationError, type Ruangan, type StatusAktif } from "@/lib/domain/ruangan";
 
@@ -53,6 +54,7 @@ export async function deleteRuanganAction(id: string): Promise<ActionResult<null
 
 function toMessage(err: unknown): string {
   if (err instanceof RuanganValidationError) return err.message;
+  if (err && typeof err === "object" && "code" in err) return toPlainDatabaseError(err);
   if (err instanceof Error) return err.message;
   return "Terjadi kesalahan yang tidak diketahui.";
 }

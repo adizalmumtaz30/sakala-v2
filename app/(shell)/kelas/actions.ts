@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { toPlainDatabaseError } from "@/lib/utils/databaseError";
 import * as usecases from "@/lib/application/kelas.usecases";
 import { getActiveAcademicContext } from "@/lib/application/academicContext.usecases";
 import { KelasValidationError, type Kelas, type StatusAktif } from "@/lib/domain/kelas";
@@ -59,6 +60,7 @@ export async function deleteKelasAction(id: string): Promise<ActionResult<null>>
 
 function toMessage(err: unknown): string {
   if (err instanceof KelasValidationError) return err.message;
+  if (err && typeof err === "object" && "code" in err) return toPlainDatabaseError(err);
   if (err instanceof Error) return err.message;
   return "Terjadi kesalahan yang tidak diketahui.";
 }
