@@ -29,6 +29,7 @@ export async function createPembagianMengajarAction(
     const supabase = await createClient();
     const item = await usecases.createPembagianMengajar(supabase, draft);
     revalidatePath("/pembagian-mengajar");
+    revalidatePath("/pembagian-mengajar/target-jp");
     return { ok: true, data: item };
   } catch (err) {
     return { ok: false, error: toMessage(err) };

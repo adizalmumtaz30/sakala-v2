@@ -1,18 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ChevronDown, ChevronRight, Sparkles } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronRight, Sparkles, UserPlus } from "lucide-react";
 import type { TargetJpView, TargetJpRow, TargetJpStatus } from "@/lib/application/targetJp.usecases";
 import { formatHari } from "@/lib/domain/jamPelajaran";
+import type { Guru } from "@/lib/domain/guru";
 import { Card, Badge, EmptyState } from "@/components/ui/primitives";
 import TargetJpImportPanel from "./TargetJpImportPanel";
+import { createPembagianMengajarAction } from "../actions";
 
 interface Props {
+  activeContextId: string;
   activeContextLabel: string;
   view: TargetJpView;
   curriculumAvailable: boolean;
   hasManualOverrideHistory: boolean;
+  guruList: Guru[];
 }
 
 // Kontrak §53-54 — bahasa operator, bukan istilah teknis.
@@ -39,7 +44,7 @@ const SCHEDULE_STATUS_LABEL: Record<string, string> = {
   cancelled: "dibatalkan",
 };
 
-export default function TargetJpWorkspace({ activeContextLabel, view, curriculumAvailable, hasManualOverrideHistory }: Props) {
+export default function TargetJpWorkspace({ activeContextId, activeContextLabel, view, curriculumAvailable, hasManualOverrideHistory, guruList }: Props) {
   // §1 analisis mendalam: default filter jangan tenggelamkan masalah di antara
   // baris sehat — kalau ada kombinasi yang guru-nya belum ditentukan, itu yang
   // langsung ditampilkan duluan. Cuma default ke "semua" kalau memang semuanya
@@ -48,6 +53,41 @@ export default function TargetJpWorkspace({ activeContextLabel, view, curriculum
   const [filter, setFilter] = useState<TargetJpStatus | "semua">(hasProblem ? "belum_siap" : "semua");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showManage, setShowManage] = useState(false);
+  // §2 masukan operator: tugaskan guru langsung dari sini, tanpa pindah ke
+  // Pembagian Mengajar — reuse capability yang sama (createPembagianMengajarAction),
+  // bukan alur baru.
+  const [assigningRow, setAssigningRow] = useState<TargetJpRow | null>(null);
+  const [assignGuruId, setAssignGuruId] = useState("");
+  const [assignJp, setAssignJp] = useState("");
+  const [assignError, setAssignError] = useState<string | null>(null);
+  const [isAssigning, startAssign] = useTransition();
+  const router = useRouter();
+
+  function openAssign(row: TargetJpRow) {
+    setAssigningRow(row);
+    setAssignGuruId("");
+    setAssignJp(String(row.belumSiapJp));
+    setAssignError(null);
+  }
+
+  function submitAssign() {
+    if (!assigningRow || !assignGuruId) return;
+    const jp = Number(assignJp) || 0;
+    if (jp <= 0) { setAssignError("JP harus lebih dari 0."); return; }
+    startAssign(async () => {
+      const result = await createPembagianMengajarAction({
+        academicContextId: activeContextId,
+        guruId: assignGuruId,
+        mataPelajaranId: assigningRow.mataPelajaranId,
+        kelasId: assigningRow.kelasId,
+        jpPerMinggu: jp,
+        status: "aktif",
+      });
+      if (!result.ok) { setAssignError(result.error); return; }
+      setAssigningRow(null);
+      router.refresh();
+    });
+  }
 
   const filteredRows = filter === "semua" ? view.rows : view.rows.filter((r) => r.status === filter);
 
@@ -198,32 +238,67 @@ export default function TargetJpWorkspace({ activeContextLabel, view, curriculum
         ) : (
           <ul>
             {filteredRows.map((row) => (
-              <TargetJpRowItem key={row.id} row={row} expanded={expandedId === row.id} onToggle={() => setExpandedId((cur) => (cur === row.id ? null : row.id))} />
+              <TargetJpRowItem key={row.id} row={row} expanded={expandedId === row.id} onToggle={() => setExpandedId((cur) => (cur === row.id ? null : row.id))} onAssign={() => openAssign(row)} />
             ))}
           </ul>
         )}
       </Card>
+
+      {assigningRow && (
+        <div className="fixed inset-0 z-[60] bg-black/20 p-4" onClick={() => setAssigningRow(null)}>
+          <div role="dialog" aria-modal="true" className="mx-auto mt-[15vh] w-full max-w-sm rounded-2xl border border-border bg-surface p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <p className="text-[13.5px] font-bold text-ink-900">Tugaskan Guru</p>
+            <p className="mt-0.5 text-[12.5px] text-ink-600">{assigningRow.mataPelajaranNama} · {assigningRow.kelasLabel}</p>
+            <div className="mt-4 flex flex-col gap-1.5">
+              <label className="text-[12.5px] font-medium text-ink-700">Guru</label>
+              <select value={assignGuruId} onChange={(e) => setAssignGuruId(e.target.value)} className="h-11 rounded-xl border border-border bg-surface px-3.5 text-[13.5px] text-ink-900 outline-none">
+                <option value="">Pilih guru...</option>
+                {guruList.map((g) => <option key={g.id} value={g.id}>{g.namaGuru}</option>)}
+              </select>
+            </div>
+            <div className="mt-3 flex flex-col gap-1.5">
+              <label className="text-[12.5px] font-medium text-ink-700">JP / Minggu</label>
+              <input type="number" min={1} value={assignJp} onChange={(e) => setAssignJp(e.target.value)} className="h-11 w-28 rounded-xl border border-border bg-surface px-3.5 text-[13.5px] text-ink-900 outline-none" />
+              <p className="text-[11.5px] text-emerald-600">Diusulkan otomatis dari sisa Target JP — bisa diubah.</p>
+            </div>
+            {assignError && <p className="mt-2 text-[12px] text-rose-700">{assignError}</p>}
+            <div className="mt-5 flex justify-end gap-2">
+              <button onClick={() => setAssigningRow(null)} className="rounded-xl border border-border px-3.5 py-2 text-[13px] font-semibold text-ink-700">Batal</button>
+              <button onClick={submitAssign} disabled={!assignGuruId || isAssigning} className="rounded-xl bg-brand-600 px-3.5 py-2 text-[13px] font-bold text-white disabled:opacity-50">{isAssigning ? "Menyimpan..." : "Simpan"}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function TargetJpRowItem({ row, expanded, onToggle }: { row: TargetJpRow; expanded: boolean; onToggle: () => void }) {
+function TargetJpRowItem({ row, expanded, onToggle, onAssign }: { row: TargetJpRow; expanded: boolean; onToggle: () => void; onAssign: () => void }) {
   return (
     <li className="border-b border-border last:border-0">
-      <button onClick={onToggle} className="flex w-full flex-wrap items-center gap-3 px-5 py-3 text-left hover:bg-surface-muted/60">
-        {expanded ? <ChevronDown size={14} className="shrink-0 text-ink-300" /> : <ChevronRight size={14} className="shrink-0 text-ink-300" />}
-        <div className="min-w-[160px] flex-1">
-          <p className="text-[13.5px] font-medium text-ink-900">{row.mataPelajaranNama} · {row.kelasLabel}</p>
-          <p className="text-[12px] text-ink-400">
-            {row.guruAssignments.length === 0 ? "Guru belum ditentukan" : row.guruAssignments.map((g) => g.guruNama).join(", ")}
-          </p>
-        </div>
-        <span className="text-[12px] text-ink-400">
-          {row.terjadwalJp}/{row.targetJp} JP{" "}
-          {row.belumSiapJp > 0 && <span className="text-rose">({row.belumSiapJp} belum ada guru)</span>}
-        </span>
-        <Badge tone={STATUS_TONE[row.status]}>{STATUS_LABEL[row.status]}</Badge>
-      </button>
+      <div className="flex w-full flex-wrap items-center gap-3 px-5 py-3 hover:bg-surface-muted/60">
+        <button onClick={onToggle} className="flex flex-1 flex-wrap items-center gap-3 text-left">
+          {expanded ? <ChevronDown size={14} className="shrink-0 text-ink-300" /> : <ChevronRight size={14} className="shrink-0 text-ink-300" />}
+          <div className="min-w-[160px] flex-1">
+            <p className="text-[13.5px] font-medium text-ink-900">{row.mataPelajaranNama} · {row.kelasLabel}</p>
+            <p className="text-[12px] text-ink-400">
+              {row.guruAssignments.length === 0 ? "Guru belum ditentukan" : row.guruAssignments.map((g) => g.guruNama).join(", ")}
+            </p>
+          </div>
+          <span className="text-[12px] text-ink-400">
+            {row.terjadwalJp}/{row.targetJp} JP{" "}
+            {row.belumSiapJp > 0 && <span className="text-rose">({row.belumSiapJp} belum ada guru)</span>}
+          </span>
+          <Badge tone={STATUS_TONE[row.status]}>{STATUS_LABEL[row.status]}</Badge>
+        </button>
+        {/* §2 masukan operator: selesaikan di tempat, jangan cuma kasih tahu
+            lalu suruh pindah halaman. */}
+        {row.status === "belum_siap" && (
+          <button onClick={onAssign} className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-2.5 py-1.5 text-[12px] font-semibold text-white hover:bg-brand-700">
+            <UserPlus size={13} /> Tugaskan Guru
+          </button>
+        )}
+      </div>
 
       {expanded && (
         <div className="border-t border-dashed border-border bg-surface-muted/40 px-5 py-3 pl-11">

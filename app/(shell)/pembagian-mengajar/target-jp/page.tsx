@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getActiveAcademicContext } from "@/lib/application/academicContext.usecases";
 import { getTargetJpView } from "@/lib/application/targetJp.usecases";
+import { listGuru } from "@/lib/application/guru.usecases";
 import { listCurriculumIntelligenceAction } from "../../akademik/mata-pelajaran/curriculum-actions";
 import TargetJpWorkspace from "./TargetJpWorkspace";
 import { ErrorState, EmptyState } from "@/components/ui/primitives";
@@ -57,12 +58,19 @@ export default async function TargetJpPage() {
       .limit(1);
     const hasManualOverrideHistory = (overrideLog?.length ?? 0) > 0;
 
+    // §2 solusi "tidak perlu pindah halaman": daftar guru aktif untuk
+    // tugaskan langsung dari baris "Guru Belum Ditentukan", tanpa harus ke
+    // Pembagian Mengajar dulu.
+    const guruList = await listGuru(supabase);
+
     return (
       <TargetJpWorkspace
+        activeContextId={activeContext.id}
         activeContextLabel={`${activeContext.tahunPelajaran} · ${activeContext.semester === "ganjil" ? "Ganjil" : "Genap"}`}
         view={view}
         curriculumAvailable={curriculumAvailable}
         hasManualOverrideHistory={hasManualOverrideHistory}
+        guruList={guruList.filter((g) => g.status === "aktif")}
       />
     );
   } catch {
