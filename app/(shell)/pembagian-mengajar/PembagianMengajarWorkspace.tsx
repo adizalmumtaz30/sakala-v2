@@ -20,7 +20,7 @@ import {
 import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import Avatar from "@/components/ui/Avatar";
-import { Card, Badge, EmptyState } from "@/components/ui/primitives";
+import { Card, Badge, EmptyState, StatusSwitch } from "@/components/ui/primitives";
 import ImportModal, { type ImportRowResult } from "@/components/import/ImportModal";
 
 interface Props {
@@ -318,11 +318,7 @@ export default function PembagianMengajarWorkspace({
                   <Badge tone={jpTone}>
                     {item.jpTerjadwal ?? 0} / {item.jpPerMinggu} JP
                   </Badge>
-                  <button onClick={() => handleToggleStatus(item)} disabled={isPending}>
-                    <Badge tone={item.status === "aktif" ? "success" : "neutral"}>
-                      {item.status === "aktif" ? "Aktif" : "Nonaktif"}
-                    </Badge>
-                  </button>
+                  <StatusSwitch checked={item.status === "aktif"} onToggle={() => handleToggleStatus(item)} disabled={isPending} label={`Status ${item.guruNama ?? "penugasan"}`} />
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => openEdit(item)}

@@ -10,7 +10,7 @@ import { createMataPelajaranAction, updateMataPelajaranAction, deleteMataPelajar
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Modal from "@/components/ui/Modal";
-import { Card, Badge, EmptyState } from "@/components/ui/primitives";
+import { Card, Badge, EmptyState, StatusSwitch } from "@/components/ui/primitives";
 import ImportModal, { type ImportRowResult } from "@/components/import/ImportModal";
 
 const emptyForm = {
@@ -170,7 +170,7 @@ export default function MataPelajaranWorkspace({ initialData, initialQuery, unma
           </tr></thead><tbody>{filtered.map((m) => <tr key={m.id} className="border-b border-border last:border-0 hover:bg-surface-muted/60">
             <td className="px-5 py-3.5"><div className="flex items-center gap-2.5"><span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: m.warnaJadwal ?? "#C6CAD3" }} aria-hidden="true" /><div><p className="font-medium text-ink-900">{m.nama}</p><p className="text-[12px] text-ink-400">{m.kode ?? "—"}</p></div></div></td>
             <td className="px-5 py-3.5 text-ink-500">{m.kelompok ?? "—"}</td><td className="px-5 py-3.5 text-ink-500">{m.prioritasPenjadwalan ? PRIORITAS_LABEL[m.prioritasPenjadwalan] : "—"}</td>
-            <td className="px-5 py-3.5"><button onClick={() => void toggleStatus(m)} disabled={togglingId === m.id} className="disabled:opacity-50"><Badge tone={m.status === "aktif" ? "success" : "neutral"}>{m.status === "aktif" ? "Aktif" : "Nonaktif"}</Badge></button></td>
+            <td className="px-5 py-3.5"><StatusSwitch checked={m.status === "aktif"} onToggle={() => void toggleStatus(m)} disabled={togglingId === m.id} label={`Status ${m.nama}`} /></td>
             <td className="px-5 py-3.5"><div className="flex items-center justify-end gap-1"><button onClick={() => openEdit(m)} className="rounded-lg p-1.5 text-ink-400 hover:bg-surface hover:text-ink-900" aria-label="Edit"><Pencil size={15} /></button><button onClick={() => handleDelete(m.id)} className="rounded-lg p-1.5 text-ink-400 hover:bg-rose-50 hover:text-rose" aria-label="Hapus"><Trash2 size={15} /></button></div></td>
           </tr>)}</tbody></table>
         )}
