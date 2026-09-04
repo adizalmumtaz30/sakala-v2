@@ -37,6 +37,50 @@ export function Badge({ tone = "neutral", children, title, className }: { tone?:
   );
 }
 
+// §4 masukan operator: "aku ingin ada saklar beneran — klik aktif jadi
+// hijau, klik lagi jadi nonaktif merah, bukan cuma teks/badge yang diklik."
+// Satu komponen dipakai ulang di semua fitur yang punya status aktif/nonaktif
+// (Guru, Mata Pelajaran, Kelas, Ruangan, Pembagian Mengajar, dst) — bukan
+// implementasi beda-beda tiap halaman.
+export function StatusSwitch({
+  checked,
+  onToggle,
+  disabled,
+  label,
+}: {
+  checked: boolean;
+  onToggle: () => void;
+  disabled?: boolean;
+  label?: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label ?? (checked ? "Aktif, klik untuk nonaktifkan" : "Nonaktif, klik untuk aktifkan")}
+      onClick={onToggle}
+      disabled={disabled}
+      className={`inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50`}
+    >
+      <span
+        className={`relative h-[22px] w-[38px] shrink-0 rounded-full transition-colors duration-200 ${
+          checked ? "bg-emerald-500" : "bg-rose-400"
+        }`}
+      >
+        <span
+          className={`absolute top-[2px] h-[18px] w-[18px] rounded-full bg-white shadow transition-transform duration-200 ${
+            checked ? "translate-x-[18px]" : "translate-x-[2px]"
+          }`}
+        />
+      </span>
+      <span className={`text-[12.5px] font-semibold ${checked ? "text-emerald-700" : "text-rose-700"}`}>
+        {checked ? "Aktif" : "Nonaktif"}
+      </span>
+    </button>
+  );
+}
+
 // Bagian 15.2 — Empty state
 export function EmptyState({
   title,
