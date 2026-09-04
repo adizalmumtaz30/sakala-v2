@@ -148,6 +148,9 @@ export interface TargetJpView {
   overallTargetJp: number;
   overallSiapJp: number;
   overallBelumSiapJp: number;
+  /** Total JP yang "terbuang" karena kelebihan alokasi di kombinasi tertentu —
+   * penjelasan kenapa (Target - total JP guru) bisa lebih kecil dari overallBelumSiapJp. */
+  overallAssignedExcessJp: number;
   overallTerjadwalJp: number;
   overallBelumTerjadwalJp: number;
 }
@@ -254,6 +257,7 @@ export async function getTargetJpView(supabase: SupabaseClient, academicContextI
     overallTargetJp: rows.reduce((sum, r) => sum + r.targetJp, 0),
     overallSiapJp: rows.reduce((sum, r) => sum + r.siapJp, 0),
     overallBelumSiapJp: rows.reduce((sum, r) => sum + r.belumSiapJp, 0),
+    overallAssignedExcessJp: rows.reduce((sum, r) => sum + r.assignedExcessJp, 0),
     overallTerjadwalJp: rows.reduce((sum, r) => sum + r.terjadwalJp, 0),
     overallBelumTerjadwalJp: rows.reduce((sum, r) => sum + r.belumTerjadwalJp, 0),
   };

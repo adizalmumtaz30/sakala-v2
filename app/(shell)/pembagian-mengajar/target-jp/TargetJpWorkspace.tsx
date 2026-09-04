@@ -149,7 +149,7 @@ export default function TargetJpWorkspace({ activeContextLabel, view, curriculum
           {view.overallTargetJp === 0
             ? "Belum ada Target JP resmi untuk konteks ini. Isi lewat Generate Kurikulum terlebih dahulu."
             : view.overallBelumSiapJp > 0
-              ? <>Target JP resmi <b>{view.overallTargetJp}</b>. <b>{view.overallSiapJp}</b> JP sudah punya guru dan siap dijadwalkan, <b className="text-rose">{view.overallBelumSiapJp} JP belum punya guru</b>.</>
+              ? <>Target JP resmi <b>{view.overallTargetJp}</b>. <b>{view.overallSiapJp}</b> JP sudah punya guru dan siap dijadwalkan, <b className="text-rose">{view.overallBelumSiapJp} JP belum punya guru</b>{view.overallAssignedExcessJp > 0 ? <> (termasuk <b>{view.overallAssignedExcessJp} JP</b> yang terbuang karena ada kombinasi kelas×mapel lain yang gurunya dialokasikan melebihi target — kelebihan itu tidak bisa menutupi kekurangan di kombinasi lain)</> : null}.</>
               : view.overallBelumTerjadwalJp > 0
                 ? <>Semua {view.overallTargetJp} JP sudah punya guru. <b>{view.overallTerjadwalJp}</b> JP sudah masuk jadwal, <b>{view.overallBelumTerjadwalJp} JP</b> masih menunggu slot.</>
                 : <>🟢 {view.overallTargetJp}/{view.overallTargetJp} JP sudah terjadwal.</>}

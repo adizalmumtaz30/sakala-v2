@@ -491,7 +491,7 @@ function SmartInsight({ jpInsight, bebanTertinggi, bebanDistribution, scheduleCo
     signals.push({ level: "critical", text: `${scheduleConflicts.total} bentrok jadwal aktif (guru/kelas/ruangan terjadwal bersamaan)${scheduleConflicts.samples[0] ? ` — ${scheduleConflicts.samples[0]}` : ""}`, href: "/jadwal" });
   }
   if (jpInsight.belumSiapJp > 0) {
-    signals.push({ level: "critical", text: `${jpInsight.belumSiapJp} JP dari Target JP resmi belum punya guru sama sekali.`, href: "/pembagian-mengajar" });
+    signals.push({ level: "critical", text: `${jpInsight.belumSiapJp} JP dari Target JP resmi belum punya guru sama sekali${jpInsight.assignedExcessJp > 0 ? ` (termasuk ${jpInsight.assignedExcessJp} JP yang terbuang karena kelebihan alokasi guru di kombinasi kelas×mapel lain)` : ""}.`, href: "/pembagian-mengajar" });
   }
   if (jpInsight.countByStatus.sebagian_terjadwal > 0) {
     signals.push({ level: "warning", text: `${jpInsight.countByStatus.sebagian_terjadwal} kombinasi sudah punya guru tapi baru sebagian masuk jadwal.`, href: "/pembagian-mengajar/target-jp" });
