@@ -59,6 +59,8 @@ export interface DashboardJpInsight {
   completionPercent: number;
   /** JP yang belum punya guru sama sekali — beda dari "belum terjadwal" (sudah ada guru, tinggal dijadwalkan). */
   belumSiapJp: number;
+  /** Dari belumSiapJp, berapa yang sebenarnya "terbuang" karena kelebihan alokasi guru di kombinasi lain — bukan murni kekurangan. */
+  assignedExcessJp: number;
 }
 
 // SAKALA MASTER RULE (Production Flow, Authority & AI Action Contract):
@@ -125,7 +127,7 @@ export async function getDashboardSummary(supabase: SupabaseClient): Promise<Das
       schoolProfile,
       activeContext: null,
       metrics: baseMetrics,
-      jpInsight: { totalKombinasi: 0, countByStatus: EMPTY_JP_COUNT, completionPercent: 0, belumSiapJp: 0 },
+      jpInsight: { totalKombinasi: 0, countByStatus: EMPTY_JP_COUNT, completionPercent: 0, belumSiapJp: 0, assignedExcessJp: 0 },
       workloadTop: [],
       scheduleConflicts: { total: 0, samples: [] },
       metricTrends: null,
@@ -214,7 +216,7 @@ export async function getDashboardSummary(supabase: SupabaseClient): Promise<Das
     schoolProfile,
     activeContext,
     metrics: finalMetrics,
-    jpInsight: { totalKombinasi: targetJpView.rows.length, countByStatus, completionPercent, belumSiapJp: targetJpView.overallBelumSiapJp },
+    jpInsight: { totalKombinasi: targetJpView.rows.length, countByStatus, completionPercent, belumSiapJp: targetJpView.overallBelumSiapJp, assignedExcessJp: targetJpView.overallAssignedExcessJp },
     workloadTop,
     scheduleConflicts,
     metricTrends,
