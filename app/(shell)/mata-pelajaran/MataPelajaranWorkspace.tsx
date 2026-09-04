@@ -34,6 +34,7 @@ export default function MataPelajaranWorkspace({ initialData, initialQuery, unma
   const [form, setForm] = useState<FormState>(emptyForm);
   const [formError, setFormError] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<{ id: string; nama: string; message: string } | null>(null);
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => setData(initialData), [initialData]);
@@ -68,7 +69,13 @@ export default function MataPelajaranWorkspace({ initialData, initialQuery, unma
 
   function handleDelete(id: string) {
     if (!confirm("Hapus mata pelajaran ini?")) return;
-    startTransition(async () => { const result = await deleteMataPelajaranAction(id); if (result.ok) setData((prev) => prev.filter((m) => m.id !== id)); });
+    setDeleteError(null);
+    const item = data.find((m) => m.id === id);
+    startTransition(async () => {
+      const result = await deleteMataPelajaranAction(id);
+      if (result.ok) setData((prev) => prev.filter((m) => m.id !== id));
+      else setDeleteError({ id, nama: item?.nama ?? "Mapel ini", message: result.error });
+    });
   }
 
   async function toggleStatus(m: MataPelajaran) {
@@ -130,6 +137,23 @@ export default function MataPelajaranWorkspace({ initialData, initialQuery, unma
             </div>
           </div>
         </Card>
+      )}
+
+      {deleteError && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose/30 bg-rose-50 px-4 py-3">
+          <p className="text-[13px] text-rose-900">
+            <span className="font-semibold">{deleteError.nama}</span> belum bisa dihapus — {deleteError.message}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => { const m = data.find((x) => x.id === deleteError.id); if (m) void toggleStatus(m); setDeleteError(null); }}
+              className="rounded-lg border border-rose/40 bg-white px-3 py-1.5 text-[12.5px] font-semibold text-rose-800 hover:bg-rose-100"
+            >
+              Nonaktifkan saja
+            </button>
+            <button onClick={() => setDeleteError(null)} className="text-[12.5px] text-rose-700 hover:underline">Tutup</button>
+          </div>
+        </div>
       )}
 
       <div className="flex items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-ink-400 sm:max-w-xs">

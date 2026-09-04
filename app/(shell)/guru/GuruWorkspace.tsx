@@ -26,6 +26,7 @@ export default function GuruWorkspace({ initialData, initialQuery }: { initialDa
   const [showMore, setShowMore] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<{ id: string; nama: string; message: string } | null>(null);
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => setData(initialData), [initialData]);
@@ -63,7 +64,13 @@ export default function GuruWorkspace({ initialData, initialQuery }: { initialDa
 
   function handleDelete(id: string) {
     if (!confirm("Hapus data guru ini? Tindakan tidak bisa dibatalkan.")) return;
-    startTransition(async () => { const result = await deleteGuruAction(id); if (result.ok) setData((prev) => prev.filter((g) => g.id !== id)); });
+    setDeleteError(null);
+    const item = data.find((g) => g.id === id);
+    startTransition(async () => {
+      const result = await deleteGuruAction(id);
+      if (result.ok) setData((prev) => prev.filter((g) => g.id !== id));
+      else setDeleteError({ id, nama: item?.namaGuru ?? "Guru ini", message: result.error });
+    });
   }
 
   async function toggleStatus(guru: Guru) {
@@ -96,6 +103,16 @@ export default function GuruWorkspace({ initialData, initialQuery }: { initialDa
         </div>
         <div className="flex items-center gap-2"><Button variant="secondary" onClick={() => setImportOpen(true)}><Upload size={16} /> Impor Data</Button><Button onClick={openCreate}><Plus size={16} /> Tambah Guru</Button></div>
       </div>
+
+      {deleteError && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose/30 bg-rose-50 px-4 py-3">
+          <p className="text-[13px] text-rose-900"><span className="font-semibold">{deleteError.nama}</span> belum bisa dihapus — {deleteError.message}</p>
+          <div className="flex items-center gap-2">
+            <button onClick={() => { const g = data.find((x) => x.id === deleteError.id); if (g) void toggleStatus(g); setDeleteError(null); }} className="rounded-lg border border-rose/40 bg-white px-3 py-1.5 text-[12.5px] font-semibold text-rose-800 hover:bg-rose-100">Nonaktifkan saja</button>
+            <button onClick={() => setDeleteError(null)} className="text-[12.5px] text-rose-700 hover:underline">Tutup</button>
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-ink-400 sm:max-w-xs"><Search size={16} aria-hidden="true" /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Cari guru..." aria-label="Cari guru" className="flex-1 bg-transparent text-[13px] text-ink-900 outline-none placeholder:text-ink-400" /></div>
 

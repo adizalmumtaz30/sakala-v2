@@ -54,7 +54,9 @@ export default function GenerateKurikulumPage() {
   const [progress, setProgress] = useState(0);
   const [syncStep, setSyncStep] = useState(0);
   const [compareOpen, setCompareOpen] = useState(false);
-  const [newSubjectsToConfirm, setNewSubjectsToConfirm] = useState<string[] | null>(null);
+  const [newSubjectsToConfirm, setNewSubjectsToConfirm] = useState<Array<{ name: string; suggestion: { id: string; nama: string; kode: string | null } | null }> | null>(null);
+  const [subjectChoices, setSubjectChoices] = useState<Record<string, string>>({});
+  const [detailFor, setDetailFor] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [belumSiapCount, setBelumSiapCount] = useState(0);
   // V4 poin 3 — Status Konteks: "↻ Konteks berubah" dideteksi dari sinyal
@@ -373,7 +375,7 @@ export default function GenerateKurikulumPage() {
     setEditingDraftValue(item.manualTarget != null ? String(item.manualTarget) : "");
   }
 
-  async function commitCandidate(confirmedNewSubjects?: string[]) {
+  async function commitCandidate(subjectDecisions?: Record<string, string>) {
     if (validation.status !== "valid" || !activeContext) return;
     setCompareOpen(false); setCommitting(true); setMessage("Menyinkronkan…");
     // V4 poin 32 — step progress ringan, bukan cuma spinner. Step 1-2 mewakili
@@ -387,14 +389,16 @@ export default function GenerateKurikulumPage() {
       academicContextId: activeContext.id,
       classIds,
       items: candidate.map((item) => ({ id: item.id, weeklyTarget: item.manualTarget })),
-      confirmedNewSubjects,
+      subjectDecisions,
     });
     if (!result.ok && "needsConfirmation" in result && result.needsConfirmation) {
       // CANDIDATE-before-COMMIT untuk Master Data: belum menulis apa pun.
-      // Tampilkan daftar mata pelajaran baru, minta konfirmasi eksplisit
-      // sebelum submit ulang dengan confirmedNewSubjects terisi.
+      // Tampilkan daftar mata pelajaran baru (+ saran kemiripan kalau ada),
+      // minta keputusan eksplisit sebelum submit ulang dengan subjectDecisions
+      // terisi.
       setCommitting(false); setSyncStep(0); setMessage("");
       setNewSubjectsToConfirm(result.newSubjects);
+      setSubjectChoices(Object.fromEntries(result.newSubjects.map((s) => [s.name, s.suggestion ? s.suggestion.id : "new"])));
       return;
     }
     if (result.ok) {
@@ -630,16 +634,47 @@ export default function GenerateKurikulumPage() {
 
       {newSubjectsToConfirm && (
         <div className="fixed inset-0 z-[60] bg-black/20 p-4" onClick={() => setNewSubjectsToConfirm(null)}>
-          <div role="dialog" aria-modal="true" className="mx-auto mt-[12vh] w-full max-w-lg rounded-2xl border border-border bg-surface p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <div role="dialog" aria-modal="true" className="mx-auto mt-[10vh] w-full max-w-lg rounded-2xl border border-border bg-surface p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <p className="text-xs font-bold uppercase tracking-wider text-brand-700">Master Data Baru</p>
-            <h2 className="mt-1 text-xl font-bold">{newSubjectsToConfirm.length} mata pelajaran baru akan dibuat</h2>
-            <p className="mt-1 text-sm text-ink-600">
-              Kurikulum ini memuat mata pelajaran yang belum ada di data Mata Pelajaran sekolah. SAKALA akan membuatnya
-              (kategori: Akademik, prioritas: Normal — bisa disesuaikan nanti di halaman Mata Pelajaran).
-            </p>
-            <div className="mt-4 space-y-1.5 rounded-xl bg-surface-muted p-4 text-sm">
-              {newSubjectsToConfirm.map((name) => (
-                <div key={name} className="font-medium text-ink-900">{name}</div>
+            <h2 className="mt-1 text-xl font-bold">{newSubjectsToConfirm.length} mata pelajaran perlu dicek</h2>
+            <p className="mt-1 text-[13px] text-ink-600">Yang sudah mirip data lama, SAKALA sarankan pakai yang itu saja — cek dulu sebelum lanjut.</p>
+            <div className="mt-4 max-h-[50vh] space-y-2 overflow-auto">
+              {newSubjectsToConfirm.map(({ name, suggestion }) => (
+                <div key={name} className="rounded-xl border border-border bg-surface-muted/40 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[13.5px] font-semibold text-ink-900">{name}</p>
+                    {suggestion && <span className="shrink-0 text-[11.5px] text-ink-500">mirip &ldquo;{suggestion.nama}&rdquo;</span>}
+                  </div>
+                  {suggestion ? (
+                    <>
+                      <div className="mt-2 flex gap-1.5 rounded-lg bg-surface p-1">
+                        <button
+                          onClick={() => setSubjectChoices((c) => ({ ...c, [name]: suggestion.id }))}
+                          className={`flex-1 rounded-md px-2.5 py-1.5 text-[12px] font-semibold ${subjectChoices[name] === suggestion.id ? "bg-brand-600 text-white" : "text-ink-600 hover:bg-surface-muted"}`}
+                        >
+                          Pakai yang sudah ada
+                        </button>
+                        <button
+                          onClick={() => setSubjectChoices((c) => ({ ...c, [name]: "new" }))}
+                          className={`flex-1 rounded-md px-2.5 py-1.5 text-[12px] font-semibold ${subjectChoices[name] === "new" ? "bg-brand-600 text-white" : "text-ink-600 hover:bg-surface-muted"}`}
+                        >
+                          Buat mapel baru
+                        </button>
+                      </div>
+                      <button onClick={() => setDetailFor(detailFor === name ? null : name)} className="mt-1.5 text-[11.5px] font-medium text-ink-500 underline hover:text-ink-700">
+                        {detailFor === name ? "Tutup" : "Lihat detail"}
+                      </button>
+                      {detailFor === name && (
+                        <div className="mt-1.5 space-y-1 text-[11.5px] text-ink-500">
+                          <p><b className="text-ink-700">Pakai yang sudah ada:</b> JP & jadwal &ldquo;{suggestion.nama}&rdquo; dipakai untuk mapel ini, tidak ada data baru.</p>
+                          <p><b className="text-ink-700">Buat mapel baru:</b> jadi 2 mapel terpisah, masing-masing punya JP & jadwal sendiri.</p>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <p className="mt-1 text-[12px] text-ink-500">Belum ada yang mirip — akan dibuat sebagai mapel baru.</p>
+                  )}
+                </div>
               ))}
             </div>
             <div className="mt-5 flex flex-wrap justify-end gap-2">
@@ -648,13 +683,13 @@ export default function GenerateKurikulumPage() {
               </button>
               <button
                 onClick={() => {
-                  const confirmed = newSubjectsToConfirm;
+                  const decisions = subjectChoices;
                   setNewSubjectsToConfirm(null);
-                  void commitCandidate(confirmed);
+                  void commitCandidate(decisions);
                 }}
                 className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white"
               >
-                Buat & Lanjutkan
+                Lanjutkan
               </button>
             </div>
           </div>

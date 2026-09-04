@@ -16,6 +16,7 @@ export default function RuanganWorkspace({ initialData, initialQuery }: { initia
   const [editing, setEditing] = useState<Ruangan | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<{ id: string; nama: string; message: string } | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const filtered = data.filter((r) => r.nama.toLowerCase().includes(query.toLowerCase()));
@@ -38,7 +39,13 @@ export default function RuanganWorkspace({ initialData, initialQuery }: { initia
 
   function handleDelete(id: string) {
     if (!confirm("Hapus ruangan ini? Tindakan ini tidak dapat dibatalkan.")) return;
-    startTransition(async () => { const result = await deleteRuanganAction(id); if (result.ok) setData((prev) => prev.filter((r) => r.id !== id)); });
+    setDeleteError(null);
+    const item = data.find((r) => r.id === id);
+    startTransition(async () => {
+      const result = await deleteRuanganAction(id);
+      if (result.ok) setData((prev) => prev.filter((r) => r.id !== id));
+      else setDeleteError({ id, nama: item?.nama ?? "Ruangan ini", message: result.error });
+    });
   }
 
   async function toggleStatus(r: Ruangan) {
@@ -53,6 +60,16 @@ export default function RuanganWorkspace({ initialData, initialQuery }: { initia
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-[20px] font-bold text-ink-900">Ruangan</h1><p className="text-[13px] text-ink-500">Kelola ruangan dan kapasitasnya untuk membantu menyusun jadwal.</p></div><Button onClick={openCreate}><Plus size={16} /> Tambah Ruangan</Button></div>
+      {deleteError && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose/30 bg-rose-50 px-4 py-3">
+          <p className="text-[13px] text-rose-900"><span className="font-semibold">{deleteError.nama}</span> belum bisa dihapus — {deleteError.message}</p>
+          <div className="flex items-center gap-2">
+            <button onClick={() => { const r = data.find((x) => x.id === deleteError.id); if (r) void toggleStatus(r); setDeleteError(null); }} className="rounded-lg border border-rose/40 bg-white px-3 py-1.5 text-[12.5px] font-semibold text-rose-800 hover:bg-rose-100">Nonaktifkan saja</button>
+            <button onClick={() => setDeleteError(null)} className="text-[12.5px] text-rose-700 hover:underline">Tutup</button>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-ink-400 sm:max-w-xs"><Search size={16} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Cari ruangan..." className="flex-1 bg-transparent text-[13px] text-ink-900 outline-none placeholder:text-ink-400" /></div>
       <Card className="p-0">{filtered.length === 0 ? <EmptyState title={data.length === 0 ? "Belum ada ruangan" : "Ruangan tidak ditemukan"} description={data.length === 0 ? "Tambahkan ruangan untuk digunakan dalam jadwal." : "Coba nama ruangan yang lain."} action={data.length === 0 ? <Button size="sm" onClick={openCreate}><Plus size={14} /> Tambah Ruangan</Button> : undefined} /> : (
         <table className="w-full text-left text-[13px]"><thead><tr className="border-b border-border text-[11.5px] uppercase tracking-wide text-ink-400"><th className="px-5 py-3 font-medium">Nama Ruangan</th><th className="px-5 py-3 font-medium">Jenis</th><th className="px-5 py-3 font-medium">Kapasitas</th><th className="px-5 py-3 font-medium">Status</th><th className="px-5 py-3 font-medium text-right">Aksi</th></tr></thead><tbody>{filtered.map((r) => <tr key={r.id} className="border-b border-border last:border-0 hover:bg-surface-muted/60"><td className="px-5 py-3.5 font-medium text-ink-900">{r.nama}</td><td className="px-5 py-3.5 text-ink-500">{r.tipeRuangan ?? "—"}</td><td className="px-5 py-3.5 text-ink-500">{r.kapasitas ?? "—"}</td><td className="px-5 py-3.5"><button onClick={() => void toggleStatus(r)} disabled={togglingId === r.id} aria-label={`Ubah status ${r.nama} jadi ${r.status === "aktif" ? "Tidak Aktif" : "Aktif"}`} title="Klik untuk ubah status" className="disabled:opacity-50"><Badge tone={r.status === "aktif" ? "success" : "neutral"} className="cursor-pointer transition-opacity hover:opacity-75">{r.status === "aktif" ? "Aktif" : "Tidak Aktif"}</Badge></button></td><td className="px-5 py-3.5"><div className="flex items-center justify-end gap-1"><button onClick={() => openEdit(r)} className="rounded-lg p-1.5 text-ink-400 hover:bg-surface hover:text-ink-900" aria-label="Ubah Ruangan" title="Ubah Ruangan"><Pencil size={15} /></button><button onClick={() => handleDelete(r.id)} className="rounded-lg p-1.5 text-ink-400 hover:bg-rose-50 hover:text-rose" aria-label="Hapus Ruangan" title="Hapus Ruangan"><Trash2 size={15} /></button></div></td></tr>)}</tbody></table>

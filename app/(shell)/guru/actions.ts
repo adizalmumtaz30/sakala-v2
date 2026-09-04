@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { toPlainDatabaseError } from "@/lib/utils/databaseError";
 import * as guruUseCases from "@/lib/application/guru.usecases";
 import { GuruValidationError, type Guru, type GuruDraft } from "@/lib/domain/guru";
 import { validateGuruImportRows, type GuruImportRowResult } from "@/lib/domain/guru-import";
@@ -95,6 +96,7 @@ export async function commitGuruImportAction(
 
 function toMessage(err: unknown): string {
   if (err instanceof GuruValidationError) return err.message;
+  if (err && typeof err === "object" && "code" in err) return toPlainDatabaseError(err);
   if (err instanceof Error) return err.message;
   return "Terjadi kesalahan yang tidak diketahui.";
 }
