@@ -70,6 +70,7 @@ export default function JadwalWorkspace({
   ruanganList,
   assignments,
   pembagianMengajarList,
+  belumSiapJpByKelas,
   schoolName,
   contextLabel,
 }: {
@@ -83,6 +84,7 @@ export default function JadwalWorkspace({
   ruanganList: Ruangan[];
   assignments: ScheduleAssignment[];
   pembagianMengajarList: PembagianMengajar[];
+  belumSiapJpByKelas: Record<string, number>;
   schoolName?: string;
   contextLabel: string;
 }) {
@@ -934,6 +936,11 @@ export default function JadwalWorkspace({
                 <p className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-400">
                   Untuk {entityOptions.find((o) => o.id === activeEntityId)?.label ?? "kelas ini"}
                 </p>
+                {(belumSiapJpByKelas[activeEntityId] ?? 0) > 0 && (
+                  <p className="mx-3 mb-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-800">
+                    ⚠ {belumSiapJpByKelas[activeEntityId]} JP kelas ini belum punya guru — SAKALA AI cuma bisa mengisi yang sudah ada gurunya.
+                  </p>
+                )}
                 <button
                   type="button"
                   onClick={() => void runAiFill("class")}

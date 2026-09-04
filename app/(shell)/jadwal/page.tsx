@@ -10,6 +10,7 @@ import { listRuangan } from "@/lib/application/ruangan.usecases";
 import { listScheduleAssignments } from "@/lib/application/scheduleAssignment.usecases";
 import { listPembagianMengajar } from "@/lib/application/pembagianMengajar.usecases";
 import { getSchoolProfile } from "@/lib/application/schoolProfile.usecases";
+import { getTargetJpView } from "@/lib/application/targetJp.usecases";
 import JadwalWorkspace from "./JadwalWorkspace";
 import { ErrorState, EmptyState } from "@/components/ui/primitives";
 
@@ -49,6 +50,14 @@ export default async function JadwalPage() {
         getSchoolProfile(supabase),
       ]);
 
+    // QW-02/QW-04 (readiness gate) — reuse getTargetJpView (rule 17: jangan
+    // duplikasi logic Target=Siap+BelumSiap), bukan hitung ulang di sini.
+    const targetJpView = await getTargetJpView(supabase, activeContext.id);
+    const belumSiapJpByKelas: Record<string, number> = {};
+    for (const row of targetJpView.rows) {
+      belumSiapJpByKelas[row.kelasId] = (belumSiapJpByKelas[row.kelasId] ?? 0) + row.belumSiapJp;
+    }
+
     const slotTemplateLists = await Promise.all(scheduleModels.map((m) => listSlotTemplate(supabase, m.id)));
     const slotTemplatesByModel: Record<string, Awaited<ReturnType<typeof listSlotTemplate>>> = {};
     scheduleModels.forEach((m, i) => { slotTemplatesByModel[m.id] = slotTemplateLists[i]; });
@@ -67,6 +76,7 @@ export default async function JadwalPage() {
         ruanganList={ruanganList}
         assignments={allAssignments}
         pembagianMengajarList={pembagianMengajarList.filter((p) => p.status === "aktif")}
+        belumSiapJpByKelas={belumSiapJpByKelas}
         schoolName={schoolProfile?.namaSekolah}
         contextLabel={contextLabel}
       />
