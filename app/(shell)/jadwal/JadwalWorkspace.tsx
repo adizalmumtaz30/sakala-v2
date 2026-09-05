@@ -706,12 +706,20 @@ export default function JadwalWorkspace({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
         <JadwalStatCard icon={<CalendarDays size={16} />} value={scopedAssignments.length} label="Jadwal" tone="brand" />
         <JadwalStatCard icon={<Clock3 size={16} />} value={totalJpTerjadwal} label="JP Terjadwal" tone="violet" />
         <JadwalStatCard icon={<LayoutGrid size={16} />} value={totalSlotPembelajaran} label="Slot Pembelajaran" tone="emerald" />
-        <JadwalStatCard icon={<AlertTriangle size={16} />} value={conflictCount} label="Conflict" tone={conflictCount > 0 ? "rose" : "neutral"} />
+        <JadwalStatCard icon={<AlertTriangle size={16} />} value={conflictCount} label="Bentrok" tone={conflictCount > 0 ? "rose" : "neutral"} />
         <JadwalStatCard icon={<GitBranch size={16} />} value={scopedCandidates.length} label="Kandidat" tone={scopedCandidates.length > 0 ? "amber" : "neutral"} />
+        {viewBy === "kelas" && activeEntityId && (
+          <JadwalStatCard
+            icon={<AlertTriangle size={16} />}
+            value={belumSiapJpByKelas[activeEntityId] ?? 0}
+            label="Guru Belum Ditentukan"
+            tone={(belumSiapJpByKelas[activeEntityId] ?? 0) > 0 ? "rose" : "neutral"}
+          />
+        )}
       </div>
 
       {scopedCandidates.length > 0 && (
@@ -936,11 +944,6 @@ export default function JadwalWorkspace({
                 <p className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-400">
                   Untuk {entityOptions.find((o) => o.id === activeEntityId)?.label ?? "kelas ini"}
                 </p>
-                {(belumSiapJpByKelas[activeEntityId] ?? 0) > 0 && (
-                  <p className="mx-3 mb-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-800">
-                    ⚠ {belumSiapJpByKelas[activeEntityId]} JP kelas ini belum punya guru — SAKALA AI cuma bisa mengisi yang sudah ada gurunya.
-                  </p>
-                )}
                 <button
                   type="button"
                   onClick={() => void runAiFill("class")}
