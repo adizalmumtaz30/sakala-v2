@@ -703,6 +703,20 @@ export default function JadwalWorkspace({
               ))}
             </div>
           )}
+          {/* P0-03 (verifikasi pasca-generate) — jangan cuma bilang "berhasil",
+              tunjukkan buktinya. Reuse conflictCount & belumSiapJpByKelas yang
+              sudah dihitung untuk stat card di atas, bukan pengecekan baru. */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-violet-100 pt-2 text-[11.5px]">
+            <span className={conflictCount === 0 ? "text-emerald-700" : "text-rose"}>
+              {conflictCount === 0 ? "✓" : "⚠"} Bentrok: {conflictCount}
+            </span>
+            <span className={(belumSiapJpByKelas[activeEntityId ?? ""] ?? 0) === 0 ? "text-emerald-700" : "text-amber-700"}>
+              {(belumSiapJpByKelas[activeEntityId ?? ""] ?? 0) === 0 ? "✓" : "⚠"} Guru belum ditentukan: {belumSiapJpByKelas[activeEntityId ?? ""] ?? 0} JP
+            </span>
+            <span className="font-medium text-ink-600">
+              Status: {conflictCount === 0 && (belumSiapJpByKelas[activeEntityId ?? ""] ?? 0) === 0 ? "LENGKAP" : "BELUM LENGKAP"}
+            </span>
+          </div>
         </div>
       )}
 
