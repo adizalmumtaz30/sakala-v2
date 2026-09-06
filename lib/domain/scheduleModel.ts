@@ -23,6 +23,11 @@ export interface ScheduleModel {
   modeRuangan: ModeRuangan;
   penggunaanRombel: PenggunaanRombel;
   status: StatusAktif;
+  // SS3 masukan operator: preferensi metode AI menyusun jadwal, diatur SEKALI
+  // di sini (bukan ditanya tiap kali AI jalan) -- konsisten dengan pola
+  // Active Context.
+  sebaranJp: "sebar" | "padat";
+  maksJpBeruntunSama: number | null;
 }
 
 export interface ScheduleModelDraft {
@@ -36,6 +41,10 @@ export interface ScheduleModelDraft {
   modeRuangan: ModeRuangan;
   penggunaanRombel: PenggunaanRombel;
   status: StatusAktif;
+  // Optional di draft supaya form lama tetap jalan tanpa harus tahu field
+  // ini; kalau tidak dikirim, repository pakai default "sebar" / null.
+  sebaranJp?: "sebar" | "padat";
+  maksJpBeruntunSama?: number | null;
 }
 
 export class ScheduleModelValidationError extends Error {

@@ -102,6 +102,11 @@ export async function generateCandidatePreview(
       roomMode: scheduleModel.modeRuangan,
       maxPeriodsPerClassPerDay: scheduleModel.maksJamPerHari,
       maxSearchNodes: 250_000,
+      // SS3 masukan operator: preferensi metode penjadwalan diambil dari
+      // Schedule Model (diatur sekali di Pengaturan Jadwal), bukan
+      // ditanya/di-hardcode di sini.
+      spread: scheduleModel.sebaranJp,
+      maxConsecutiveSamePerDay: scheduleModel.maksJpBeruntunSama ?? undefined,
     }
   );
 
