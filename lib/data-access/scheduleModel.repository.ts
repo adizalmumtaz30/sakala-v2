@@ -18,10 +18,12 @@ type Row = {
   mode_ruangan: ModeRuangan;
   penggunaan_rombel: PenggunaanRombel;
   status: StatusAktif;
+  sebaran_jp: "sebar" | "padat";
+  maks_jp_beruntun_sama: number | null;
 };
 
 const SELECT_COLUMNS =
-  "id, academic_context_id, nama_model, waktu_mulai, durasi_standar_menit, maks_jam_per_hari, hari_aktif, hari_libur, mode_ruangan, penggunaan_rombel, status";
+  "id, academic_context_id, nama_model, waktu_mulai, durasi_standar_menit, maks_jam_per_hari, hari_aktif, hari_libur, mode_ruangan, penggunaan_rombel, status, sebaran_jp, maks_jp_beruntun_sama";
 
 function rowToEntity(row: Row): ScheduleModel {
   return {
@@ -36,6 +38,8 @@ function rowToEntity(row: Row): ScheduleModel {
     modeRuangan: row.mode_ruangan,
     penggunaanRombel: row.penggunaan_rombel,
     status: row.status,
+    sebaranJp: row.sebaran_jp,
+    maksJpBeruntunSama: row.maks_jp_beruntun_sama,
   };
 }
 
@@ -51,6 +55,8 @@ function draftToRow(draft: ScheduleModelDraft) {
     mode_ruangan: draft.modeRuangan,
     penggunaan_rombel: draft.penggunaanRombel,
     status: draft.status,
+    sebaran_jp: draft.sebaranJp ?? "sebar",
+    maks_jp_beruntun_sama: draft.maksJpBeruntunSama ?? null,
   };
 }
 

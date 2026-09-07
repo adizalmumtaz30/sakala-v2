@@ -2,37 +2,92 @@ import type { HariSekolah } from "@/lib/domain/jamPelajaran";
 
 export interface SolverRequirement { id: string; classId: string; subjectId: string; teacherId: string; roomId: string | null; jpTarget: number; }
 export interface SolverSlot { day: HariSekolah; period: number; }
-export interface SolverOccupancy { teacherId: string; classId: string; roomId: string | null; day: HariSekolah; periodStart: number; periodEnd: number; }
-export interface SolverOptions { activeDays: HariSekolah[]; slots: SolverSlot[]; existing: SolverOccupancy[]; roomMode: "wajib" | "opsional" | "tidak_dipakai"; maxPeriodsPerClassPerDay: number; maxSearchNodes?: number; }
+export interface SolverOccupancy { teacherId: string; classId: string; roomId: string | null; day: HariSekolah; periodStart: number; periodEnd: number; subjectId?: string; }
+export interface SolverOptions {
+  activeDays: HariSekolah[];
+  slots: SolverSlot[];
+  existing: SolverOccupancy[];
+  roomMode: "wajib" | "opsional" | "tidak_dipakai";
+  maxPeriodsPerClassPerDay: number;
+  maxSearchNodes?: number;
+  /**
+   * SS3 masukan operator: "variasi metode penjadwalan, bukan cuma isi yang
+   * kosong". Dua gaya (soft preference, mempengaruhi urutan slot yang
+   * dicoba solver, bukan menolak penempatan): "sebar" (default) menyebar JP
+   * mapel yang sama ke lebih banyak hari dulu sebelum menumpuk di satu hari;
+   * "padat" sebaliknya, lebih suka menambah ke hari yang SUDAH dipakai
+   * kelas itu dulu, baru pindah ke hari baru kalau perlu.
+   */
+  spread?: "sebar" | "padat";
+  /**
+   * Batas keras JP BERURUTAN (nempel tanpa jeda) untuk mapel yang sama, di
+   * kelas & hari yang sama. undefined = tidak dibatasi (perilaku lama).
+   * Ini HARD CONSTRAINT -- penempatan yang melanggar langsung ditolak
+   * solver, sama derajatnya dengan bentrok guru/kelas/ruangan, BUKAN
+   * sekadar kurang disukai seperti `spread`.
+   */
+  maxConsecutiveSamePerDay?: number;
+}
 export interface SolverPlacement extends SolverSlot { requirementId: string; }
 export interface SolverFailureReason { requirementId: string; code: "NO_SLOT" | "TEACHER_BUSY" | "CLASS_BUSY" | "ROOM_BUSY" | "DAILY_CAP" | "ROOM_REQUIRED" | "SEARCH_LIMIT"; message: string; affectedSlots: number; }
 export interface SolverOutcome { requirementId: string; placed: number; unplaced: number; placements: SolverPlacement[]; }
 export interface SolverResult { complete: boolean; placements: SolverPlacement[]; outcomes: SolverOutcome[]; failures: SolverFailureReason[]; searchNodes: number; reason: string | null; }
 
 type Unit = { unitId: string; requirementId: string; classId: string; subjectId: string; teacherId: string; roomId: string | null; };
-type State = { teacher: Set<string>; class: Set<string>; room: Set<string>; dayLoad: Map<string, number>; subjectDay: Map<string, number>; placements: Map<string, SolverSlot>; };
+type State = { teacher: Set<string>; class: Set<string>; room: Set<string>; dayLoad: Map<string, number>; subjectDay: Map<string, number>; subjectDayPeriods: Map<string, Set<number>>; placements: Map<string, SolverSlot>; };
 
 const DAY: Record<HariSekolah, number> = { senin: 0, selasa: 1, rabu: 2, kamis: 3, jumat: 4, sabtu: 5, minggu: 6 };
 const sk = (s: SolverSlot) => `${s.day}:${s.period}`;
 const key = (id: string, day: HariSekolah, period: number) => `${id}:${day}:${period}`;
 const compare = (a: SolverSlot, b: SolverSlot) => DAY[a.day] - DAY[b.day] || a.period - b.period;
-const clone = (s: State): State => ({ teacher: new Set(s.teacher), class: new Set(s.class), room: new Set(s.room), dayLoad: new Map(s.dayLoad), subjectDay: new Map(s.subjectDay), placements: new Map(s.placements) });
+const clone = (s: State): State => ({
+  teacher: new Set(s.teacher),
+  class: new Set(s.class),
+  room: new Set(s.room),
+  dayLoad: new Map(s.dayLoad),
+  subjectDay: new Map(s.subjectDay),
+  subjectDayPeriods: new Map(Array.from(s.subjectDayPeriods, ([k, v]) => [k, new Set(v)])),
+  placements: new Map(s.placements),
+});
 
 function initialState(existing: SolverOccupancy[], roomEnabled: boolean): State {
-  const s: State = { teacher: new Set(), class: new Set(), room: new Set(), dayLoad: new Map(), subjectDay: new Map(), placements: new Map() };
+  const s: State = { teacher: new Set(), class: new Set(), room: new Set(), dayLoad: new Map(), subjectDay: new Map(), subjectDayPeriods: new Map(), placements: new Map() };
   for (const a of existing) for (let p = a.periodStart; p <= a.periodEnd; p++) {
     s.teacher.add(key(a.teacherId, a.day, p)); s.class.add(key(`class:${a.classId}`, a.day, p));
     if (roomEnabled && a.roomId) s.room.add(key(`room:${a.roomId}`, a.day, p));
     const k = `${a.classId}:${a.day}`; s.dayLoad.set(k, (s.dayLoad.get(k) ?? 0) + 1);
+    if (a.subjectId) {
+      const sdK = `${a.classId}:${a.subjectId}:${a.day}`;
+      s.subjectDay.set(sdK, (s.subjectDay.get(sdK) ?? 0) + 1);
+      if (!s.subjectDayPeriods.has(sdK)) s.subjectDayPeriods.set(sdK, new Set());
+      s.subjectDayPeriods.get(sdK)!.add(p);
+    }
   }
   return s;
+}
+
+// Panjang rentetan JP mapel-sama yang BERSAMBUNGAN kalau `period` ditempatkan
+// di hari ini (menghitung ke kiri dan ke kanan dari periode yang sudah ada).
+function consecutiveRunIfPlaced(periods: Set<number> | undefined, period: number): number {
+  const set = new Set(periods ?? []);
+  set.add(period);
+  let run = 1, p = period - 1;
+  while (set.has(p)) { run++; p--; }
+  p = period + 1;
+  while (set.has(p)) { run++; p++; }
+  return run;
 }
 
 function free(s: State, u: Unit, slot: SolverSlot, o: SolverOptions): boolean {
   if (s.teacher.has(key(u.teacherId, slot.day, slot.period))) return false;
   if (s.class.has(key(`class:${u.classId}`, slot.day, slot.period))) return false;
   if (o.roomMode !== "tidak_dipakai" && u.roomId && s.room.has(key(`room:${u.roomId}`, slot.day, slot.period))) return false;
-  return (s.dayLoad.get(`${u.classId}:${slot.day}`) ?? 0) < o.maxPeriodsPerClassPerDay;
+  if ((s.dayLoad.get(`${u.classId}:${slot.day}`) ?? 0) >= o.maxPeriodsPerClassPerDay) return false;
+  if (o.maxConsecutiveSamePerDay) {
+    const sdK = `${u.classId}:${u.subjectId}:${slot.day}`;
+    if (consecutiveRunIfPlaced(s.subjectDayPeriods.get(sdK), slot.period) > o.maxConsecutiveSamePerDay) return false;
+  }
+  return true;
 }
 
 function reserve(s: State, u: Unit, slot: SolverSlot, roomEnabled: boolean): void {
@@ -40,22 +95,29 @@ function reserve(s: State, u: Unit, slot: SolverSlot, roomEnabled: boolean): voi
   if (roomEnabled && u.roomId) s.room.add(key(`room:${u.roomId}`, slot.day, slot.period));
   const d = `${u.classId}:${slot.day}`; s.dayLoad.set(d, (s.dayLoad.get(d) ?? 0) + 1);
   const sd = `${u.classId}:${u.subjectId}:${slot.day}`; s.subjectDay.set(sd, (s.subjectDay.get(sd) ?? 0) + 1); s.placements.set(u.unitId, slot);
+  if (!s.subjectDayPeriods.has(sd)) s.subjectDayPeriods.set(sd, new Set());
+  s.subjectDayPeriods.get(sd)!.add(slot.period);
 }
 
 function explain(u: Unit, slots: SolverSlot[], s: State, o: SolverOptions): SolverFailureReason[] {
   if (o.roomMode === "wajib" && !u.roomId) return [{ requirementId: u.requirementId, code: "ROOM_REQUIRED", message: `Requirement ${u.requirementId} tidak memiliki ruangan pada mode ruangan wajib.`, affectedSlots: slots.length }];
-  let t = 0, c = 0, r = 0, d = 0;
+  let t = 0, c = 0, r = 0, d = 0, consec = 0;
   for (const slot of slots) {
     if (s.teacher.has(key(u.teacherId, slot.day, slot.period))) t++;
     if (s.class.has(key(`class:${u.classId}`, slot.day, slot.period))) c++;
     if (o.roomMode !== "tidak_dipakai" && u.roomId && s.room.has(key(`room:${u.roomId}`, slot.day, slot.period))) r++;
     if ((s.dayLoad.get(`${u.classId}:${slot.day}`) ?? 0) >= o.maxPeriodsPerClassPerDay) d++;
+    if (o.maxConsecutiveSamePerDay) {
+      const sdK = `${u.classId}:${u.subjectId}:${slot.day}`;
+      if (consecutiveRunIfPlaced(s.subjectDayPeriods.get(sdK), slot.period) > o.maxConsecutiveSamePerDay) consec++;
+    }
   }
   const out: SolverFailureReason[] = [];
   if (t === slots.length) out.push({ requirementId: u.requirementId, code: "TEACHER_BUSY", message: `Semua slot kandidat bentrok dengan guru ${u.teacherId}.`, affectedSlots: t });
   if (c === slots.length) out.push({ requirementId: u.requirementId, code: "CLASS_BUSY", message: `Semua slot kandidat bentrok dengan kelas ${u.classId}.`, affectedSlots: c });
   if (r === slots.length) out.push({ requirementId: u.requirementId, code: "ROOM_BUSY", message: `Semua slot kandidat bentrok dengan ruangan ${u.roomId}.`, affectedSlots: r });
   if (d === slots.length) out.push({ requirementId: u.requirementId, code: "DAILY_CAP", message: `Semua slot kandidat ditolak karena batas JP harian kelas ${u.classId} tercapai.`, affectedSlots: d });
+  if (!out.length && consec === slots.length) out.push({ requirementId: u.requirementId, code: "DAILY_CAP", message: `Semua slot kandidat ditolak karena akan melebihi batas maksimal ${o.maxConsecutiveSamePerDay} JP berurutan untuk mapel yang sama.`, affectedSlots: consec });
   if (!out.length) out.push({ requirementId: u.requirementId, code: "NO_SLOT", message: `Tidak ada slot yang memenuhi seluruh constraint untuk ${u.requirementId}.`, affectedSlots: slots.length });
   return out;
 }
@@ -78,7 +140,13 @@ export function solveWeeklySchedule(requirements: SolverRequirement[], options: 
   const units: Unit[] = reqs.flatMap(r => Array.from({ length: r.jpTarget }, (_, i) => ({ unitId: `${r.id}#${i + 1}`, requirementId: r.id, classId: r.classId, subjectId: r.subjectId, teacherId: r.teacherId, roomId: r.roomId })));
   const start = initialState(options.existing, roomEnabled);
   const domain = (u: Unit, s: State) => slots.filter(slot => free(s, u, slot, options));
-  const score = (u: Unit, slot: SolverSlot, s: State) => (s.subjectDay.get(`${u.classId}:${u.subjectId}:${slot.day}`) ?? 0) * 100 + (s.dayLoad.get(`${u.classId}:${slot.day}`) ?? 0) * 10;
+  // "sebar" (default): makin banyak JP mapel-sama yang sudah di hari itu,
+  // makin dihindari -- mendorong tersebar ke hari lain. "padat": dibalik --
+  // lebih suka menambah ke hari yang SUDAH dipakai kelas itu dulu, baru
+  // pindah hari baru kalau perlu (memadatkan, bukan menyebar).
+  const spreadSign = options.spread === "padat" ? -1 : 1;
+  const score = (u: Unit, slot: SolverSlot, s: State) =>
+    spreadSign * ((s.subjectDay.get(`${u.classId}:${u.subjectId}:${slot.day}`) ?? 0) * 100 + (s.dayLoad.get(`${u.classId}:${slot.day}`) ?? 0) * 10);
   let nodes = 0; let terminal: SolverFailureReason[] = [];
 
   const search = (state: State, remaining: Unit[]): State | null => {
@@ -125,5 +193,25 @@ export function runSchedulingSolverRegression(): { passed: boolean; details: str
   test("insufficient-slots", () => { const r=solveWeeklySchedule([{id:"a",classId:"7A",subjectId:"m",teacherId:"t1",roomId:null,jpTarget:3}],{activeDays:["senin"],slots:[{day:"senin",period:1},{day:"senin",period:2}],existing:[],roomMode:"tidak_dipakai",maxPeriodsPerClassPerDay:4}); assert(!r.complete && r.outcomes[0].unplaced===3,"insufficient slots"); });
   test("existing-occupancy", () => { const r=solveWeeklySchedule([{id:"a",classId:"7A",subjectId:"m",teacherId:"t1",roomId:"r1",jpTarget:1}],{activeDays:["senin"],slots:regressionSlots(["senin"]),existing:[{teacherId:"t1",classId:"8A",roomId:"r1",day:"senin",periodStart:1,periodEnd:1}],roomMode:"wajib",maxPeriodsPerClassPerDay:4}); assert(r.complete && r.placements[0].period!==1,"existing occupancy"); });
   test("backtracking", () => { const r=solveWeeklySchedule([{id:"a",classId:"7A",subjectId:"m",teacherId:"t1",roomId:"r1",jpTarget:2},{id:"b",classId:"8A",subjectId:"i",teacherId:"t1",roomId:"r2",jpTarget:2}],{activeDays:["senin","selasa"],slots:[{day:"senin",period:1},{day:"senin",period:2},{day:"selasa",period:1},{day:"selasa",period:2}],existing:[],roomMode:"wajib",maxPeriodsPerClassPerDay:2}); assert(r.complete && r.placements.length===4,"backtracking"); });
-  return { passed: details.length === 8 && details.every(x=>x.includes("=PASS")), details };
+  test("max-consecutive-same-subject", () => {
+    const r = solveWeeklySchedule(
+      [{ id: "a", classId: "7A", subjectId: "matematika", teacherId: "t1", roomId: "r1", jpTarget: 3 }],
+      { activeDays: ["senin"], slots: regressionSlots(["senin"]), existing: [], roomMode: "wajib", maxPeriodsPerClassPerDay: 4, maxConsecutiveSamePerDay: 2 }
+    );
+    const periods = r.placements.map((p) => p.period).sort((a, b) => a - b);
+    let maxRun = periods.length ? 1 : 0, run = 1;
+    for (let i = 1; i < periods.length; i++) { run = periods[i] === periods[i - 1] + 1 ? run + 1 : 1; maxRun = Math.max(maxRun, run); }
+    assert(maxRun <= 2, "max consecutive same subject dilanggar");
+  });
+  test("spread-vs-padat", () => {
+    const req = [{ id: "a", classId: "7A", subjectId: "matematika", teacherId: "t1", roomId: "r1", jpTarget: 2 }];
+    const base = { activeDays: ["senin", "selasa"] as HariSekolah[], slots: regressionSlots(["senin", "selasa"]), existing: [], roomMode: "wajib" as const, maxPeriodsPerClassPerDay: 4 };
+    const sebar = solveWeeklySchedule(req, { ...base, spread: "sebar" });
+    const padat = solveWeeklySchedule(req, { ...base, spread: "padat" });
+    assert(sebar.complete && padat.complete, "spread-vs-padat harus feasible");
+    const daysUsed = (r: typeof sebar) => new Set(r.placements.map((p) => p.day)).size;
+    assert(daysUsed(sebar) === 2, "sebar harus pakai 2 hari berbeda");
+    assert(daysUsed(padat) === 1, "padat harus menumpuk di 1 hari yang sama");
+  });
+  return { passed: details.length === 10 && details.every(x=>x.includes("=PASS")), details };
 }

@@ -369,6 +369,11 @@ export default function AkademikWorkspace({
       modeRuangan: (formData.get("modeRuangan") as ModeRuangan) ?? "opsional",
       penggunaanRombel: (formData.get("penggunaanRombel") as PenggunaanRombel) ?? "seragam",
       status: (formData.get("status") as PeriodeStatus) ?? "aktif",
+      // SS3 masukan operator: metode AI menyusun jadwal diatur di sini,
+      // sekali per Schedule Model — dipakai otomatis oleh AI di mana pun
+      // (Jadwal, SAKALA AI, Jadwal Cerdas), tidak perlu diatur ulang.
+      sebaranJp: (formData.get("sebaranJp") as "sebar" | "padat") ?? "sebar",
+      maksJpBeruntunSama: formData.get("maksJpBeruntunSama") ? Number(formData.get("maksJpBeruntunSama")) : null,
     };
 
     startTransition(async () => {
@@ -995,7 +1000,7 @@ export default function AkademikWorkspace({
       <Modal
         open={modelModalOpen}
         onClose={() => setModelModalOpen(false)}
-        title={modelEditing ? "Edit Schedule Model" : "Tambah Schedule Model"}
+        title={modelEditing ? "Edit Model Jadwal" : "Tambah Model Jadwal"}
       >
         <form action={handleSaveModel} className="flex flex-col gap-4">
           <Input name="namaModel" label="Nama Model" placeholder="cth. Model Reguler" defaultValue={modelEditing?.namaModel} required />
@@ -1037,7 +1042,7 @@ export default function AkademikWorkspace({
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <SelectField name="modeRuangan" label="Room Mode" defaultValue={modelEditing?.modeRuangan ?? "opsional"}>
+            <SelectField name="modeRuangan" label="Mode Ruangan" defaultValue={modelEditing?.modeRuangan ?? "opsional"}>
               <option value="wajib">Wajib</option>
               <option value="opsional">Opsional</option>
               <option value="tidak_dipakai">Tidak Dipakai</option>
@@ -1047,6 +1052,30 @@ export default function AkademikWorkspace({
               <option value="per_rombel">Per Rombel</option>
             </SelectField>
           </div>
+          {/* SS3 masukan operator: variasi metode penjadwalan AI, diatur di
+              sini sekali — dipakai otomatis tiap AI menyusun/melengkapi
+              jadwal, operator tidak perlu pilih ulang tiap kali. */}
+          <div className="grid grid-cols-2 gap-3">
+            <SelectField name="sebaranJp" label="Gaya susun jadwal AI" defaultValue={modelEditing?.sebaranJp ?? "sebar"}>
+              <option value="sebar">Sebar ke banyak hari</option>
+              <option value="padat">Padatkan di hari yang sama</option>
+            </SelectField>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[12.5px] font-medium text-ink-700">Maks JP beruntun/hari</label>
+              <input
+                name="maksJpBeruntunSama"
+                type="number"
+                min={1}
+                max={10}
+                placeholder="Tanpa batas"
+                defaultValue={modelEditing?.maksJpBeruntunSama ?? ""}
+                className="h-11 rounded-xl border border-border bg-surface px-3.5 text-[13.5px] text-ink-900 outline-none focus:border-brand-600/50 focus:ring-2 focus:ring-brand-600/15"
+              />
+            </div>
+          </div>
+          <p className="-mt-2 text-[11.5px] text-ink-400">
+            Contoh: "Sebar" + maks 2 JP beruntun berarti Matematika 6 JP/minggu disusun ke beberapa hari, maksimal 2 JP berturut-turut per hari — bukan ditumpuk 6 JP sekaligus di hari yang sama.
+          </p>
           <SelectField name="status" label="Status" defaultValue={modelEditing?.status ?? "aktif"}>
             <option value="aktif">Aktif</option>
             <option value="nonaktif">Nonaktif</option>
