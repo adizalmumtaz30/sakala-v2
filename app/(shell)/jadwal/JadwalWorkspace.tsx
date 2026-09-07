@@ -111,6 +111,7 @@ export default function JadwalWorkspace({
   const [aiResult, setAiResult] = useState<{
     message: string;
     missingTeacherSubjects: { subjectId: string; subjectName: string }[];
+    bunchedCount: number;
   } | null>(null);
   const [aiUndoIds, setAiUndoIds] = useState<string[]>([]);
   const [aiUndoBusy, setAiUndoBusy] = useState(false);
@@ -207,7 +208,20 @@ export default function JadwalWorkspace({
         const msg = res.data.placedCount > 0
           ? `AI mengisi ${res.data.placedCount} slot jadwal${res.data.skippedCount > 0 ? ` (${res.data.skippedCount} dilewati karena bentrok)` : ""}.${res.data.missingTeacherSubjects.length > 0 ? " Catatan di bawah." : ""}`
           : res.data.message;
-        setAiResult({ message: msg, missingTeacherSubjects: res.data.missingTeacherSubjects });
+        // Sebaran mapel (P1-02 "candidate scoring" — bukan algoritma baru,
+        // cuma menampilkan kriteria yang SUDAH dipakai solver internal untuk
+        // memilih slot: hindari mapel yang sama menumpuk di hari yang sama
+        // untuk kelas yang sama). Dihitung dari assignment yang baru saja
+        // di-commit AI, bukan re-derive dari solver.
+        const placedIds = new Set(res.data.committedAssignmentIds);
+        const placedRows = scopedAssignments.filter((a) => placedIds.has(a.id));
+        const bunchKeys = new Map<string, number>();
+        for (const a of placedRows) {
+          const key = `${a.classId}:${a.subjectId}:${a.day}`;
+          bunchKeys.set(key, (bunchKeys.get(key) ?? 0) + 1);
+        }
+        const bunchedCount = Array.from(bunchKeys.values()).filter((n) => n > 1).length;
+        setAiResult({ message: msg, missingTeacherSubjects: res.data.missingTeacherSubjects, bunchedCount });
         setAiUndoIds(res.data.committedAssignmentIds);
         markNewlyAdded(res.data.committedAssignmentIds);
       }
@@ -713,6 +727,9 @@ export default function JadwalWorkspace({
             </span>
             <span className={(belumSiapJpByKelas[activeEntityId ?? ""] ?? 0) === 0 ? "text-emerald-700" : "text-amber-700"}>
               {(belumSiapJpByKelas[activeEntityId ?? ""] ?? 0) === 0 ? "✓" : "⚠"} Guru belum ditentukan: {belumSiapJpByKelas[activeEntityId ?? ""] ?? 0} JP
+            </span>
+            <span className={aiResult.bunchedCount === 0 ? "text-emerald-700" : "text-amber-700"}>
+              {aiResult.bunchedCount === 0 ? "✓" : "⚠"} Sebaran mapel: {aiResult.bunchedCount === 0 ? "baik, tidak ada yang menumpuk" : `${aiResult.bunchedCount} menumpuk di hari sama`}
             </span>
             <span className="font-medium text-ink-600">
               Status: {conflictCount === 0 && (belumSiapJpByKelas[activeEntityId ?? ""] ?? 0) === 0 ? "LENGKAP" : "BELUM LENGKAP"}
