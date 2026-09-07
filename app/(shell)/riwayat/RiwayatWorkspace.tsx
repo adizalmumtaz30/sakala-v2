@@ -171,7 +171,7 @@ export default function RiwayatWorkspace({
         )}
       </Card>
 
-      <Card className="border-amber-200 bg-amber-50/60 !p-3.5">
+      <Card accent={false} className="border-amber-200 bg-amber-50/60 !p-3.5">
         <p className="text-[12.5px] text-ink-600">
           <strong className="text-ink-900">Audit:</strong> mutation Jadwal, Guru, Mata Pelajaran, Kelas,
           Ruangan, dan Pembagian Mengajar dicatat dengan actor, waktu, context, before/after, source, dan reason.

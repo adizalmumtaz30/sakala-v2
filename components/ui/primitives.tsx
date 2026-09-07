@@ -2,19 +2,38 @@ import type { CSSProperties } from "react";
 import { AlertTriangle, Inbox, RefreshCw, Check, X } from "lucide-react";
 import Button from "./Button";
 
+// §"optimized semua panel": satu komponen dasar dipakai ~15 tempat berbeda
+// di seluruh SAKALA, jadi peningkatan di sini otomatis berlaku ke mana-mana
+// — bukan diubah satu-satu per halaman (rawan beda-beda & pecah). Aksen
+// warna pakai biru→violet (token brand/violet asli tema), bukan warna baru.
 export function Card({
   id,
   className = "",
   style,
   children,
+  accent = true,
 }: {
   id?: string;
   className?: string;
   style?: CSSProperties;
   children: React.ReactNode;
+  /** Garis tipis gradient biru→violet di tepi atas — bisa dimatikan untuk
+   * kartu kecil/alert yang sudah punya aksen warna sendiri (mis. border-l
+   * amber/rose untuk status). Default nyala. */
+  accent?: boolean;
 }) {
   return (
-    <div id={id} style={style} className={`rounded-card border border-border bg-surface p-5 ${className}`}>
+    <div
+      id={id}
+      style={{ boxShadow: "var(--shadow-soft)", ...style }}
+      className={`relative overflow-hidden rounded-card border border-border bg-surface p-5 transition-shadow duration-300 hover:shadow-float ${className}`}
+    >
+      {accent && (
+        <span
+          className="pointer-events-none absolute inset-x-0 top-0 h-[2.5px]"
+          style={{ background: "linear-gradient(90deg, var(--color-brand) 0%, var(--color-violet) 100%)" }}
+        />
+      )}
       {children}
     </div>
   );
