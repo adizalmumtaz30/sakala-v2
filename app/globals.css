@@ -34,6 +34,12 @@ button, input, select, textarea { font: inherit; }
   100% { opacity: 1; transform: scale(1) rotate(0deg); }
 }
 
+/* Modal & panel: muncul dengan sedikit naik + fade, bukan langsung nongol. */
+@keyframes modalRise {
+  0% { opacity: 0; transform: translateY(10px) scale(0.98); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
 :where(button, a, input, select, textarea, [role="button"], [role="menuitem"], [tabindex]:not([tabindex="-1"])):focus-visible {
   outline: 2px solid var(--color-brand);
   outline-offset: 3px;
