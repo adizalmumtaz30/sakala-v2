@@ -53,6 +53,7 @@ export function StatusSwitch({
   disabled?: boolean;
   label?: string;
 }) {
+  const tone = checked ? "var(--color-emerald)" : "var(--color-rose)";
   return (
     <button
       type="button"
@@ -63,33 +64,42 @@ export function StatusSwitch({
       disabled={disabled}
       className="group inline-flex items-center gap-2.5 disabled:cursor-not-allowed disabled:opacity-40"
     >
-      {/* Track: gradient dari warna asli tema (bukan warna Tailwind generik),
-          dengan inset highlight/shadow tipis supaya ada kedalaman — bukan
-          flat single-color seperti toggle template pada umumnya. */}
+      {/* Track: gradient 2-lapis dari token warna asli tema + gloss halus di
+          atas (bukan flat 1 warna) + glow ambient tipis yang ikut warna
+          status — kesan lebih "hidup", bukan toggle template generik.
+          Hover: track sedikit membesar untuk afordansi sentuh. */}
       <span
-        className="relative block h-[24px] w-[44px] shrink-0 rounded-full transition-[background] duration-300 ease-[cubic-bezier(0.16,0.8,0.24,1)]"
+        className="relative block h-[25px] w-[46px] shrink-0 overflow-hidden rounded-full transition-[transform,box-shadow] duration-300 ease-[cubic-bezier(0.16,0.8,0.24,1)] group-hover:scale-[1.04]"
         style={{
-          background: checked
-            ? "linear-gradient(135deg, var(--color-emerald) 0%, color-mix(in srgb, var(--color-emerald) 80%, black) 100%)"
-            : "linear-gradient(135deg, var(--color-rose) 0%, color-mix(in srgb, var(--color-rose) 78%, black) 100%)",
-          boxShadow: "inset 0 1px 1.5px rgba(255,255,255,.35), inset 0 -1px 3px rgba(0,0,0,.18)",
+          background: `linear-gradient(160deg, color-mix(in srgb, ${tone} 92%, white) 0%, ${tone} 45%, color-mix(in srgb, ${tone} 78%, black) 100%)`,
+          boxShadow: `inset 0 1px 1.5px rgba(255,255,255,.4), inset 0 -2px 4px rgba(0,0,0,.16), 0 0 0 1px color-mix(in srgb, ${tone} 25%, transparent), 0 3px 10px -4px color-mix(in srgb, ${tone} 55%, transparent)`,
         }}
       >
+        {/* Gloss: highlight kaca tipis di sepertiga atas track */}
         <span
-          className="absolute top-1/2 flex h-[19px] w-[19px] -translate-y-1/2 items-center justify-center rounded-full bg-white transition-[left,transform] duration-300 ease-[cubic-bezier(0.16,0.8,0.24,1)] group-active:scale-90"
+          className="pointer-events-none absolute inset-x-0 top-0 h-1/2 rounded-t-full"
+          style={{ background: "linear-gradient(180deg, rgba(255,255,255,.30) 0%, rgba(255,255,255,0) 100%)" }}
+        />
+        <span
+          className="absolute top-1/2 flex h-[20px] w-[20px] -translate-y-1/2 items-center justify-center rounded-full bg-white transition-[left] duration-[420ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] group-active:w-[24px]"
           style={{
-            left: checked ? "22px" : "2.5px",
-            boxShadow: "0 1px 2px rgba(0,0,0,.18), 0 3px 8px rgba(0,0,0,.14)",
+            left: checked ? "23px" : "2.5px",
+            boxShadow: "0 1px 2px rgba(0,0,0,.18), 0 3px 8px rgba(0,0,0,.16), inset 0 -1px 1.5px rgba(0,0,0,.05)",
           }}
         >
-          {checked ? (
-            <Check size={11} strokeWidth={3} className="text-emerald-600" />
-          ) : (
-            <X size={11} strokeWidth={3} className="text-rose-600" />
-          )}
+          <span
+            key={checked ? "on" : "off"}
+            className="animate-[switchPop_260ms_cubic-bezier(0.34,1.56,0.64,1)]"
+          >
+            {checked ? (
+              <Check size={11} strokeWidth={3} className="text-emerald-600" />
+            ) : (
+              <X size={11} strokeWidth={3} className="text-rose-600" />
+            )}
+          </span>
         </span>
       </span>
-      <span className={`text-[12.5px] font-semibold tracking-[0.01em] ${checked ? "text-emerald-700" : "text-rose-700"}`}>
+      <span className={`text-[12.5px] font-semibold tracking-[0.01em] transition-colors duration-300 ${checked ? "text-emerald-700" : "text-rose-700"}`}>
         {checked ? "Aktif" : "Nonaktif"}
       </span>
     </button>
