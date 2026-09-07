@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { Plus, X, Trash2, Copy, Pencil, Eye, AlertTriangle, CheckCircle2, Info, CalendarClock, User, Users, DoorOpen, CalendarDays, Clock3, LayoutGrid, GitBranch, Sparkles, Filter, ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { scanCommittedConflicts } from "@/lib/application/conflictEngine";
+import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import type { AcademicContext } from "@/lib/domain/academicContext";
 import { formatContextLabel } from "@/lib/domain/academicContext";
 import type { ScheduleModel } from "@/lib/domain/scheduleModel";
@@ -1116,8 +1117,8 @@ export default function JadwalWorkspace({
             )}
 
             <SelectField label="Kelas" value={addForm.classId} onChange={(v) => setAddForm((f) => ({ ...f, classId: v }))} options={kelasList.map((k) => ({ id: k.id, label: `${k.tingkat} ${k.namaRombel}` }))} />
-            <SelectField label="Mata Pelajaran" value={addForm.subjectId} onChange={(v) => setAddForm((f) => ({ ...f, subjectId: v }))} options={mapelList.map((m) => ({ id: m.id, label: m.nama }))} />
-            <SelectField label="Guru" value={addForm.teacherId} onChange={(v) => setAddForm((f) => ({ ...f, teacherId: v }))} options={guruList.map((g) => ({ id: g.id, label: g.namaGuru }))} />
+            <div className="flex flex-col gap-1.5"><label className="text-[12.5px] font-medium text-ink-700">Mata Pelajaran</label><SearchableSelect value={addForm.subjectId} onChange={(v) => setAddForm((f) => ({ ...f, subjectId: v }))} placeholder="Cari mata pelajaran..." options={mapelList.map((m) => ({ id: m.id, label: m.nama }))} /></div>
+            <div className="flex flex-col gap-1.5"><label className="text-[12.5px] font-medium text-ink-700">Guru</label><SearchableSelect value={addForm.teacherId} onChange={(v) => setAddForm((f) => ({ ...f, teacherId: v }))} placeholder="Cari nama guru..." options={guruList.map((g) => ({ id: g.id, label: g.namaGuru }))} /></div>
             {!roomDisabled && (
               <SelectField
                 label={`Ruangan${roomRequired ? " (wajib)" : " (opsional)"}`}
@@ -1197,8 +1198,8 @@ export default function JadwalWorkspace({
         {editTarget && (
           <div className="flex flex-col gap-3">
             <SelectField label="Kelas" value={editForm.classId} onChange={(v) => setEditForm((f) => ({ ...f, classId: v }))} options={kelasList.map((k) => ({ id: k.id, label: `${k.tingkat} ${k.namaRombel}` }))} />
-            <SelectField label="Mata Pelajaran" value={editForm.subjectId} onChange={(v) => setEditForm((f) => ({ ...f, subjectId: v }))} options={mapelList.map((m) => ({ id: m.id, label: m.nama }))} />
-            <SelectField label="Guru" value={editForm.teacherId} onChange={(v) => setEditForm((f) => ({ ...f, teacherId: v }))} options={guruList.map((g) => ({ id: g.id, label: g.namaGuru }))} />
+            <div className="flex flex-col gap-1.5"><label className="text-[12.5px] font-medium text-ink-700">Mata Pelajaran</label><SearchableSelect value={editForm.subjectId} onChange={(v) => setEditForm((f) => ({ ...f, subjectId: v }))} placeholder="Cari mata pelajaran..." options={mapelList.map((m) => ({ id: m.id, label: m.nama }))} /></div>
+            <div className="flex flex-col gap-1.5"><label className="text-[12.5px] font-medium text-ink-700">Guru</label><SearchableSelect value={editForm.teacherId} onChange={(v) => setEditForm((f) => ({ ...f, teacherId: v }))} placeholder="Cari nama guru..." options={guruList.map((g) => ({ id: g.id, label: g.namaGuru }))} /></div>
             {!roomDisabled && (
               <SelectField
                 label={`Ruangan${roomRequired ? " (wajib)" : " (opsional)"}`}

@@ -21,6 +21,7 @@ import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import Avatar from "@/components/ui/Avatar";
 import { Card, Badge, EmptyState, StatusSwitch } from "@/components/ui/primitives";
+import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import ImportModal, { type ImportRowResult } from "@/components/import/ImportModal";
 
 interface Props {
@@ -357,37 +358,24 @@ export default function PembagianMengajarWorkspace({
 
           <div className="flex flex-col gap-1.5">
             <label className="text-[12.5px] font-medium text-ink-700">Guru *</label>
-            <select
+            <SearchableSelect
               value={form.guruId}
-              onChange={(e) => setForm((f) => ({ ...f, guruId: e.target.value }))}
+              onChange={(id) => setForm((f) => ({ ...f, guruId: id }))}
+              placeholder="Cari nama guru..."
               required
-              className="h-11 rounded-xl border border-border bg-surface px-3.5 text-[13.5px] text-ink-900 outline-none focus:border-brand-600/50 focus:ring-2 focus:ring-brand-600/15"
-            >
-              <option value="">Pilih guru...</option>
-              {guruList.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.namaGuru} ({g.kodeGuru})
-                </option>
-              ))}
-            </select>
+              options={guruList.map((g) => ({ id: g.id, label: g.namaGuru, sublabel: g.kodeGuru }))}
+            />
           </div>
 
           <div className="flex flex-col gap-1.5">
             <label className="text-[12.5px] font-medium text-ink-700">Mata Pelajaran *</label>
-            <select
+            <SearchableSelect
               value={form.mataPelajaranId}
-              onChange={(e) => setForm((f) => ({ ...f, mataPelajaranId: e.target.value }))}
+              onChange={(id) => setForm((f) => ({ ...f, mataPelajaranId: id }))}
+              placeholder="Cari mata pelajaran..."
               required
-              className="h-11 rounded-xl border border-border bg-surface px-3.5 text-[13.5px] text-ink-900 outline-none focus:border-brand-600/50 focus:ring-2 focus:ring-brand-600/15"
-            >
-              <option value="">Pilih mata pelajaran...</option>
-              {mapelList.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.nama}
-                  {m.kode ? ` (${m.kode})` : ""}
-                </option>
-              ))}
-            </select>
+              options={mapelList.map((m) => ({ id: m.id, label: m.nama, sublabel: m.kode ?? undefined }))}
+            />
           </div>
 
           <div className="flex flex-col gap-1.5">
