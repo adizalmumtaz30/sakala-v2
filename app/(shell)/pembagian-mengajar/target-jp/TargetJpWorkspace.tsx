@@ -156,7 +156,7 @@ export default function TargetJpWorkspace({ activeContextId, activeContextLabel,
               </p>
               <Link
                 href="/akademik/generate-kurikulum"
-                className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-[linear-gradient(135deg,var(--color-brand)_0%,var(--color-violet)_100%)] px-3.5 py-2 text-[12.5px] font-semibold text-white shadow-[0_2px_8px_-2px_color-mix(in_srgb,var(--color-brand)_55%,transparent)] transition-[filter] duration-200 hover:brightness-[1.08]"
+                className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-[linear-gradient(135deg,var(--color-brand)_0%,var(--color-violet)_100%)] px-3.5 py-2 text-[12.5px] font-semibold text-white shadow-[0_2px_8px_-2px_color-mix(in_srgb,var(--color-brand)_55%,transparent)] transition-[filter,transform] duration-150 hover:brightness-[1.08] active:scale-[0.94] active:brightness-[0.92]"
               >
                 <Sparkles size={13} /> Generate dari Kurikulum
               </Link>
@@ -262,7 +262,7 @@ export default function TargetJpWorkspace({ activeContextId, activeContextLabel,
             {assignError && <p className="mt-2 text-[12px] text-rose-700">{assignError}</p>}
             <div className="mt-5 flex justify-end gap-2">
               <button onClick={() => setAssigningRow(null)} className="rounded-xl border border-border px-3.5 py-2 text-[13px] font-semibold text-ink-700">Batal</button>
-              <button onClick={submitAssign} disabled={!assignGuruId || isAssigning} className="rounded-xl bg-[linear-gradient(135deg,var(--color-brand)_0%,var(--color-violet)_100%)] px-3.5 py-2 text-[13px] font-bold text-white shadow-[0_2px_8px_-2px_color-mix(in_srgb,var(--color-brand)_55%,transparent)] transition-[filter] duration-200 hover:brightness-[1.08] disabled:opacity-50 disabled:hover:brightness-100">{isAssigning ? "Menyimpan..." : "Simpan"}</button>
+              <button onClick={submitAssign} disabled={!assignGuruId || isAssigning} className="rounded-xl bg-[linear-gradient(135deg,var(--color-brand)_0%,var(--color-violet)_100%)] px-3.5 py-2 text-[13px] font-bold text-white shadow-[0_2px_8px_-2px_color-mix(in_srgb,var(--color-brand)_55%,transparent)] transition-[filter,transform] duration-150 hover:brightness-[1.08] active:scale-[0.94] active:brightness-[0.92] disabled:opacity-50 disabled:hover:brightness-100">{isAssigning ? "Menyimpan..." : "Simpan"}</button>
             </div>
           </div>
         </div>
@@ -292,7 +292,7 @@ function TargetJpRowItem({ row, expanded, onToggle, onAssign }: { row: TargetJpR
         {/* §2 masukan operator: selesaikan di tempat, jangan cuma kasih tahu
             lalu suruh pindah halaman. */}
         {row.status === "belum_siap" && (
-          <button onClick={onAssign} className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-[linear-gradient(135deg,var(--color-brand)_0%,var(--color-violet)_100%)] px-2.5 py-1.5 text-[12px] font-semibold text-white shadow-[0_2px_8px_-2px_color-mix(in_srgb,var(--color-brand)_55%,transparent)] transition-[filter] duration-200 hover:brightness-[1.08]">
+          <button onClick={onAssign} className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-[linear-gradient(135deg,var(--color-brand)_0%,var(--color-violet)_100%)] px-2.5 py-1.5 text-[12px] font-semibold text-white shadow-[0_2px_8px_-2px_color-mix(in_srgb,var(--color-brand)_55%,transparent)] transition-[filter,transform] duration-150 hover:brightness-[1.08] active:scale-[0.94] active:brightness-[0.92]">
             <UserPlus size={13} /> Tugaskan Guru
           </button>
         )}
