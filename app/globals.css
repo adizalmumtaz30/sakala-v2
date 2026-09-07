@@ -26,6 +26,14 @@ body {
 
 button, input, select, textarea { font: inherit; }
 
+/* StatusSwitch: ikon di dalam thumb "pop" halus setiap ganti status,
+   bukan langsung muncul statis. */
+@keyframes switchPop {
+  0% { opacity: 0; transform: scale(0.4) rotate(-20deg); }
+  60% { opacity: 1; transform: scale(1.15) rotate(4deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+
 :where(button, a, input, select, textarea, [role="button"], [role="menuitem"], [tabindex]:not([tabindex="-1"])):focus-visible {
   outline: 2px solid var(--color-brand);
   outline-offset: 3px;
