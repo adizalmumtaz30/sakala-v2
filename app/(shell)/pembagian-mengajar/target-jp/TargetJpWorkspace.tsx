@@ -8,6 +8,7 @@ import type { TargetJpView, TargetJpRow, TargetJpStatus } from "@/lib/applicatio
 import { formatHari } from "@/lib/domain/jamPelajaran";
 import type { Guru } from "@/lib/domain/guru";
 import { Card, Badge, EmptyState } from "@/components/ui/primitives";
+import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import TargetJpImportPanel from "./TargetJpImportPanel";
 import { createPembagianMengajarAction } from "../actions";
 
@@ -251,10 +252,7 @@ export default function TargetJpWorkspace({ activeContextId, activeContextLabel,
             <p className="mt-0.5 text-[12.5px] text-ink-600">{assigningRow.mataPelajaranNama} · {assigningRow.kelasLabel}</p>
             <div className="mt-4 flex flex-col gap-1.5">
               <label className="text-[12.5px] font-medium text-ink-700">Guru</label>
-              <select value={assignGuruId} onChange={(e) => setAssignGuruId(e.target.value)} className="h-11 rounded-xl border border-border bg-surface px-3.5 text-[13.5px] text-ink-900 outline-none">
-                <option value="">Pilih guru...</option>
-                {guruList.map((g) => <option key={g.id} value={g.id}>{g.namaGuru}</option>)}
-              </select>
+              <SearchableSelect value={assignGuruId} onChange={setAssignGuruId} placeholder="Cari nama guru..." options={guruList.map((g) => ({ id: g.id, label: g.namaGuru, sublabel: g.kodeGuru }))} />
             </div>
             <div className="mt-3 flex flex-col gap-1.5">
               <label className="text-[12.5px] font-medium text-ink-700">JP / Minggu</label>
