@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Plus, Pencil, Trash2, Search } from "lucide-react";
 import type { Kelas, StatusAktif } from "@/lib/domain/kelas";
 import { createKelasAction, updateKelasAction, deleteKelasAction } from "./actions";
@@ -33,6 +34,7 @@ export default function KelasWorkspace({
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<{ id: string; nama: string; message: string } | null>(null);
   const [isPending, startTransition] = useTransition();
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const filtered = data.filter((k) => k.namaRombel.toLowerCase().includes(query.toLowerCase()) || k.tingkat.toLowerCase().includes(query.toLowerCase()));
 
@@ -53,8 +55,8 @@ export default function KelasWorkspace({
     });
   }
 
-  function handleDelete(id: string) {
-    if (!confirm("Hapus kelas ini? Tindakan ini tidak dapat dibatalkan.")) return;
+  async function handleDelete(id: string) {
+    if (!(await confirm("Hapus kelas ini? Tindakan ini tidak dapat dibatalkan."))) return;
     setDeleteError(null);
     const item = data.find((k) => k.id === id);
     startTransition(async () => {
@@ -75,6 +77,7 @@ export default function KelasWorkspace({
 
   return (
     <div className="flex flex-col gap-5">
+      <ConfirmDialog />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-[20px] font-bold text-ink-900">Kelas</h1>
