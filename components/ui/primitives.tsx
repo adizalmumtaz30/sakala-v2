@@ -136,9 +136,15 @@ export function EmptyState({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
-      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-muted text-ink-300">
-        <Inbox size={20} />
+    <div className="flex animate-[modalRise_320ms_cubic-bezier(0.16,0.8,0.24,1)] flex-col items-center justify-center gap-2 py-16 text-center">
+      <div
+        className="flex h-14 w-14 items-center justify-center rounded-full text-brand-700"
+        style={{
+          background: "linear-gradient(160deg, color-mix(in srgb, var(--color-brand) 12%, transparent), color-mix(in srgb, var(--color-violet) 12%, transparent))",
+          boxShadow: "inset 0 1px 1px rgba(255,255,255,.4), 0 0 0 1px color-mix(in srgb, var(--color-brand) 10%, transparent)",
+        }}
+      >
+        <Inbox size={22} />
       </div>
       <p className="text-[14px] font-semibold text-ink-900">{title}</p>
       {description && <p className="max-w-xs text-[12.5px] text-ink-500">{description}</p>}
