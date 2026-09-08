@@ -235,7 +235,7 @@ export default function AnalitikWorkspace({ activeContextLabel, schoolName, view
                           aria-valuemax={maxJam}
                           aria-valuenow={g.totalJamCommitted}
                         >
-                          <div className="h-full rounded-full bg-brand transition-[width] duration-200" style={{ width: `${Math.max(4, percentage)}%` }} />
+                          <div className="h-full rounded-full origin-left animate-[dashGrowX_600ms_cubic-bezier(0.16,0.8,0.24,1)] transition-[width] duration-200" style={{ width: `${Math.max(4, percentage)}%`, background: "linear-gradient(90deg, var(--color-brand) 0%, var(--color-violet) 100%)" }} />
                         </div>
                       </div>
                       <span className="w-16 shrink-0 text-right tabular-nums text-[12px] font-semibold text-ink-700">{g.totalJamCommitted} JP</span>
@@ -279,7 +279,7 @@ export default function AnalitikWorkspace({ activeContextLabel, schoolName, view
               {view.jpBreakdown.map((b) => (
                 <div
                   key={b.status}
-                  className={b.status === "lengkap" ? "bg-emerald" : b.status === "belum_siap" ? "bg-rose" : "bg-amber"}
+                  className={`origin-left animate-[dashGrowX_500ms_cubic-bezier(0.16,0.8,0.24,1)] ${b.status === "lengkap" ? "bg-emerald" : b.status === "belum_siap" ? "bg-rose" : "bg-amber"}`}
                   style={{ width: `${view.totalKombinasiAktif ? (b.count / view.totalKombinasiAktif) * 100 : 0}%` }}
                   title={`${b.label}: ${b.count}`}
                 />
@@ -294,7 +294,7 @@ export default function AnalitikWorkspace({ activeContextLabel, schoolName, view
                     <div className="min-w-0 flex-1">
                       <div className="h-1.5 overflow-hidden rounded-full bg-surface-muted">
                         <div
-                          className={b.status === "lengkap" ? "h-full rounded-full bg-emerald" : b.status === "belum_siap" ? "h-full rounded-full bg-rose" : "h-full rounded-full bg-amber"}
+                          className={b.status === "lengkap" ? "h-full rounded-full bg-emerald origin-left animate-[dashGrowX_500ms_cubic-bezier(0.16,0.8,0.24,1)]" : b.status === "belum_siap" ? "h-full rounded-full bg-rose origin-left animate-[dashGrowX_500ms_cubic-bezier(0.16,0.8,0.24,1)]" : "h-full rounded-full bg-amber origin-left animate-[dashGrowX_500ms_cubic-bezier(0.16,0.8,0.24,1)]"}
                           style={{ width: `${b.count === 0 ? 0 : Math.max(4, percentage)}%` }}
                         />
                       </div>
