@@ -77,10 +77,16 @@ function useCountUp(target: number, durationMs = 500): number {
 
 function KpiCard({ label, value, suffix, icon, href, spark }: { label: string; value: number; suffix?: string; icon: ReactNode; href: string; spark?: DashboardMetricSpark }) {
   const animatedValue = useCountUp(value);
-  return <Link href={href} className="group flex flex-col gap-2.5 rounded-[16px] border border-border/70 bg-surface/95 p-3.5 shadow-[0_1px_2px_rgba(15,23,42,.03)] transition-all hover:-translate-y-0.5 hover:border-brand-600/25 hover:shadow-[0_8px_20px_rgba(15,23,42,.06)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">
-    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600 transition-transform duration-200 group-hover:scale-110">{icon}</span>
+  return <Link href={href} className="group relative flex flex-col gap-2.5 overflow-hidden rounded-[16px] border border-border/70 bg-surface/95 p-3.5 shadow-[0_1px_2px_rgba(15,23,42,.03)] transition-all duration-200 hover:-translate-y-1 hover:border-transparent hover:shadow-[0_10px_24px_-8px_color-mix(in_srgb,var(--color-brand)_35%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 active:scale-[0.98]">
+    <span className="pointer-events-none absolute inset-x-0 top-0 h-[2px] scale-x-0 transition-transform duration-300 group-hover:scale-x-100" style={{ background: "linear-gradient(90deg, var(--color-brand) 0%, var(--color-violet) 100%)" }} />
+    <span
+      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-white transition-transform duration-200 group-hover:scale-110"
+      style={{ background: "linear-gradient(135deg, var(--color-brand) 0%, var(--color-violet) 100%)", boxShadow: "0 2px 6px -2px color-mix(in srgb, var(--color-brand) 50%, transparent)" }}
+    >
+      {icon}
+    </span>
     <span className="min-w-0">
-      <span className="flex items-baseline gap-1"><strong className="text-[16px] font-bold leading-none tabular-nums text-ink-900 group-hover:text-brand-700">{animatedValue}</strong>{suffix && <span className="text-[8.5px] font-medium text-ink-400">{suffix}</span>}</span>
+      <span className="flex items-baseline gap-1"><strong className="text-[16px] font-bold leading-none tabular-nums text-ink-900 transition-colors group-hover:text-brand-700">{animatedValue}</strong>{suffix && <span className="text-[8.5px] font-medium text-ink-400">{suffix}</span>}</span>
       <span className="mt-1.5 block truncate text-[9px] font-medium text-ink-400">{label}</span>
       {spark && spark.trend !== null ? (
         <span className={`mt-0.5 block text-[8px] font-semibold ${spark.trend > 0 ? "text-emerald" : spark.trend < 0 ? "text-rose" : "text-ink-400"}`}>{spark.trend > 0 ? "↑" : spark.trend < 0 ? "↓" : "—"} {spark.trend !== 0 ? Math.abs(spark.trend) : "stabil"}{spark.trend !== 0 ? " dari data sebelumnya" : ""}</span>
@@ -116,11 +122,22 @@ function LineChart({ days }: { days: DashboardHeatmapDay[] }) {
   const plotW = width - padL - padR;
   const points = days.map((d, i) => ({ x: days.length <= 1 ? padL + plotW / 2 : padL + (i * plotW) / Math.max(days.length - 1, 1), y: height - padY - (d.total / max) * (height - padY * 2), d }));
   const path = points.map((p, i) => `${i ? "L" : "M"}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+  const areaPath = `${path} L${points[points.length - 1].x.toFixed(1)} ${height - padY} L${points[0].x.toFixed(1)} ${height - padY} Z`;
   const active = hover !== null ? points[hover] : null;
   const prevTotal = hover !== null && hover > 0 ? points[hover - 1].d.total : null;
   const trendPct = active && prevTotal !== null && prevTotal > 0 ? Math.round(((active.d.total - prevTotal) / prevTotal) * 100) : null;
   return <div className="relative h-[164px] w-full overflow-visible rounded-xl bg-surface-muted/45 px-1 pt-1">
     <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="h-[142px] w-full overflow-visible" role="img" aria-label="Distribusi JP committed per hari">
+      <defs>
+        <linearGradient id="dashLineStroke" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="var(--color-brand)" />
+          <stop offset="100%" stopColor="var(--color-violet)" />
+        </linearGradient>
+        <linearGradient id="dashLineArea" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="var(--color-brand)" stopOpacity="0.22" />
+          <stop offset="100%" stopColor="var(--color-brand)" stopOpacity="0" />
+        </linearGradient>
+      </defs>
       {ticks.map((t) => {
         const y = height - padY - (t / max) * (height - padY * 2);
         return <g key={t}>
@@ -128,8 +145,14 @@ function LineChart({ days }: { days: DashboardHeatmapDay[] }) {
           <text x={padL - 6} y={y + 3} textAnchor="end" className="fill-ink-400" fontSize="8.5">{t}</text>
         </g>;
       })}
-      <path d={path} fill="none" stroke="currentColor" className="text-brand-600" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-      {points.map(({ x, y, d }, i) => <circle key={d.day} cx={x} cy={y} r={hover === i ? 6 : 4.5} fill="currentColor" className="text-brand-600 transition-all" />)}
+      <path d={areaPath} fill="url(#dashLineArea)" className="animate-[dashFadeIn_500ms_ease-out]" />
+      <path d={path} fill="none" stroke="url(#dashLineStroke)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" pathLength={1} className="animate-[dashDrawIn_700ms_cubic-bezier(0.16,0.8,0.24,1)]" style={{ strokeDasharray: 1, strokeDashoffset: 0 }} />
+      {points.map(({ x, y, d }, i) => (
+        <g key={d.day}>
+          {hover === i && <circle cx={x} cy={y} r={10} fill="var(--color-brand)" opacity={0.18} className="animate-[dashPulse_1.4s_ease-out_infinite]" />}
+          <circle cx={x} cy={y} r={hover === i ? 6 : 4.5} fill="url(#dashLineStroke)" className="transition-all" style={{ filter: hover === i ? "drop-shadow(0 0 4px color-mix(in srgb, var(--color-violet) 60%, transparent))" : undefined }} />
+        </g>
+      ))}
       {active && <line x1={active.x} y1={active.y} x2={active.x} y2={height - padY} stroke="currentColor" className="text-brand-600/50" strokeWidth="1" strokeDasharray="3 3" />}
     </svg>
     <div className="absolute inset-x-0 bottom-1 flex justify-between px-[30px] text-[9px] font-medium text-ink-400">{days.map((d) => <Link key={d.day} href={`/analitik?day=${encodeURIComponent(d.day)}`} className="rounded px-1 hover:text-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">{d.label.slice(0, 3)}</Link>)}</div>
@@ -151,7 +174,16 @@ function BarChartJtm({ days }: { days: DashboardHeatmapDay[] }) {
   return <div className="flex h-[164px] items-end gap-2 rounded-xl bg-surface-muted/45 px-3 pb-6 pt-3">
     {days.map((d, i) => <Link key={d.day} href={`/analitik?day=${encodeURIComponent(d.day)}`} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)} className="group relative flex h-full flex-1 flex-col items-center justify-end gap-1.5 focus-visible:outline-none">
       {hover === i && <span className="absolute -top-1 -translate-y-full whitespace-nowrap rounded-lg border border-border bg-surface px-2 py-1 text-[9px] font-semibold text-ink-800 shadow-lg">{d.total} JP</span>}
-      <div className={`w-full rounded-t-md transition-all ${hover === i ? "bg-brand-600" : "bg-brand-500/70 group-hover:bg-brand-600"}`} style={{ height: `${Math.max((d.total / max) * 100, d.total > 0 ? 4 : 1)}%` }} />
+      <div
+        className="w-full origin-bottom animate-[dashGrow_500ms_cubic-bezier(0.16,0.8,0.24,1)_backwards] rounded-t-md transition-[filter,height] duration-200"
+        style={{
+          height: `${Math.max((d.total / max) * 100, d.total > 0 ? 4 : 1)}%`,
+          background: "linear-gradient(180deg, var(--color-violet) 0%, var(--color-brand) 100%)",
+          filter: hover === i ? "brightness(1.12)" : undefined,
+          boxShadow: hover === i ? "0 0 10px -2px color-mix(in srgb, var(--color-violet) 55%, transparent)" : undefined,
+          animationDelay: `${i * 40}ms`,
+        }}
+      />
       <span className="text-[8.5px] font-medium text-ink-400 group-hover:text-brand-600">{d.label.slice(0, 3)}</span>
     </Link>)}
   </div>;
@@ -199,7 +231,10 @@ function BebanDonut({ distribution, variant, onVariantChange }: { distribution: 
       </button>
     </div>
     {variant === "donut" ? <div className="flex items-center gap-5">
-      <div className="relative h-28 w-28 shrink-0 rounded-full p-[11px] transition-transform hover:scale-[1.02]" style={{ background: bg }}>
+      <div
+        className="relative h-28 w-28 shrink-0 animate-[dashFadeIn_450ms_ease-out] rounded-full p-[11px] transition-transform duration-200 hover:scale-[1.04]"
+        style={{ background: bg, filter: "drop-shadow(0 4px 14px color-mix(in srgb, var(--color-violet) 22%, transparent))" }}
+      >
         <Link href="/guru" aria-label="Buka Data Guru" className="flex h-full w-full items-center justify-center rounded-full bg-surface text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">
           <span><strong className="block text-[20px] leading-none tabular-nums text-ink-900">{distribution.ringan + distribution.normal + distribution.berat}</strong><small className="mt-1 block text-[8px] text-ink-400">guru aktif</small></span>
         </Link>
@@ -210,7 +245,7 @@ function BebanDonut({ distribution, variant, onVariantChange }: { distribution: 
     </div> : <div className="space-y-2.5">
       {rows.map((r) => <Link key={r.key} href="/guru" className={`block rounded-lg px-1 py-1 focus-visible:ring-2 focus-visible:ring-brand-500/40 ${r.hover}`}>
         <div className="mb-1 flex items-center justify-between text-[10px]"><span className="flex items-center gap-1.5"><span className={`h-1.5 w-1.5 rounded-full ${r.dot}`} />{r.label} <span className="text-ink-400">{r.range}</span></span><span className="tabular-nums"><b>{r.value}</b><span className="ml-1 text-[8.5px] text-ink-400">({pct(r.value)}%)</span></span></div>
-        <div className="h-2 w-full overflow-hidden rounded-full bg-surface-muted"><div className={`h-full rounded-full ${r.dot}`} style={{ width: `${pct(r.value)}%` }} /></div>
+        <div className="h-2 w-full overflow-hidden rounded-full bg-surface-muted"><div className={`h-full origin-left animate-[dashGrowX_500ms_cubic-bezier(0.16,0.8,0.24,1)] rounded-full ${r.dot}`} style={{ width: `${pct(r.value)}%` }} /></div>
       </Link>)}
     </div>}
   </div>;
