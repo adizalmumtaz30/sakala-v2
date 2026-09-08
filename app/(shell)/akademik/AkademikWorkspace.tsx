@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import Link from "next/link";
 import {
   Plus,
@@ -105,6 +106,7 @@ export default function AkademikWorkspace({
   const [slotError, setSlotError] = useState<string | null>(null);
 
   const [isPending, startTransition] = useTransition();
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const activeContext = contexts.find((c) => c.isActive) ?? null;
 
@@ -193,9 +195,9 @@ export default function AkademikWorkspace({
     });
   }
 
-  function handleDeactivate(context: AcademicContext) {
+  async function handleDeactivate(context: AcademicContext) {
     if (!context.isActive) return;
-    if (!confirm(`Nonaktifkan konteks ${formatContextLabel(context)}? Halaman yang bergantung pada konteks aktif (Dashboard, Jadwal, dst) akan menampilkan status "belum siap" sampai konteks lain diaktifkan.`)) return;
+    if (!(await confirm(`Nonaktifkan konteks ${formatContextLabel(context)}? Halaman yang bergantung pada konteks aktif (Dashboard, Jadwal, dst) akan menampilkan status "belum siap" sampai konteks lain diaktifkan.`))) return;
     startTransition(async () => {
       const result = await deactivateAcademicContextAction(context.id);
       if (!result.ok) return;
@@ -204,9 +206,9 @@ export default function AkademikWorkspace({
     });
   }
 
-  function handleDeleteContext(context: AcademicContext) {
+  async function handleDeleteContext(context: AcademicContext) {
     if (context.isActive) return;
-    if (!confirm(`Hapus konteks ${formatContextLabel(context)}? Tindakan tidak bisa dibatalkan.`)) return;
+    if (!(await confirm(`Hapus konteks ${formatContextLabel(context)}? Tindakan tidak bisa dibatalkan.`))) return;
     startTransition(async () => {
       const result = await deleteAcademicContextAction(context);
       if (result.ok) setContexts((prev) => prev.filter((c) => c.id !== context.id));
@@ -258,8 +260,8 @@ export default function AkademikWorkspace({
     });
   }
 
-  function handleDeletePeriode(periode: PeriodeAkademik) {
-    if (!confirm(`Hapus periode "${periode.nama}"? Tindakan tidak bisa dibatalkan.`)) return;
+  async function handleDeletePeriode(periode: PeriodeAkademik) {
+    if (!(await confirm(`Hapus periode "${periode.nama}"? Tindakan tidak bisa dibatalkan.`))) return;
     startTransition(async () => {
       const result = await deletePeriodeAkademikAction(periode.id);
       if (result.ok) setPeriodeList((prev) => prev.filter((p) => p.id !== periode.id));
@@ -313,8 +315,8 @@ export default function AkademikWorkspace({
     });
   }
 
-  function handleDeleteJam(jam: JamPelajaran) {
-    if (!confirm(`Hapus jam pelajaran "${jam.nama}" (${formatHari(jam.hari)})? Tindakan tidak bisa dibatalkan.`)) return;
+  async function handleDeleteJam(jam: JamPelajaran) {
+    if (!(await confirm(`Hapus jam pelajaran "${jam.nama}" (${formatHari(jam.hari)})? Tindakan tidak bisa dibatalkan.`))) return;
     startTransition(async () => {
       const result = await deleteJamPelajaranAction(jam.id);
       if (result.ok) setJamList((prev) => prev.filter((j) => j.id !== jam.id));
@@ -395,8 +397,8 @@ export default function AkademikWorkspace({
     });
   }
 
-  function handleDeleteModel(model: ScheduleModel) {
-    if (!confirm(`Hapus Schedule Model "${model.namaModel}"? Slot Template di dalamnya ikut terhapus.`)) return;
+  async function handleDeleteModel(model: ScheduleModel) {
+    if (!(await confirm(`Hapus Schedule Model "${model.namaModel}"? Slot Template di dalamnya ikut terhapus.`))) return;
     startTransition(async () => {
       const result = await deleteScheduleModelAction(model.id);
       if (result.ok) setModelList((prev) => prev.filter((m) => m.id !== model.id));
@@ -461,8 +463,8 @@ export default function AkademikWorkspace({
     });
   }
 
-  function handleDeleteSlot(slot: SlotTemplate) {
-    if (!confirm(`Hapus Slot Template "${formatJenisSlot(slot)}" (${formatHari(slot.hari)}, ke-${slot.nomorUrut})?`)) return;
+  async function handleDeleteSlot(slot: SlotTemplate) {
+    if (!(await confirm(`Hapus Slot Template "${formatJenisSlot(slot)}" (${formatHari(slot.hari)}, ke-${slot.nomorUrut})?`))) return;
     startTransition(async () => {
       const result = await deleteSlotTemplateAction(slot.id);
       if (result.ok) setSlotList((prev) => prev.filter((s) => s.id !== slot.id));
@@ -471,6 +473,7 @@ export default function AkademikWorkspace({
 
   return (
     <div className="flex flex-col gap-6">
+      <ConfirmDialog />
       <div>
         <h1 className="text-[20px] font-bold text-ink-900">Akademik</h1>
         <p className="text-[13px] text-ink-500">

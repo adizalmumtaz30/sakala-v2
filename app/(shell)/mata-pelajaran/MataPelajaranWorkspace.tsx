@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Plus, Pencil, Trash2, Search, Upload, Check, Sparkles } from "lucide-react";
@@ -36,6 +37,7 @@ export default function MataPelajaranWorkspace({ initialData, initialQuery, unma
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<{ id: string; nama: string; message: string } | null>(null);
   const [isPending, startTransition] = useTransition();
+  const { confirm, ConfirmDialog } = useConfirm();
 
   useEffect(() => setData(initialData), [initialData]);
   const filtered = data.filter((m) => m.nama.toLowerCase().includes(query.toLowerCase()) || (m.kode ?? "").toLowerCase().includes(query.toLowerCase()));
@@ -67,8 +69,8 @@ export default function MataPelajaranWorkspace({ initialData, initialQuery, unma
     });
   }
 
-  function handleDelete(id: string) {
-    if (!confirm("Hapus mata pelajaran ini?")) return;
+  async function handleDelete(id: string) {
+    if (!(await confirm("Hapus mata pelajaran ini?"))) return;
     setDeleteError(null);
     const item = data.find((m) => m.id === id);
     startTransition(async () => {
@@ -102,6 +104,7 @@ export default function MataPelajaranWorkspace({ initialData, initialQuery, unma
 
   return (
     <div className="flex flex-col gap-5">
+      <ConfirmDialog />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-[20px] font-bold text-ink-900">Mata Pelajaran</h1>

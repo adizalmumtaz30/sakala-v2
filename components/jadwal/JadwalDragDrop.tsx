@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useRouter } from "next/navigation";
 import { GripVertical, AlertTriangle, CheckCircle2, MoreVertical, Trash2, Move } from "lucide-react";
 import type { ScheduleAssignment } from "@/lib/domain/scheduleAssignment";
@@ -31,6 +32,7 @@ export default function JadwalDragDrop({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [menuId, setMenuId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const { confirm, ConfirmDialog } = useConfirm();
   const model = activeModels.find((m) => m.id === modelId) ?? null;
   const days = model ? URUTAN_HARI.filter((d) => model.hariAktif.includes(d)) : [];
   const committed = useMemo(() => assignments.filter((a) => a.status === "committed" && a.scheduleModelId === modelId), [assignments, modelId]);
@@ -77,6 +79,7 @@ export default function JadwalDragDrop({
 
   return (
     <section className="mx-auto flex max-w-6xl flex-col gap-3 rounded-card border border-border bg-surface p-4 shadow-soft">
+      <ConfirmDialog />
       <div className="flex flex-wrap items-center gap-3">
         <div className="mr-auto"><h2 className="text-[14px] font-semibold text-ink-900">Drag &amp; Drop Jadwal</h2><p className="text-[11.5px] text-ink-500">Tarik kartu jadwal ke slot kosong. Conflict tetap diblokir server-side.</p></div>
         <select value={modelId} onChange={(e) => setModelId(e.target.value)} className="h-10 rounded-xl border border-border bg-surface px-3 text-[12.5px]">{activeModels.map((m) => <option key={m.id} value={m.id}>{m.namaModel}</option>)}</select>
@@ -96,7 +99,7 @@ export default function JadwalDragDrop({
                   <div draggable={busyId !== a.id} onDragStart={(e) => { setDragId(a.id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", a.id); }} onDragEnd={() => setDragId(null)} className={`flex cursor-grab items-start gap-1 rounded-lg border border-border bg-surface px-2 py-1.5 shadow-sm active:cursor-grabbing ${busyId === a.id ? "opacity-50" : ""}`}>
                     <GripVertical size={14} className="mt-0.5 shrink-0 text-ink-400" />
                     <div className="min-w-0 pr-4"><div className="truncate text-[11px] font-semibold text-ink-900">{subjectNames[a.subjectId] ?? "Mapel"}</div><div className="truncate text-[10px] text-ink-500">{classNames[a.classId] ?? "Kelas"} · {teacherNames[a.teacherId] ?? "Guru"}</div>{a.periodEnd > a.periodStart && <div className="text-[9.5px] text-brand-700">{a.periodEnd - a.periodStart + 1} JP</div>}</div>
-                    <div className="absolute right-1 top-1"><button type="button" aria-label="Menu slot" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setMenuId(menuId === a.id ? null : a.id); }} className="rounded-md p-1 text-ink-400 hover:bg-surface-muted hover:text-ink-800"><MoreVertical size={14} /></button>{menuId === a.id && <div className="absolute right-0 z-20 mt-1 w-40 rounded-lg border border-border bg-surface p-1 shadow-lg"><button type="button" onClick={() => setNotice("Tarik kartu ini ke slot tujuan untuk memindahkannya.")} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-surface-muted"><Move size={13} />Pindah via Drag &amp; Drop</button><button type="button" disabled={busyId === a.id} onClick={() => { if (window.confirm("Arsipkan jadwal ini?")) void remove(a.id); }} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-rose hover:bg-surface-muted disabled:opacity-40"><Trash2 size={13} />Arsipkan / Hapus</button></div>}</div>
+                    <div className="absolute right-1 top-1"><button type="button" aria-label="Menu slot" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setMenuId(menuId === a.id ? null : a.id); }} className="rounded-md p-1 text-ink-400 hover:bg-surface-muted hover:text-ink-800"><MoreVertical size={14} /></button>{menuId === a.id && <div className="absolute right-0 z-20 mt-1 w-40 rounded-lg border border-border bg-surface p-1 shadow-lg"><button type="button" onClick={() => setNotice("Tarik kartu ini ke slot tujuan untuk memindahkannya.")} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-surface-muted"><Move size={13} />Pindah via Drag &amp; Drop</button><button type="button" disabled={busyId === a.id} onClick={async () => { if (await confirm("Arsipkan jadwal ini?")) void remove(a.id); }} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-rose hover:bg-surface-muted disabled:opacity-40"><Trash2 size={13} />Arsipkan / Hapus</button></div>}</div>
                   </div>
                 ) : a ? <div className="h-full rounded-lg bg-surface-muted" /> : <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-border text-[10px] text-ink-300">Drop</div>}
               </div>;

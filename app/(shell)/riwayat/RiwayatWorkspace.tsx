@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { History, ChevronDown, ChevronUp, RotateCcw } from "lucide-react";
 import type { AuditAction, AuditLogEntry } from "@/lib/domain/auditLog";
 import { AUDIT_ACTION_LABEL, AUDIT_ENTITY_LABEL } from "@/lib/domain/auditLog";
@@ -52,6 +53,7 @@ export default function RiwayatWorkspace({
   const [actionFilter, setActionFilter] = useState<AuditAction | "all">("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const hasMore = items.length < totalCount;
 
@@ -86,9 +88,9 @@ export default function RiwayatWorkspace({
     });
   }
 
-  function restoreVersion(version: ScheduleVersion) {
+  async function restoreVersion(version: ScheduleVersion) {
     if (!activeContext || version.status === "active") return;
-    const confirmed = window.confirm(
+    const confirmed = await confirm(
       `Pulihkan versi "${version.label}"? Jadwal aktif saat ini akan disimpan sebagai versi historis dan tidak dihapus.`
     );
     if (!confirmed) return;
@@ -113,6 +115,7 @@ export default function RiwayatWorkspace({
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-5 pb-16 pt-6">
+      <ConfirmDialog />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-[18px] font-semibold text-ink-900">Riwayat</h1>

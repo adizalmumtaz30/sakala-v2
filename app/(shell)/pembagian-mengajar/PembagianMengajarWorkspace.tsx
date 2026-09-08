@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Plus, Pencil, Trash2, Search, Upload, Target } from "lucide-react";
@@ -60,6 +61,7 @@ export default function PembagianMengajarWorkspace({
   const [jpTouched, setJpTouched] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const { confirm, ConfirmDialog } = useConfirm();
 
   useEffect(() => setData(initialData), [initialData]);
 
@@ -211,8 +213,8 @@ export default function PembagianMengajarWorkspace({
     });
   }
 
-  function handleDelete(id: string) {
-    if (!confirm("Hapus pembagian mengajar ini?")) return;
+  async function handleDelete(id: string) {
+    if (!(await confirm("Hapus pembagian mengajar ini?"))) return;
     startTransition(async () => {
       const result = await deletePembagianMengajarAction(id);
       if (!result.ok) {
@@ -243,6 +245,7 @@ export default function PembagianMengajarWorkspace({
 
   return (
     <div className="flex flex-col gap-5">
+      <ConfirmDialog />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-[20px] font-bold text-ink-900">Pembagian Mengajar</h1>

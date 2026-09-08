@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Plus, Pencil, Trash2, Search, ChevronDown, Upload, Eye, CalendarPlus, GraduationCap } from "lucide-react";
@@ -28,6 +29,7 @@ export default function GuruWorkspace({ initialData, initialQuery }: { initialDa
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<{ id: string; nama: string; message: string } | null>(null);
   const [isPending, startTransition] = useTransition();
+  const { confirm, ConfirmDialog } = useConfirm();
 
   useEffect(() => setData(initialData), [initialData]);
   const filtered = data.filter((g) => g.namaGuru.toLowerCase().includes(query.toLowerCase()));
@@ -62,8 +64,8 @@ export default function GuruWorkspace({ initialData, initialQuery }: { initialDa
     });
   }
 
-  function handleDelete(id: string) {
-    if (!confirm("Hapus data guru ini? Tindakan tidak bisa dibatalkan.")) return;
+  async function handleDelete(id: string) {
+    if (!(await confirm("Hapus data guru ini? Tindakan tidak bisa dibatalkan."))) return;
     setDeleteError(null);
     const item = data.find((g) => g.id === id);
     startTransition(async () => {
@@ -96,6 +98,7 @@ export default function GuruWorkspace({ initialData, initialQuery }: { initialDa
 
   return (
     <div className="flex flex-col gap-5">
+      <ConfirmDialog />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <IconChip icon={<GraduationCap size={20} strokeWidth={2.1} />} tone="brand" size="lg" shadow />

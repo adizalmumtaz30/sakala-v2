@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Plus, Pencil, Trash2, Search } from "lucide-react";
 import type { Ruangan, StatusAktif } from "@/lib/domain/ruangan";
 import { createRuanganAction, updateRuanganAction, deleteRuanganAction } from "./actions";
@@ -18,6 +19,7 @@ export default function RuanganWorkspace({ initialData, initialQuery }: { initia
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<{ id: string; nama: string; message: string } | null>(null);
   const [isPending, startTransition] = useTransition();
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const filtered = data.filter((r) => r.nama.toLowerCase().includes(query.toLowerCase()));
   function openCreate() { setEditing(null); setFormError(null); setModalOpen(true); }
@@ -37,8 +39,8 @@ export default function RuanganWorkspace({ initialData, initialQuery }: { initia
     });
   }
 
-  function handleDelete(id: string) {
-    if (!confirm("Hapus ruangan ini? Tindakan ini tidak dapat dibatalkan.")) return;
+  async function handleDelete(id: string) {
+    if (!(await confirm("Hapus ruangan ini? Tindakan ini tidak dapat dibatalkan."))) return;
     setDeleteError(null);
     const item = data.find((r) => r.id === id);
     startTransition(async () => {
@@ -59,6 +61,7 @@ export default function RuanganWorkspace({ initialData, initialQuery }: { initia
 
   return (
     <div className="flex flex-col gap-5">
+      <ConfirmDialog />
       <div className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-[20px] font-bold text-ink-900">Ruangan</h1><p className="text-[13px] text-ink-500">Kelola ruangan dan kapasitasnya untuk membantu menyusun jadwal.</p></div><Button onClick={openCreate}><Plus size={16} /> Tambah Ruangan</Button></div>
       {deleteError && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose/30 bg-rose-50 px-4 py-3">
