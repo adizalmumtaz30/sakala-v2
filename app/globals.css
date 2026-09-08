@@ -40,6 +40,31 @@ button, input, select, textarea { font: inherit; }
   100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+/* Dashboard: grafik garis "menggambar" masuk + area fade-in + titik pulse saat hover. */
+@keyframes dashDrawIn {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes dashFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes dashPulse {
+  0% { opacity: 0.35; transform: scale(0.6); }
+  70% { opacity: 0; transform: scale(1.6); }
+  100% { opacity: 0; transform: scale(1.6); }
+}
+/* Dashboard: batang grafik tumbuh dari bawah saat pertama tampil. */
+@keyframes dashGrow {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+/* Dashboard: batang horizontal (distribusi beban) tumbuh dari kiri. */
+@keyframes dashGrowX {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
 :where(button, a, input, select, textarea, [role="button"], [role="menuitem"], [tabindex]:not([tabindex="-1"])):focus-visible {
   outline: 2px solid var(--color-brand);
   outline-offset: 3px;
