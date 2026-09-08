@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { useToast } from "@/components/ui/Toast";
 import { History, ChevronDown, ChevronUp, RotateCcw } from "lucide-react";
 import type { AuditAction, AuditLogEntry } from "@/lib/domain/auditLog";
 import { AUDIT_ACTION_LABEL, AUDIT_ENTITY_LABEL } from "@/lib/domain/auditLog";
@@ -54,6 +55,7 @@ export default function RiwayatWorkspace({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const { confirm, ConfirmDialog } = useConfirm();
+  const { toast, ToastHost } = useToast();
 
   const hasMore = items.length < totalCount;
 
@@ -98,7 +100,7 @@ export default function RiwayatWorkspace({
     startTransition(async () => {
       const result = await restoreScheduleVersionAction(activeContext.id, version.id);
       if (!result.ok) {
-        window.alert(result.error);
+        toast.error(result.error);
         return;
       }
       setVersions((prev) => prev.map((item) =>
@@ -108,14 +110,15 @@ export default function RiwayatWorkspace({
             ? { ...item, status: "superseded" }
             : item
       ));
-      window.alert(`Versi dipulihkan. ${result.data.restoredAssignments} assignment dikembalikan.`);
-      window.location.reload();
+      toast.success(`Versi dipulihkan. ${result.data.restoredAssignments} assignment dikembalikan.`);
+      setTimeout(() => window.location.reload(), 900);
     });
   }
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-5 pb-16 pt-6">
       <ConfirmDialog />
+      <ToastHost />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-[18px] font-semibold text-ink-900">Riwayat</h1>

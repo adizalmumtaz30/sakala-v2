@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useToast } from "@/components/ui/Toast";
 import Link from "next/link";
 import { ArrowLeft, CheckCircle2, ChevronRight, Link2, RefreshCw, Save, Search, ShieldCheck, Sparkles, UploadCloud, X } from "lucide-react";
 import { adoptCurriculumItemsAction, listCurriculumIntelligenceAction, getCurriculumDraftAction, saveCurriculumDraftAction, clearCurriculumDraftAction, recordCurriculumGenerateEventAction, getPreviouslyAdoptedSubjectsAction, deleteCurriculumSourceAction, extractCurriculumPdfAction, saveExtractedCurriculumSourceAction, promoteCurriculumSourceToOfficialAction, type ExtractedCurriculumRow } from "../mata-pelajaran/curriculum-actions";
@@ -49,6 +50,7 @@ export default function GenerateKurikulumPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [errorRetry, setErrorRetry] = useState<"load" | "commit" | null>(null);
   const [busy, setBusy] = useState(true);
+  const { toast, ToastHost } = useToast();
   const [updating, setUpdating] = useState(false);
   const [committing, setCommitting] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -403,7 +405,7 @@ export default function GenerateKurikulumPage() {
     }
     if (result.ok) {
       setSyncStep(3);
-      setSuccess(true); setMessage(`Kurikulum tersimpan: ${result.data.adopted} kombinasi.`);
+      setSuccess(true); setMessage(`Kurikulum tersimpan: ${result.data.adopted} kombinasi.`); toast.success(`Kurikulum tersimpan: ${result.data.adopted} kombinasi.`);
       setBelumSiapCount(result.data.belumSiapCount);
       // Draft sudah "terpakai" — hapus supaya sesi berikutnya mulai bersih,
       // bukan merehidrasi candidate yang sudah di-commit.
@@ -454,6 +456,7 @@ export default function GenerateKurikulumPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-5 pb-24">
+      <ToastHost />
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <Link href="/akademik/mata-pelajaran" className="inline-flex items-center gap-2 text-sm font-semibold text-brand-700"><ArrowLeft className="h-4 w-4" /> Kembali</Link>
