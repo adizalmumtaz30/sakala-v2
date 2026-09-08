@@ -63,7 +63,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
 
   return (
     <aside className="fixed inset-y-0 left-0 z-30 flex flex-col overflow-visible border-r border-border bg-surface transition-[width] duration-200 ease-out" style={{ width: collapsed ? 68 : 240 }}>
-      <button type="button" onClick={onToggle} aria-label={collapsed ? "Perluas sidebar" : "Ciutkan sidebar"} title={collapsed ? "Perluas sidebar" : "Ciutkan sidebar"} className="absolute -right-3 top-16 z-40 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-surface text-ink-500 shadow-sm transition-colors hover:border-brand-600/30 hover:text-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">
+      <button type="button" onClick={onToggle} aria-label={collapsed ? "Perluas sidebar" : "Ciutkan sidebar"} title={collapsed ? "Perluas sidebar" : "Ciutkan sidebar"} className="absolute -right-3 top-16 z-40 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-surface text-ink-500 shadow-sm transition-all duration-150 hover:border-brand-600/30 hover:text-brand-600 active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">
         {collapsed ? <ChevronRight size={13} /> : <ChevronLeft size={13} />}
       </button>
       <div className={`flex items-center gap-3 border-b border-border py-4 ${collapsed ? "justify-center px-2" : "px-5"}`}>
@@ -80,9 +80,23 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                   const active = item.match ? item.match(pathname) : pathname === item.href || pathname.startsWith(`${item.href}/`);
                   const Icon = item.icon;
                   return (
-                    <Link key={item.href} href={item.href} title={collapsed ? item.label : undefined} className={`group relative flex items-center gap-3 rounded-[10px] py-2 text-[13px] font-medium transition-all duration-150 ${collapsed ? "justify-center px-0" : "px-3"} ${active ? "bg-brand-50 text-brand-700" : "text-ink-700 hover:bg-surface-muted"}`}>
-                      {active && <span className={`absolute top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-brand-600 ${collapsed ? "left-0.5" : "left-0"}`} />}
-                      <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] ${active ? "bg-brand-100 text-brand-600" : "text-ink-400 group-hover:text-ink-700"}`}>
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      title={collapsed ? item.label : undefined}
+                      className={`group relative flex items-center gap-3 rounded-[10px] py-2 text-[13px] font-medium transition-all duration-150 active:scale-[0.97] ${collapsed ? "justify-center px-0" : "px-3"} ${active ? "text-brand-700" : "text-ink-700 hover:bg-surface-muted"}`}
+                      style={active ? { background: "linear-gradient(90deg, color-mix(in srgb, var(--color-brand) 10%, transparent) 0%, color-mix(in srgb, var(--color-violet) 8%, transparent) 100%)" } : undefined}
+                    >
+                      {active && (
+                        <span
+                          className={`absolute top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full ${collapsed ? "left-0.5" : "left-0"}`}
+                          style={{ background: "linear-gradient(180deg, var(--color-brand) 0%, var(--color-violet) 100%)" }}
+                        />
+                      )}
+                      <span
+                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] transition-colors duration-150 ${active ? "text-white" : "text-ink-400 group-hover:text-ink-700"}`}
+                        style={active ? { background: "linear-gradient(135deg, var(--color-brand) 0%, var(--color-violet) 100%)", boxShadow: "0 1px 4px -1px color-mix(in srgb, var(--color-brand) 45%, transparent)" } : undefined}
+                      >
                         <Icon size={18} strokeWidth={1.8} />
                       </span>
                       {!collapsed && item.label}
@@ -95,11 +109,19 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
         </div>
       </nav>
       {!collapsed && (
-        <div className="mx-3 mb-3 rounded-2xl border border-border/70 bg-gradient-to-br from-brand-50 to-surface p-3.5">
-          <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-brand-100 text-brand-600"><LifeBuoy size={16} strokeWidth={1.8} /></span>
+        <div
+          className="mx-3 mb-3 overflow-hidden rounded-2xl border border-border/70 p-3.5 shadow-soft"
+          style={{ background: "linear-gradient(160deg, color-mix(in srgb, var(--color-brand) 8%, var(--color-surface)) 0%, color-mix(in srgb, var(--color-violet) 8%, var(--color-surface)) 100%)" }}
+        >
+          <span
+            className="flex h-8 w-8 items-center justify-center rounded-xl text-white"
+            style={{ background: "linear-gradient(135deg, var(--color-brand) 0%, var(--color-violet) 100%)", boxShadow: "0 1px 4px -1px color-mix(in srgb, var(--color-brand) 45%, transparent)" }}
+          >
+            <LifeBuoy size={16} strokeWidth={1.8} />
+          </span>
           <p className="mt-2.5 text-[11.5px] font-semibold leading-tight text-ink-800">Butuh bantuan?</p>
           <p className="mt-1 text-[9.5px] leading-4 text-ink-400">Panduan &amp; dukungan tim SAKALA siap membantu Anda.</p>
-          <Link href="/navigasi" className="mt-2.5 inline-flex items-center gap-1 text-[9.5px] font-semibold text-brand-600 hover:text-brand-700">Pelajari lebih lanjut<ArrowUpRight size={11} /></Link>
+          <Link href="/navigasi" className="mt-2.5 inline-flex items-center gap-1 text-[9.5px] font-semibold text-brand-600 transition-transform duration-150 hover:text-brand-700 active:scale-[0.96]">Pelajari lebih lanjut<ArrowUpRight size={11} /></Link>
         </div>
       )}
       {!collapsed && <p className="px-5 pb-4 text-center text-[10px] text-ink-300">© 2026 SAKALA V2</p>}
