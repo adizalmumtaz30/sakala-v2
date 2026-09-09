@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState, useEffect, useRef } from "react";
-import { Activity, ArrowRight, Bell, BookOpen, CalendarCheck2, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, DoorOpen, Info, AlertTriangle, Layers, Lightbulb, Plus, Sparkles, ShieldCheck, Upload, MoreHorizontal, Search, Users, X, Settings2, GripVertical, Minus, RotateCcw, BarChart3, LineChartIcon, PieChart } from "lucide-react";
+import { Activity, ArrowRight, Bell, BookOpen, CalendarCheck2, CalendarDays, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock3, DoorOpen, Info, AlertTriangle, Layers, Lightbulb, Plus, Sparkles, ShieldCheck, Upload, MoreHorizontal, Search, Users, X, Settings2, GripVertical, Minus, RotateCcw, BarChart3, LineChartIcon, PieChart } from "lucide-react";
 import type { ReactNode } from "react";
 import type { DashboardKeyMetrics, DashboardJpInsight, DashboardWorkloadEntry, DashboardMetricTrends, DashboardMetricSpark, DashboardScheduleConflictSummary } from "@/lib/application/dashboard.usecases";
 import type { DashboardCurriculumStatus } from "@/lib/application/dashboardCurriculumStatus.usecases";
@@ -483,23 +483,43 @@ function Widget({ id, title, editing, span, dragOverId, onDragStart, onDragOver,
 function DashboardCustomizeBar({ open, onToggle, fontSize, fontFamily, onFontSize, onFontFamily, onReset }: {
   open: boolean; onToggle: () => void; fontSize: FontSize; fontFamily: FontFamily; onFontSize: (v: FontSize) => void; onFontFamily: (v: FontFamily) => void; onReset: () => void;
 }) {
+  // §"jangan langsung full": panel dibuka dulu ringkas (cuma Ukuran Font,
+  // paling sering dipakai), sisanya (Jenis Font, hint drag, reset) baru
+  // muncul kalau operator klik panah "lihat lengkap" — bukan semua
+  // sekaligus begitu tombol Kustomisasi diklik.
+  const [detailOpen, setDetailOpen] = useState(false);
   return <div className="relative">
-    <button type="button" onClick={onToggle} aria-expanded={open} className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[10.5px] font-semibold shadow-sm transition-colors ${open ? "border-brand-600/40 bg-brand-50 text-brand-700" : "border-border bg-surface text-ink-700 hover:border-brand-600/25"}`}>
+    <button type="button" onClick={onToggle} aria-expanded={open} className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[10.5px] font-semibold shadow-sm backdrop-blur-md transition-colors ${open ? "border-brand-600/30 text-brand-700" : "border-border/70 bg-surface/80 text-ink-700 hover:border-brand-600/25"}`} style={open ? { background: "linear-gradient(140deg, color-mix(in srgb, var(--color-brand) 12%, transparent), color-mix(in srgb, var(--color-violet) 12%, transparent))" } : undefined}>
       <Settings2 size={13} /> {open ? "Selesai kustomisasi" : "Kustomisasi"}
     </button>
-    {open && <div className="absolute right-0 top-full z-20 mt-2 w-72 rounded-2xl border border-border bg-surface p-4 shadow-xl">
-      <p className="mb-2.5 text-[11px] font-bold text-ink-800">Tampilan Dashboard</p>
-      <div className="mb-3">
-        <p className="mb-1.5 text-[9.5px] font-semibold uppercase tracking-wide text-ink-400">Ukuran Font</p>
-        <div className="flex gap-1.5">{(["sm", "md", "lg"] as FontSize[]).map((s) => <button key={s} type="button" onClick={() => onFontSize(s)} className={`flex-1 rounded-lg border px-2 py-1.5 text-[10.5px] font-semibold ${fontSize === s ? "border-brand-600/40 bg-brand-50 text-brand-700" : "border-border text-ink-500 hover:border-brand-600/25"}`}>{FONT_SIZE_LABEL[s]}</button>)}</div>
+    {open && (
+      <div
+        className="absolute right-0 top-full z-20 mt-2 w-72 animate-[modalRise_220ms_cubic-bezier(0.16,0.8,0.24,1)] overflow-hidden rounded-[22px] border border-white/40 p-4 shadow-float backdrop-blur-2xl"
+        style={{ background: "linear-gradient(160deg, color-mix(in srgb, var(--color-surface) 72%, transparent) 0%, color-mix(in srgb, var(--color-surface) 55%, transparent) 100%)", boxShadow: "inset 0 1px 1px rgba(255,255,255,.5), var(--shadow-float)" }}
+      >
+        <p className="mb-2.5 text-[11px] font-bold text-ink-800">Tampilan Dashboard</p>
+        <div className="mb-1">
+          <p className="mb-1.5 text-[9.5px] font-semibold uppercase tracking-wide text-ink-400">Ukuran Font</p>
+          <div className="flex gap-1.5">{(["sm", "md", "lg"] as FontSize[]).map((s) => <button key={s} type="button" onClick={() => onFontSize(s)} className={`flex-1 rounded-lg border px-2 py-1.5 text-[10.5px] font-semibold transition-transform active:scale-[0.95] ${fontSize === s ? "border-brand-600/40 text-brand-700" : "border-border/70 text-ink-500 hover:border-brand-600/25"}`} style={fontSize === s ? { background: "linear-gradient(140deg, color-mix(in srgb, var(--color-brand) 14%, transparent), color-mix(in srgb, var(--color-violet) 14%, transparent))" } : undefined}>{FONT_SIZE_LABEL[s]}</button>)}</div>
+        </div>
+
+        <button type="button" onClick={() => setDetailOpen((v) => !v)} className="mt-2.5 flex w-full items-center justify-between rounded-lg py-1.5 text-[9.5px] font-semibold text-ink-500 transition-colors hover:text-brand-600">
+          Lihat pengaturan lengkap
+          <ChevronDown size={13} className={`transition-transform duration-200 ${detailOpen ? "rotate-180" : ""}`} />
+        </button>
+
+        {detailOpen && (
+          <div className="animate-[modalRise_200ms_cubic-bezier(0.16,0.8,0.24,1)]">
+            <div className="mb-3.5 mt-1">
+              <p className="mb-1.5 text-[9.5px] font-semibold uppercase tracking-wide text-ink-400">Jenis Font</p>
+              <div className="flex flex-col gap-1">{(["default", "serif", "mono"] as FontFamily[]).map((f) => <button key={f} type="button" onClick={() => onFontFamily(f)} className={`rounded-lg border px-2.5 py-1.5 text-left text-[10.5px] font-medium transition-transform active:scale-[0.97] ${fontFamily === f ? "border-brand-600/40 text-brand-700" : "border-border/70 text-ink-500 hover:border-brand-600/25"}`} style={{ fontFamily: FONT_FAMILY_STACK[f], ...(fontFamily === f ? { background: "linear-gradient(140deg, color-mix(in srgb, var(--color-brand) 14%, transparent), color-mix(in srgb, var(--color-violet) 14%, transparent))" } : {}) }}>{FONT_FAMILY_LABEL[f]}</button>)}</div>
+            </div>
+            <p className="mb-3 text-[9.5px] leading-4 text-ink-400">Seret ikon <GripVertical size={10} className="inline" /> pada judul widget untuk memindahkan, atau pakai tombol +/− untuk mengubah ukurannya. Menggeser sebuah widget ke posisi lain akan menyesuaikan ukurannya dengan slot tujuan.</p>
+            <button type="button" onClick={onReset} className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-border/70 px-2.5 py-1.5 text-[10.5px] font-semibold text-ink-500 transition-transform active:scale-[0.97] hover:border-rose/30 hover:text-rose"><RotateCcw size={11} /> Kembalikan ke Default</button>
+          </div>
+        )}
       </div>
-      <div className="mb-3.5">
-        <p className="mb-1.5 text-[9.5px] font-semibold uppercase tracking-wide text-ink-400">Jenis Font</p>
-        <div className="flex flex-col gap-1">{(["default", "serif", "mono"] as FontFamily[]).map((f) => <button key={f} type="button" onClick={() => onFontFamily(f)} className={`rounded-lg border px-2.5 py-1.5 text-left text-[10.5px] font-medium ${fontFamily === f ? "border-brand-600/40 bg-brand-50 text-brand-700" : "border-border text-ink-500 hover:border-brand-600/25"}`} style={{ fontFamily: FONT_FAMILY_STACK[f] }}>{FONT_FAMILY_LABEL[f]}</button>)}</div>
-      </div>
-      <p className="mb-3 text-[9.5px] leading-4 text-ink-400">Seret ikon <GripVertical size={10} className="inline" /> pada judul widget untuk memindahkan, atau pakai tombol +/− untuk mengubah ukurannya. Menggeser sebuah widget ke posisi lain akan menyesuaikan ukurannya dengan slot tujuan.</p>
-      <button type="button" onClick={onReset} className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-[10.5px] font-semibold text-ink-500 hover:border-rose/30 hover:text-rose"><RotateCcw size={11} /> Kembalikan ke Default</button>
-    </div>}
+    )}
   </div>;
 }
 
