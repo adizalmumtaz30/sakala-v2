@@ -461,19 +461,19 @@ function Widget({ id, title, editing, span, dragOverId, onDragStart, onDragOver,
 }) {
   const isDragOver = dragOverId === id;
   return <div
-    style={{ gridColumn: `span ${span} / span ${span}` }}
+    style={{ gridColumn: `span ${span} / span ${span}`, ...(editing && isDragOver ? { background: "linear-gradient(160deg, color-mix(in srgb, var(--color-brand) 10%, transparent), color-mix(in srgb, var(--color-violet) 10%, transparent))" } : undefined) }}
     draggable={editing}
     onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; onDragStart(id); }}
     onDragOver={(e) => { if (editing) { e.preventDefault(); onDragOver(id); } }}
     onDrop={(e) => { e.preventDefault(); onDrop(id); }}
     onDragEnd={onDragEnd}
-    className={`min-w-0 transition-all ${editing ? `rounded-[18px] ring-2 ring-dashed ${isDragOver ? "ring-brand-600 bg-brand-50/40" : "ring-border"}` : ""}`}
+    className={`min-w-0 rounded-[18px] transition-all duration-200 ${editing ? `p-1.5 ring-2 ring-dashed backdrop-blur-md ${isDragOver ? "ring-violet/60 shadow-[0_0_0_1px_rgba(255,255,255,.5)_inset]" : "ring-border/60"}` : ""}`}
   >
-    {editing && <div className="mb-1.5 flex items-center justify-between gap-2 px-1 text-ink-400">
-      <span className="flex cursor-grab items-center gap-1 text-[9.5px] font-semibold active:cursor-grabbing"><GripVertical size={12} /> {title}</span>
-      <span className="flex items-center gap-0.5">
-        <button type="button" onClick={() => onResize(id, -1)} aria-label={`Perkecil ${title}`} className="flex h-5 w-5 items-center justify-center rounded-md border border-border bg-surface hover:border-brand-600/30 hover:text-brand-700"><Minus size={11} /></button>
-        <button type="button" onClick={() => onResize(id, 1)} aria-label={`Perbesar ${title}`} className="flex h-5 w-5 items-center justify-center rounded-md border border-border bg-surface hover:border-brand-600/30 hover:text-brand-700"><Plus size={11} /></button>
+    {editing && <div className="mb-1.5 flex items-center justify-between gap-2 rounded-full border border-white/40 px-2.5 py-1 shadow-sm backdrop-blur-md" style={{ background: "linear-gradient(140deg, color-mix(in srgb, var(--color-surface) 75%, transparent), color-mix(in srgb, var(--color-surface) 55%, transparent))" }}>
+      <span className="flex cursor-grab items-center gap-1 text-[9.5px] font-semibold text-ink-600 active:cursor-grabbing"><GripVertical size={12} /> {title}</span>
+      <span className="flex items-center gap-1">
+        <button type="button" onClick={() => onResize(id, -1)} aria-label={`Perkecil ${title}`} className="flex h-5 w-5 items-center justify-center rounded-md border border-white/50 bg-surface/70 text-ink-500 backdrop-blur-sm transition-transform active:scale-90 hover:border-brand-600/30 hover:text-brand-700"><Minus size={11} /></button>
+        <button type="button" onClick={() => onResize(id, 1)} aria-label={`Perbesar ${title}`} className="flex h-5 w-5 items-center justify-center rounded-md border border-white/50 bg-surface/70 text-ink-500 backdrop-blur-sm transition-transform active:scale-90 hover:border-brand-600/30 hover:text-brand-700"><Plus size={11} /></button>
       </span>
     </div>}
     {children}
