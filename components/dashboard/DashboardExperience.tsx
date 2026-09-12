@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState, useEffect, useRef } from "react";
-import { Activity, ArrowRight, Bell, BookOpen, CalendarCheck2, CalendarDays, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock3, DoorOpen, Info, AlertTriangle, Layers, Lightbulb, Plus, Sparkles, ShieldCheck, Upload, MoreHorizontal, Search, Users, X, Settings2, GripVertical, Minus, RotateCcw, BarChart3, LineChartIcon, PieChart } from "lucide-react";
+import { Activity, ArrowRight, Bell, BookOpen, CalendarCheck2, CalendarDays, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock3, DoorOpen, Info, AlertTriangle, Layers, Lightbulb, Plus, Sparkles, ShieldCheck, Upload, MoreHorizontal, Search, Users, X, Settings2, GripVertical, Minus, RotateCcw, BarChart3, LineChartIcon, PieChart, MoreVertical, Pin, EyeOff } from "lucide-react";
 import type { ReactNode } from "react";
 import type { DashboardKeyMetrics, DashboardJpInsight, DashboardWorkloadEntry, DashboardMetricTrends, DashboardMetricSpark, DashboardScheduleConflictSummary } from "@/lib/application/dashboard.usecases";
 import type { DashboardCurriculumStatus } from "@/lib/application/dashboardCurriculumStatus.usecases";
@@ -11,7 +11,7 @@ import type { NotificationEntry } from "@/lib/application/notifications.usecases
 import type { HariSekolah } from "@/lib/domain/jamPelajaran";
 
 import PremiumAvatar from "@/components/ui/Avatar";
-import { useDashboardPrefs, SPAN_PRESETS, FONT_SIZE_ZOOM, FONT_FAMILY_STACK, FONT_SIZE_LABEL, FONT_FAMILY_LABEL, type DashboardWidgetId, type FontSize, type FontFamily } from "@/lib/ui/dashboardPrefs";
+import { useDashboardPrefs, SPAN_PRESETS, FONT_SIZE_ZOOM, FONT_FAMILY_STACK, FONT_SIZE_LABEL, FONT_FAMILY_LABEL, WIDGET_COLOR_LABEL, WIDGET_COLOR_CLASS, type DashboardWidgetId, type FontSize, type FontFamily, type WidgetColorTone } from "@/lib/ui/dashboardPrefs";
 
 type GuruLite = { id: string; namaGuru: string; kodeGuru?: string; jenisKelamin?: "L" | "P" };
 type AvatarSize = "xs" | "sm" | "md" | "lg";
@@ -25,10 +25,11 @@ function Avatar({ name, size = "md", kodeGuru, jenisKelamin }: { name?: string |
   return <span aria-hidden="true" className={`inline-flex shrink-0 items-center justify-center rounded-full border border-brand-600/10 bg-brand-50 font-bold text-brand-700 ${cls[size]}`}>{initials}</span>;
 }
 
-function Section({ title, description, href, children, icon, badge, className }: { title: string; description?: string; href?: string; children: ReactNode; icon?: ReactNode; badge?: ReactNode; className?: string }) {
+function Section({ title, description, href, children, icon, badge, className, colorTone = "default" }: { title: string; description?: string; href?: string; children: ReactNode; icon?: ReactNode; badge?: ReactNode; className?: string; colorTone?: WidgetColorTone }) {
+  const c = WIDGET_COLOR_CLASS[colorTone];
   return <section className={`rounded-[18px] border border-border/70 bg-surface/95 p-4 shadow-[0_1px_2px_rgba(15,23,42,.03)] sm:p-[18px] ${className ?? ""}`}>
     <div className="mb-3.5 flex items-start justify-between gap-3">
-      <div className="min-w-0"><div className="flex items-center gap-2"><span className="text-brand-600">{icon}</span><h2 className="text-[13px] font-semibold tracking-[-.01em] text-ink-900">{title}</h2>{badge}</div>{description && <p className="mt-1 text-[10px] leading-4 text-ink-400">{description}</p>}</div>
+      <div className="min-w-0"><div className="flex items-center gap-2">{icon && <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg ${c.bg} ${c.text}`}>{icon}</span>}<h2 className="text-[13px] font-semibold tracking-[-.01em] text-ink-900">{title}</h2>{badge}</div>{description && <p className="mt-1 text-[10px] leading-4 text-ink-400">{description}</p>}</div>
       {href && <Link href={href} className="group shrink-0 text-[10.5px] font-semibold text-brand-600">Lihat <ChevronRight size={12} className="inline transition-transform group-hover:translate-x-0.5" /></Link>}
     </div>
     {children}
@@ -416,67 +417,81 @@ function NotificationsPanel({ notifications }: { notifications: NotificationEntr
   </div>;
 }
 
-function FloatingActionDock({ conflictCount }: { conflictCount: number }) {
-  const [more, setMore] = useState(false);
-  const focusRing = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40";
-  const actions: { label: string; href: string; icon: ReactNode; badge?: number }[] = [
-    { label: "Tambah Guru", href: "/guru?new=1", icon: <Plus size={16} /> },
-    { label: "Generate Jadwal", href: "/jadwal", icon: <Sparkles size={16} /> },
-    { label: "Validasi Jadwal", href: "/jadwal", icon: <ShieldCheck size={16} /> },
-    { label: "Lihat Konflik", href: "/jadwal", icon: <AlertTriangle size={16} />, badge: conflictCount > 0 ? conflictCount : undefined },
-    { label: "Import Data", href: "/guru?import=1", icon: <Upload size={16} /> },
-  ];
-  const moreActions: { label: string; href: string; icon: ReactNode }[] = [
-    { label: "Riwayat Perubahan", href: "/riwayat", icon: <Clock3 size={14} /> },
-    { label: "Notifikasi", href: "/notifikasi", icon: <Info size={14} /> },
-    { label: "Analitik", href: "/analitik", icon: <Activity size={14} /> },
-    { label: "Pencarian Global", href: "/navigasi", icon: <Search size={14} /> },
-  ];
-  return <nav aria-label="Aksi cepat" className="pointer-events-none sticky bottom-4 z-10 mt-1 flex justify-center">
-    <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-border/70 bg-surface/95 p-1.5 shadow-[0_10px_30px_rgba(15,23,42,.12)] backdrop-blur">
-      {actions.map((a) => <Link key={a.href + a.label} href={a.href} className={`group flex flex-col items-center gap-1 rounded-full px-3 py-1.5 text-ink-700 transition-colors hover:bg-brand-50 hover:text-brand-700 ${focusRing}`}>
-        <span className="relative flex h-8 w-8 items-center justify-center rounded-full bg-surface-muted text-ink-700 group-hover:bg-brand-100 group-hover:text-brand-700">
-          {a.icon}
-          {a.badge !== undefined && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose px-1 text-[8px] font-bold text-white animate-pulse">{a.badge}</span>}
-        </span>
-        <span className="whitespace-nowrap text-[8.5px] font-semibold">{a.label}</span>
-      </Link>)}
-      <div className="relative">
-        <button type="button" onClick={() => setMore((v) => !v)} aria-expanded={more} aria-haspopup="menu" aria-label="Lebih banyak aksi" className={`group flex flex-col items-center gap-1 rounded-full px-3 py-1.5 text-ink-700 transition-colors hover:bg-brand-50 hover:text-brand-700 ${focusRing}`}>
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-muted text-ink-700 group-hover:bg-brand-100 group-hover:text-brand-700">{more ? <X size={16} /> : <MoreHorizontal size={16} />}</span>
-          <span className="whitespace-nowrap text-[8.5px] font-semibold">More</span>
-        </button>
-        {more && <div role="menu" className="absolute bottom-full right-0 mb-2 w-52 rounded-xl border border-border bg-surface p-1.5 shadow-lg">
-          {moreActions.map((a) => <Link key={a.href} href={a.href} role="menuitem" onClick={() => setMore(false)} className={`flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[12px] font-medium text-ink-700 hover:bg-surface-muted ${focusRing}`}><span className="text-brand-600">{a.icon}</span>{a.label}</Link>)}
-        </div>}
-      </div>
-    </div>
-  </nav>;
-}
-
-function Widget({ id, title, editing, span, dragOverId, onDragStart, onDragOver, onDrop, onDragEnd, onResize, children }: {
-  id: DashboardWidgetId; title: string; editing: boolean; span: number; dragOverId: DashboardWidgetId | null;
+function Widget({ id, title, editing, span, pinned, dragOverId, onDragStart, onDragOver, onDrop, onDragEnd, onResize, menu, children }: {
+  id: DashboardWidgetId; title: string; editing: boolean; span: number; pinned: boolean; dragOverId: DashboardWidgetId | null;
   onDragStart: (id: DashboardWidgetId) => void; onDragOver: (id: DashboardWidgetId) => void; onDrop: (id: DashboardWidgetId) => void; onDragEnd: () => void;
-  onResize: (id: DashboardWidgetId, dir: 1 | -1) => void; children: ReactNode;
+  onResize: (id: DashboardWidgetId, dir: 1 | -1) => void; menu: ReactNode; children: ReactNode;
 }) {
   const isDragOver = dragOverId === id;
+  const cardRef = useRef<HTMLDivElement>(null);
   return <div
+    ref={cardRef}
     style={{ gridColumn: `span ${span} / span ${span}`, ...(editing && isDragOver ? { background: "linear-gradient(160deg, color-mix(in srgb, var(--color-brand) 10%, transparent), color-mix(in srgb, var(--color-violet) 10%, transparent))" } : undefined) }}
-    draggable={editing}
-    onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; onDragStart(id); }}
     onDragOver={(e) => { if (editing) { e.preventDefault(); onDragOver(id); } }}
     onDrop={(e) => { e.preventDefault(); onDrop(id); }}
-    onDragEnd={onDragEnd}
-    className={`min-w-0 rounded-[18px] transition-all duration-200 ${editing ? `p-1.5 ring-2 ring-dashed backdrop-blur-md ${isDragOver ? "ring-violet/60 shadow-[0_0_0_1px_rgba(255,255,255,.5)_inset]" : "ring-border/60"}` : ""}`}
+    className={`relative min-w-0 rounded-[18px] transition-all duration-200 ${editing ? `p-1.5 ring-2 ring-dashed backdrop-blur-md ${isDragOver ? "ring-violet/60 shadow-[0_0_0_1px_rgba(255,255,255,.5)_inset]" : "ring-border/60"}` : ""}`}
   >
+    {pinned && <span title="Widget dipin — posisi terkunci" className="absolute left-2.5 top-2.5 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-brand-50 text-brand-600"><Pin size={10} /></span>}
     {editing && <div className="mb-1.5 flex items-center justify-between gap-2 rounded-full border border-white/40 px-2.5 py-1 shadow-sm backdrop-blur-md" style={{ background: "linear-gradient(140deg, color-mix(in srgb, var(--color-surface) 75%, transparent), color-mix(in srgb, var(--color-surface) 55%, transparent))" }}>
-      <span className="flex cursor-grab items-center gap-1 text-[9.5px] font-semibold text-ink-600 active:cursor-grabbing"><GripVertical size={12} /> {title}</span>
+      {pinned ? (
+        <span className="flex items-center gap-1 text-[9.5px] font-semibold text-ink-400"><Pin size={11} /> {title}</span>
+      ) : (
+        <span
+          draggable
+          onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; if (cardRef.current) e.dataTransfer.setDragImage(cardRef.current, 20, 20); onDragStart(id); }}
+          onDragEnd={onDragEnd}
+          className="flex cursor-grab items-center gap-1 text-[9.5px] font-semibold text-ink-600 active:cursor-grabbing"
+        ><GripVertical size={12} /> {title}</span>
+      )}
       <span className="flex items-center gap-1">
-        <button type="button" onClick={() => onResize(id, -1)} aria-label={`Perkecil ${title}`} className="flex h-5 w-5 items-center justify-center rounded-md border border-white/50 bg-surface/70 text-ink-500 backdrop-blur-sm transition-transform active:scale-90 hover:border-brand-600/30 hover:text-brand-700"><Minus size={11} /></button>
-        <button type="button" onClick={() => onResize(id, 1)} aria-label={`Perbesar ${title}`} className="flex h-5 w-5 items-center justify-center rounded-md border border-white/50 bg-surface/70 text-ink-500 backdrop-blur-sm transition-transform active:scale-90 hover:border-brand-600/30 hover:text-brand-700"><Plus size={11} /></button>
+        {!pinned && <>
+          <button type="button" onClick={() => onResize(id, -1)} aria-label={`Perkecil ${title}`} className="flex h-5 w-5 items-center justify-center rounded-md border border-white/50 bg-surface/70 text-ink-500 backdrop-blur-sm transition-transform active:scale-90 hover:border-brand-600/30 hover:text-brand-700"><Minus size={11} /></button>
+          <button type="button" onClick={() => onResize(id, 1)} aria-label={`Perbesar ${title}`} className="flex h-5 w-5 items-center justify-center rounded-md border border-white/50 bg-surface/70 text-ink-500 backdrop-blur-sm transition-transform active:scale-90 hover:border-brand-600/30 hover:text-brand-700"><Plus size={11} /></button>
+        </>}
+        {menu}
       </span>
     </div>}
     {children}
+  </div>;
+}
+
+function WidgetMenu({ title, span, pinned, colorTone, hasVariant, onSpan, onColor, onTogglePin, onToggleHidden, onReset }: {
+  title: string; span: number; pinned: boolean; colorTone: WidgetColorTone; hasVariant: boolean;
+  onSpan: (span: number) => void; onColor: (tone: WidgetColorTone) => void; onTogglePin: () => void; onToggleHidden: () => void; onReset: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [open]);
+  return <div className="relative shrink-0" ref={ref}>
+    <button type="button" onClick={() => setOpen((v) => !v)} aria-label={`Opsi tambahan ${title}`} className={`flex h-5 w-5 items-center justify-center rounded-md border border-white/50 bg-surface/70 backdrop-blur-sm transition-colors ${open ? "text-brand-700" : "text-ink-500 hover:border-brand-600/30 hover:text-brand-700"}`}>
+      <MoreVertical size={11} />
+    </button>
+    {open && <div className="absolute right-0 top-full z-20 mt-2 w-60 rounded-[22px] border border-white/40 bg-surface/70 p-3 shadow-[0_24px_70px_-18px_rgba(15,23,42,.35)] backdrop-blur-2xl backdrop-saturate-150 dark:border-white/10">
+      <p className="mb-1.5 px-1 text-[9px] font-semibold uppercase tracking-wide text-ink-300">Ukuran</p>
+      <div className="mb-2.5 flex flex-wrap gap-1 rounded-xl bg-surface-muted/60 p-1">
+        {SPAN_PRESETS.map((s) => <button key={s} type="button" onClick={() => onSpan(s)} className={`min-w-[28%] flex-1 rounded-lg px-1.5 py-1 text-[9.5px] font-semibold transition-all ${span === s ? "bg-surface text-brand-700 shadow-sm" : "text-ink-500 hover:text-ink-800"}`}>{s === 12 ? "Penuh" : s}</button>)}
+      </div>
+      {hasVariant && <p className="mb-2.5 px-1 text-[9px] leading-4 text-ink-400">Tipe grafik bisa diganti langsung lewat tombol di dalam widget.</p>}
+      <p className="mb-1.5 px-1 text-[9px] font-semibold uppercase tracking-wide text-ink-300">Warna</p>
+      <div className="mb-2.5 flex flex-wrap gap-1.5 px-1">
+        {(Object.keys(WIDGET_COLOR_LABEL) as WidgetColorTone[]).map((tone) => <button key={tone} type="button" onClick={() => onColor(tone)} title={WIDGET_COLOR_LABEL[tone]} aria-label={WIDGET_COLOR_LABEL[tone]} className={`flex h-6 w-6 items-center justify-center rounded-full border-2 transition-all ${WIDGET_COLOR_CLASS[tone].bg} ${colorTone === tone ? "border-ink-700 scale-110" : "border-transparent hover:scale-105"}`}><span className={`h-2.5 w-2.5 rounded-full ${WIDGET_COLOR_CLASS[tone].text.replace("text-", "bg-")}`} /></button>)}
+      </div>
+      <div className="my-2 border-t border-border/60" />
+      <button type="button" onClick={() => { onTogglePin(); setOpen(false); }} className="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left text-[11px] font-medium text-ink-700 transition-colors hover:bg-surface-muted/80">
+        <Pin size={12} className={pinned ? "text-brand-600" : "text-ink-400"} /> {pinned ? "Lepas pin" : "Pin (kunci posisi)"}
+      </button>
+      <button type="button" onClick={() => { onReset(); setOpen(false); }} className="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left text-[11px] font-medium text-ink-700 transition-colors hover:bg-surface-muted/80">
+        <RotateCcw size={12} className="text-ink-400" /> Reset tampilan
+      </button>
+      <button type="button" onClick={() => { onToggleHidden(); setOpen(false); }} className="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left text-[11px] font-medium text-rose transition-colors hover:bg-rose-50/80">
+        <EyeOff size={12} /> Sembunyikan
+      </button>
+    </div>}
   </div>;
 }
 
@@ -582,17 +597,18 @@ export default function DashboardExperience({ schoolName, adminName, context, me
   const guruByName = new Map(guruList.map((g) => [g.namaGuru, g]));
   const bebanTertinggi = workloadFull.slice(0, 4);
   const salutation = useMemo(() => greetingSalutation(), []);
-  const { prefs, reorder, setSpan, setFontSize, setFontFamily, setChartVariant, reset } = useDashboardPrefs();
+  const { prefs, reorder, setSpan, setSpanBalanced, setFontSize, setFontFamily, setChartVariant, togglePin, toggleHidden, showAllHidden, setColorTone, reset, resetWidget } = useDashboardPrefs();
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const editing = customizeOpen;
   const [draggedId, setDraggedId] = useState<DashboardWidgetId | null>(null);
   const [dragOverId, setDragOverId] = useState<DashboardWidgetId | null>(null);
+  const hiddenCount = Object.values(prefs.hidden).filter(Boolean).length;
 
   function handleResize(id: DashboardWidgetId, dir: 1 | -1) {
     const current = prefs.spans[id] ?? 6;
     const idx = SPAN_PRESETS.findIndex((s) => s >= current);
     const nextIdx = Math.min(SPAN_PRESETS.length - 1, Math.max(0, (idx === -1 ? SPAN_PRESETS.length - 1 : idx) + dir));
-    setSpan(id, SPAN_PRESETS[nextIdx]);
+    setSpanBalanced(id, SPAN_PRESETS[nextIdx]);
   }
 
   const widgetTitle: Record<DashboardWidgetId, string> = {
@@ -601,15 +617,15 @@ export default function DashboardExperience({ schoolName, adminName, context, me
   };
 
   const widgetContent: Record<DashboardWidgetId, ReactNode> = {
-    rekapJtm: <Section title="Rekap JTM" description="Jam Tatap Muka committed · klik titik/area untuk membuka analitik." href="/analitik" icon={<Activity size={14} />}><RekapJtm heatmap={heatmap} variant={prefs.chartVariant.rekapJtm === "batang" ? "batang" : "garis"} onVariantChange={(v) => setChartVariant("rekapJtm", v)} /></Section>,
-    bebanGuru: <Section title="Distribusi Beban Guru" description="Ringan/Normal/Berat berdasarkan JP committed." href="/guru" icon={<Users size={14} />}><BebanDonut distribution={bebanDistribution} variant={prefs.chartVariant.bebanGuru} onVariantChange={(v) => setChartVariant("bebanGuru", v)} /></Section>,
-    heatmapGrid: <Section title="Heatmap Jadwal" description="Kepadatan tiap jam pelajaran sepekan." href="/jadwal" icon={<Activity size={14} />}><HeatmapGrid grid={heatmapGrid} rooms={rooms} gridByRoom={heatmapGridByRoom} /></Section>,
-    bebanTertinggi: <Section title="Beban Guru Tertinggi" description="Guru dengan JP committed tertinggi." href="/guru" icon={<Users size={14} />} badge={<span className="ml-1 inline-flex items-center gap-1 rounded-full border border-border bg-surface-muted px-2 py-0.5 text-[9px] font-bold text-ink-500">Top 5</span>}><div className="space-y-2">{bebanTertinggi.map((e) => { const style = BEBAN_STYLE[e.beban]; const g = guruList.find((item) => item.id === e.guruId); return <Link key={e.guruId} href={`/guru?teacher=${encodeURIComponent(e.guruId)}`} aria-label={`${e.namaGuru}: ${e.totalJamMengajar} JP, ${style.label}`} className="group flex items-center gap-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"><Avatar name={e.namaGuru} size="md" kodeGuru={g?.kodeGuru} jenisKelamin={g?.jenisKelamin} /><span className="min-w-0 flex-1 truncate text-[10px] font-medium text-ink-800 group-hover:text-brand-700">{e.namaGuru}</span><span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[8px] font-bold ${style.badge}`}>{style.label}</span><span className="text-[10px] font-bold tabular-nums text-ink-800">{e.totalJamMengajar} JP</span></Link>; })}{bebanTertinggi.length === 0 && <p className="text-[10px] text-ink-400">Belum ada guru aktif dengan jadwal committed.</p>}</div></Section>,
-    aktivitas: <Section title="Aktivitas Terbaru" description="Perubahan terakhir pada konteks aktif." href="/riwayat" icon={<Clock3 size={14} />}><div className="space-y-2.5">{activity.slice(0, 4).map((a) => { const isGuru = a.entityType.toLowerCase().replace(/[- ]+/g, "_") === "guru"; const guru = isGuru && a.entityLabel ? guruByName.get(a.entityLabel) : undefined; return <Link key={a.id} href="/riwayat" className="group flex items-start gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">{isGuru ? <Avatar name={a.entityLabel} size="sm" kodeGuru={guru?.kodeGuru} jenisKelamin={guru?.jenisKelamin} /> : <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald"><CheckCircle2 size={12} aria-hidden="true" /></span>}<div className="min-w-0"><p className="truncate text-[10px] font-medium text-ink-800 group-hover:text-brand-700">{a.action}</p><time className="text-[8.5px] text-ink-400">{new Date(a.createdAt).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" })}</time></div></Link>; })}</div></Section>,
-    insight: <Section title="Insight" description="Sinyal yang layak diperhatikan, urut prioritas." href="/analitik" icon={<Lightbulb size={14} />}><SmartInsight jpInsight={jpInsight} bebanTertinggi={bebanTertinggi} bebanDistribution={bebanDistribution} scheduleConflicts={scheduleConflicts} curriculumStatus={curriculumStatus} /></Section>,
-    kalender: <Section title="Mini Kalender" description="Bulan berjalan · titik menandai hari dengan jadwal committed." icon={<CalendarDays size={14} />}><MiniCalendar heatmap={heatmap} /></Section>,
+    rekapJtm: <Section title="Rekap JTM" colorTone={prefs.colorTone.rekapJtm} description="Jam Tatap Muka committed · klik titik/area untuk membuka analitik." href="/analitik" icon={<Activity size={14} />}><RekapJtm heatmap={heatmap} variant={prefs.chartVariant.rekapJtm === "batang" ? "batang" : "garis"} onVariantChange={(v) => setChartVariant("rekapJtm", v)} /></Section>,
+    bebanGuru: <Section title="Distribusi Beban Guru" colorTone={prefs.colorTone.bebanGuru} description="Ringan/Normal/Berat berdasarkan JP committed." href="/guru" icon={<Users size={14} />}><BebanDonut distribution={bebanDistribution} variant={prefs.chartVariant.bebanGuru} onVariantChange={(v) => setChartVariant("bebanGuru", v)} /></Section>,
+    heatmapGrid: <Section title="Heatmap Jadwal" colorTone={prefs.colorTone.heatmapGrid} description="Kepadatan tiap jam pelajaran sepekan." href="/jadwal" icon={<Activity size={14} />}><HeatmapGrid grid={heatmapGrid} rooms={rooms} gridByRoom={heatmapGridByRoom} /></Section>,
+    bebanTertinggi: <Section title="Beban Guru Tertinggi" colorTone={prefs.colorTone.bebanTertinggi} description="Guru dengan JP committed tertinggi." href="/guru" icon={<Users size={14} />} badge={<span className="ml-1 inline-flex items-center gap-1 rounded-full border border-border bg-surface-muted px-2 py-0.5 text-[9px] font-bold text-ink-500">Top 5</span>}><div className="space-y-2">{bebanTertinggi.map((e) => { const style = BEBAN_STYLE[e.beban]; const g = guruList.find((item) => item.id === e.guruId); return <Link key={e.guruId} href={`/guru?teacher=${encodeURIComponent(e.guruId)}`} aria-label={`${e.namaGuru}: ${e.totalJamMengajar} JP, ${style.label}`} className="group flex items-center gap-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"><Avatar name={e.namaGuru} size="md" kodeGuru={g?.kodeGuru} jenisKelamin={g?.jenisKelamin} /><span className="min-w-0 flex-1 truncate text-[10px] font-medium text-ink-800 group-hover:text-brand-700">{e.namaGuru}</span><span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[8px] font-bold ${style.badge}`}>{style.label}</span><span className="text-[10px] font-bold tabular-nums text-ink-800">{e.totalJamMengajar} JP</span></Link>; })}{bebanTertinggi.length === 0 && <p className="text-[10px] text-ink-400">Belum ada guru aktif dengan jadwal committed.</p>}</div></Section>,
+    aktivitas: <Section title="Aktivitas Terbaru" colorTone={prefs.colorTone.aktivitas} description="Perubahan terakhir pada konteks aktif." href="/riwayat" icon={<Clock3 size={14} />}><div className="space-y-2.5">{activity.slice(0, 4).map((a) => { const isGuru = a.entityType.toLowerCase().replace(/[- ]+/g, "_") === "guru"; const guru = isGuru && a.entityLabel ? guruByName.get(a.entityLabel) : undefined; return <Link key={a.id} href="/riwayat" className="group flex items-start gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">{isGuru ? <Avatar name={a.entityLabel} size="sm" kodeGuru={guru?.kodeGuru} jenisKelamin={guru?.jenisKelamin} /> : <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald"><CheckCircle2 size={12} aria-hidden="true" /></span>}<div className="min-w-0"><p className="truncate text-[10px] font-medium text-ink-800 group-hover:text-brand-700">{a.action}</p><time className="text-[8.5px] text-ink-400">{new Date(a.createdAt).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" })}</time></div></Link>; })}</div></Section>,
+    insight: <Section title="Insight" colorTone={prefs.colorTone.insight} description="Sinyal yang layak diperhatikan, urut prioritas." href="/analitik" icon={<Lightbulb size={14} />}><SmartInsight jpInsight={jpInsight} bebanTertinggi={bebanTertinggi} bebanDistribution={bebanDistribution} scheduleConflicts={scheduleConflicts} curriculumStatus={curriculumStatus} /></Section>,
+    kalender: <Section title="Mini Kalender" colorTone={prefs.colorTone.kalender} description="Bulan berjalan · titik menandai hari dengan jadwal committed." icon={<CalendarDays size={14} />}><MiniCalendar heatmap={heatmap} /></Section>,
     agenda: <AgendaSection agenda={agenda} guruList={guruList} guruByName={guruByName} />,
-    notifikasi: <Section title="Notifikasi Terbaru" description="Aktivitas terbaru pada konteks aktif." href="/notifikasi" icon={<Bell size={14} />}><NotificationsPanel notifications={notifications} /></Section>,
+    notifikasi: <Section title="Notifikasi Terbaru" colorTone={prefs.colorTone.notifikasi} description="Aktivitas terbaru pada konteks aktif." href="/notifikasi" icon={<Bell size={14} />}><NotificationsPanel notifications={notifications} /></Section>,
   };
 
   return <main className="mx-auto flex min-h-[calc(100vh-5.5rem)] max-w-[1760px] flex-col gap-3 px-1 pb-4 pt-3 sm:px-2 lg:gap-3.5">
@@ -620,28 +636,45 @@ export default function DashboardExperience({ schoolName, adminName, context, me
         <p className="mt-1.5 text-[11px] text-ink-500">Ringkasan kondisi akademik <span className="font-semibold text-ink-700">{schoolName}</span> dan jadwal sekolah.</p>
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        <Link href="/analitik" className="hidden items-center gap-1 rounded-full border border-border bg-surface px-3 py-1.5 text-[10px] font-semibold text-ink-700 shadow-sm hover:border-brand-600/25 hover:text-brand-700 sm:flex">Analitik <ArrowRight size={12} /></Link>
         <DashboardCustomizeBar open={customizeOpen} onToggle={() => setCustomizeOpen((v) => !v)} fontSize={prefs.fontSize} fontFamily={prefs.fontFamily} onFontSize={setFontSize} onFontFamily={setFontFamily} onReset={reset} />
       </div>
     </header>
     <KpiRow metrics={metrics} metricTrends={metricTrends} />
+    {hiddenCount > 0 && (
+      <div className="flex items-center justify-between gap-2 rounded-xl border border-border/70 bg-surface-muted/50 px-3.5 py-2">
+        <span className="text-[10.5px] font-medium text-ink-500">{hiddenCount} widget disembunyikan.</span>
+        <button type="button" onClick={showAllHidden} className="text-[10.5px] font-semibold text-brand-600 hover:text-brand-700">Tampilkan semua</button>
+      </div>
+    )}
     <div style={{ zoom: FONT_SIZE_ZOOM[prefs.fontSize], fontFamily: FONT_FAMILY_STACK[prefs.fontFamily] }}>
-      <div className="grid min-h-0 grid-cols-12 items-start gap-3">
-        {prefs.order.map((id) => <Widget
+      <div className="grid min-h-0 grid-cols-12 items-start gap-4">
+        {prefs.order.filter((id) => !prefs.hidden[id]).map((id) => <Widget
           key={id}
           id={id}
           title={widgetTitle[id]}
           editing={editing}
           span={Math.min(prefs.spans[id] ?? 6, 12)}
+          pinned={!!prefs.pinned[id]}
           dragOverId={dragOverId}
           onDragStart={setDraggedId}
           onDragOver={setDragOverId}
           onDrop={(targetId) => { if (draggedId) reorder(draggedId, targetId); setDraggedId(null); setDragOverId(null); }}
           onDragEnd={() => { setDraggedId(null); setDragOverId(null); }}
           onResize={handleResize}
+          menu={<WidgetMenu
+            title={widgetTitle[id]}
+            span={Math.min(prefs.spans[id] ?? 6, 12)}
+            pinned={!!prefs.pinned[id]}
+            colorTone={prefs.colorTone[id] ?? "default"}
+            hasVariant={id === "rekapJtm" || id === "bebanGuru"}
+            onSpan={(span) => setSpanBalanced(id, span)}
+            onColor={(tone) => setColorTone(id, tone)}
+            onTogglePin={() => togglePin(id)}
+            onToggleHidden={() => toggleHidden(id)}
+            onReset={() => resetWidget(id)}
+          />}
         >{widgetContent[id]}</Widget>)}
       </div>
     </div>
-    <FloatingActionDock conflictCount={scheduleConflicts.total} />
   </main>;
 }

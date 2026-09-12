@@ -4,9 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 
 /**
  * Preferensi kustomisasi Dashboard: font, urutan widget, ukuran (grid-column
- * span dari 12 kolom), dan varian tampilan grafik. Disimpan di localStorage
- * per-browser (bukan per-akun/server) — cukup untuk kebutuhan "atur tampilan
- * dashboard sesuai selera saya di perangkat ini".
+ * span dari 12 kolom), varian tampilan grafik, warna aksen, pin (kunci
+ * posisi), dan sembunyikan per widget. Disimpan di localStorage per-browser
+ * (bukan per-akun/server) — cukup untuk kebutuhan "atur tampilan dashboard
+ * sesuai selera saya di perangkat ini".
  */
 
 export const DASHBOARD_WIDGET_IDS = [
@@ -27,6 +28,7 @@ export type FontSize = "sm" | "md" | "lg";
 export type FontFamily = "default" | "serif" | "mono";
 export type RekapJtmVariant = "garis" | "batang";
 export type BebanGuruVariant = "donut" | "batang";
+export type WidgetColorTone = "default" | "neutral" | "accent" | "success" | "warning" | "attention";
 
 export interface DashboardPrefs {
   fontSize: FontSize;
@@ -34,6 +36,9 @@ export interface DashboardPrefs {
   order: DashboardWidgetId[];
   spans: Record<DashboardWidgetId, number>;
   chartVariant: { rekapJtm: RekapJtmVariant; bebanGuru: BebanGuruVariant };
+  pinned: Record<DashboardWidgetId, boolean>;
+  hidden: Record<DashboardWidgetId, boolean>;
+  colorTone: Record<DashboardWidgetId, WidgetColorTone>;
 }
 
 export const FONT_SIZE_ZOOM: Record<FontSize, number> = { sm: 0.92, md: 1, lg: 1.15 };
@@ -44,6 +49,19 @@ export const FONT_FAMILY_STACK: Record<FontFamily, string | undefined> = {
 };
 export const FONT_SIZE_LABEL: Record<FontSize, string> = { sm: "Kecil", md: "Sedang", lg: "Besar" };
 export const FONT_FAMILY_LABEL: Record<FontFamily, string> = { default: "Default (Inter)", serif: "Serif elegan", mono: "Mono teknikal" };
+
+export const WIDGET_COLOR_LABEL: Record<WidgetColorTone, string> = {
+  default: "Default", neutral: "Neutral", accent: "Accent", success: "Success", warning: "Warning", attention: "Attention",
+};
+/** Tone -> kelas badge ikon widget. Sistem yang kontrol kontras (bukan bebas pilih hex) — user bebas pilih, sistem jaga harmoni. */
+export const WIDGET_COLOR_CLASS: Record<WidgetColorTone, { bg: string; text: string }> = {
+  default: { bg: "bg-brand-50", text: "text-brand-600" },
+  neutral: { bg: "bg-surface-muted", text: "text-ink-500" },
+  accent: { bg: "bg-violet-50", text: "text-violet" },
+  success: { bg: "bg-emerald-50", text: "text-emerald" },
+  warning: { bg: "bg-amber-50", text: "text-amber" },
+  attention: { bg: "bg-rose-50", text: "text-rose" },
+};
 
 export const DEFAULT_SPANS: Record<DashboardWidgetId, number> = {
   rekapJtm: 8,
@@ -57,15 +75,29 @@ export const DEFAULT_SPANS: Record<DashboardWidgetId, number> = {
   notifikasi: 4,
 };
 
+function emptyBoolMap(): Record<DashboardWidgetId, boolean> {
+  return Object.fromEntries(DASHBOARD_WIDGET_IDS.map((id) => [id, false])) as Record<DashboardWidgetId, boolean>;
+}
+function defaultColorMap(): Record<DashboardWidgetId, WidgetColorTone> {
+  return Object.fromEntries(DASHBOARD_WIDGET_IDS.map((id) => [id, "default" as WidgetColorTone])) as Record<DashboardWidgetId, WidgetColorTone>;
+}
+
 export const DEFAULT_PREFS: DashboardPrefs = {
   fontSize: "md",
   fontFamily: "default",
   order: [...DASHBOARD_WIDGET_IDS],
   spans: { ...DEFAULT_SPANS },
   chartVariant: { rekapJtm: "garis", bebanGuru: "donut" },
+  pinned: emptyBoolMap(),
+  hidden: emptyBoolMap(),
+  colorTone: defaultColorMap(),
 };
 
-const STORAGE_KEY = "sakala:dashboard-prefs:v1";
+// v1 -> v2: tambah pinned/hidden/colorTone. Key storage baru supaya prefs v1 lama
+// (tanpa field ini) tidak pernah "setengah termuat" — cukup mulai dari default baru;
+// preferensi lama (font/urutan/ukuran) memang hilang tapi itu trade-off wajar untuk
+// migrasi kecil seperti ini, bukan bug data.
+const STORAGE_KEY = "sakala:dashboard-prefs:v2";
 // Preset lebar widget dalam grid 12 kolom — dipakai tombol "perbesar/perkecil".
 export const SPAN_PRESETS = [4, 5, 6, 7, 8, 12] as const;
 
@@ -78,6 +110,9 @@ function sanitize(raw: unknown): DashboardPrefs {
       : [...DASHBOARD_WIDGET_IDS]
     : [...DASHBOARD_WIDGET_IDS];
   const spans = { ...DEFAULT_SPANS, ...(r.spans && typeof r.spans === "object" ? r.spans : {}) };
+  const pinned = { ...emptyBoolMap(), ...(r.pinned && typeof r.pinned === "object" ? r.pinned : {}) };
+  const hidden = { ...emptyBoolMap(), ...(r.hidden && typeof r.hidden === "object" ? r.hidden : {}) };
+  const colorTone = { ...defaultColorMap(), ...(r.colorTone && typeof r.colorTone === "object" ? r.colorTone : {}) };
   return {
     fontSize: r.fontSize === "sm" || r.fontSize === "lg" ? r.fontSize : "md",
     fontFamily: r.fontFamily === "serif" || r.fontFamily === "mono" ? r.fontFamily : "default",
@@ -87,6 +122,9 @@ function sanitize(raw: unknown): DashboardPrefs {
       rekapJtm: r.chartVariant?.rekapJtm === "batang" ? "batang" : "garis",
       bebanGuru: r.chartVariant?.bebanGuru === "batang" ? "batang" : "donut",
     },
+    pinned,
+    hidden,
+    colorTone,
   };
 }
 
@@ -115,9 +153,19 @@ export function useDashboardPrefs() {
 
   const reset = useCallback(() => setPrefs(DEFAULT_PREFS), []);
 
+  const resetWidget = useCallback((id: DashboardWidgetId) => {
+    setPrefs((p) => ({
+      ...p,
+      spans: { ...p.spans, [id]: DEFAULT_SPANS[id] },
+      colorTone: { ...p.colorTone, [id]: "default" },
+      chartVariant: id === "rekapJtm" ? { ...p.chartVariant, rekapJtm: "garis" } : id === "bebanGuru" ? { ...p.chartVariant, bebanGuru: "donut" } : p.chartVariant,
+    }));
+  }, []);
+
   const reorder = useCallback((draggedId: DashboardWidgetId, targetId: DashboardWidgetId) => {
     if (draggedId === targetId) return;
     setPrefs((p) => {
+      if (p.pinned[draggedId] || p.pinned[targetId]) return p; // widget dipin -> tidak boleh digeser atau jadi target geseran
       const order = [...p.order];
       const from = order.indexOf(draggedId);
       const to = order.indexOf(targetId);
@@ -134,11 +182,56 @@ export function useDashboardPrefs() {
     setPrefs((p) => ({ ...p, spans: { ...p.spans, [id]: span } }));
   }, []);
 
+  /**
+   * Resize dengan auto-balance ringan: kalau widget yang di-resize berbagi baris
+   * dengan TEPAT SATU tetangga (grid 12-kolom), tetangga itu otomatis menyesuaikan
+   * supaya total baris tetap 12 — baris tidak jadi rapuh/tidak rata setelah resize.
+   * Baris berisi 3+ widget dibiarkan manual (bukan kasus umum di layout ini).
+   */
+  const setSpanBalanced = useCallback((id: DashboardWidgetId, span: number) => {
+    setPrefs((p) => {
+      const spans = { ...p.spans, [id]: span };
+      const groups: DashboardWidgetId[][] = [];
+      let current: DashboardWidgetId[] = [];
+      let sum = 0;
+      for (const wid of p.order) {
+        const s = spans[wid] ?? 6;
+        if (sum + s > 12 && current.length > 0) {
+          groups.push(current);
+          current = [];
+          sum = 0;
+        }
+        current.push(wid);
+        sum += s;
+      }
+      if (current.length) groups.push(current);
+      const group = groups.find((g) => g.includes(id));
+      if (group && group.length === 2) {
+        const other = group.find((w) => w !== id) as DashboardWidgetId;
+        const remaining = 12 - span;
+        if (remaining >= 2 && remaining <= 12) spans[other] = remaining;
+      }
+      return { ...p, spans };
+    });
+  }, []);
+
   const setFontSize = useCallback((fontSize: FontSize) => setPrefs((p) => ({ ...p, fontSize })), []);
   const setFontFamily = useCallback((fontFamily: FontFamily) => setPrefs((p) => ({ ...p, fontFamily })), []);
   const setChartVariant = useCallback(<K extends keyof DashboardPrefs["chartVariant"]>(key: K, value: DashboardPrefs["chartVariant"][K]) => {
     setPrefs((p) => ({ ...p, chartVariant: { ...p.chartVariant, [key]: value } }));
   }, []);
+  const togglePin = useCallback((id: DashboardWidgetId) => {
+    setPrefs((p) => ({ ...p, pinned: { ...p.pinned, [id]: !p.pinned[id] } }));
+  }, []);
+  const toggleHidden = useCallback((id: DashboardWidgetId) => {
+    setPrefs((p) => ({ ...p, hidden: { ...p.hidden, [id]: !p.hidden[id] } }));
+  }, []);
+  const showAllHidden = useCallback(() => {
+    setPrefs((p) => ({ ...p, hidden: emptyBoolMap() }));
+  }, []);
+  const setColorTone = useCallback((id: DashboardWidgetId, tone: WidgetColorTone) => {
+    setPrefs((p) => ({ ...p, colorTone: { ...p.colorTone, [id]: tone } }));
+  }, []);
 
-  return { prefs, hydrated, reorder, setSpan, setFontSize, setFontFamily, setChartVariant, reset };
+  return { prefs, hydrated, reorder, setSpan, setSpanBalanced, setFontSize, setFontFamily, setChartVariant, togglePin, toggleHidden, showAllHidden, setColorTone, reset, resetWidget };
 }
