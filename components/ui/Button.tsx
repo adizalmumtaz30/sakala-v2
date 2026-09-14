@@ -46,13 +46,13 @@ const sizeClass: Record<Size, string> = {
 const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ variant = "primary", size = "md", loading, disabled, className = "", children, ...props }, ref) => {
     return (
+      // §A2: rounded-xl (12px) -> rounded-2xl (16px), disamakan dengan radius
+      // Card/Modal yang baru dinaikkan lewat token di tailwind.config.ts --
+      // supaya tombol/card/panel satu bahasa visual continuous-curve, bukan
+      // campur-campur sudut tajam.
       <button
         ref={ref}
         disabled={disabled || loading}
-        {/* §A2: rounded-xl (12px) -> rounded-2xl (16px), disamakan dengan
-            radius Card/Modal yang baru dinaikkan lewat token di
-            tailwind.config.ts -- supaya tombol/card/panel satu bahasa
-            visual continuous-curve, bukan campur-campur sudut tajam. */}
         className={`inline-flex items-center justify-center gap-2 rounded-2xl font-medium transition-[filter,box-shadow,transform,background-color] duration-150 ease-[cubic-bezier(0.16,0.8,0.24,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 disabled:cursor-not-allowed disabled:active:scale-100 ${variantClass[variant]} ${sizeClass[size]} ${className}`}
         {...props}
       >
