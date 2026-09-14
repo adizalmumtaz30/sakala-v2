@@ -466,6 +466,11 @@ function WidgetMenu({ title, span, pinned, colorTone, hasVariant, onSpan, onColo
   onSpan: (span: number) => void; onColor: (tone: WidgetColorTone) => void; onTogglePin: () => void; onToggleHidden: () => void; onReset: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  // §B3 (perluasan): panel per-widget dulunya buka SEMUA (Ukuran+Warna+Pin+
+  // Reset+Sembunyikan) sekaligus. Sekarang cuma "Ukuran" (paling sering
+  // dipakai) yang tampil default -- sisanya di balik "Lihat pengaturan
+  // lengkap", sama persis polanya dengan panel Kustomisasi global.
+  const [detailOpen, setDetailOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -473,30 +478,42 @@ function WidgetMenu({ title, span, pinned, colorTone, hasVariant, onSpan, onColo
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
   }, [open]);
+  useEffect(() => { if (!open) setDetailOpen(false); }, [open]);
   return <div className="relative shrink-0" ref={ref}>
-    <button type="button" onClick={() => setOpen((v) => !v)} aria-label={`Opsi tambahan ${title}`} className={`flex h-5 w-5 items-center justify-center rounded-md border border-white/50 bg-surface/70 backdrop-blur-sm transition-colors ${open ? "text-brand-700" : "text-ink-500 hover:border-brand-600/30 hover:text-brand-700"}`}>
-      <MoreVertical size={11} />
+    {/* §B3 (perluasan): trigger jadi cukup ikon titik-tiga saja -- tanpa
+        border/bg permanen -- konsisten dengan tombol Kustomisasi global.
+        Highlight (bg lingkaran tipis) baru muncul saat hover/terbuka. */}
+    <button type="button" onClick={() => setOpen((v) => !v)} aria-label={`Opsi tambahan ${title}`} aria-expanded={open} className={`flex h-6 w-6 items-center justify-center rounded-full text-ink-400 transition-colors hover:bg-surface-muted/80 hover:text-brand-700 ${open ? "bg-surface-muted/80 text-brand-700" : ""}`}>
+      <MoreVertical size={13} />
     </button>
     {open && <div className="absolute right-0 top-full z-20 mt-2 w-60 rounded-[22px] border border-white/40 bg-surface/70 p-3 shadow-[0_24px_70px_-18px_rgba(15,23,42,.35)] backdrop-blur-2xl backdrop-saturate-150 dark:border-white/10">
       <p className="mb-1.5 px-1 text-[9px] font-semibold uppercase tracking-wide text-ink-300">Ukuran</p>
-      <div className="mb-2.5 flex flex-wrap gap-1 rounded-xl bg-surface-muted/60 p-1">
+      <div className="mb-1 flex flex-wrap gap-1 rounded-xl bg-surface-muted/60 p-1">
         {SPAN_PRESETS.map((s) => <button key={s} type="button" onClick={() => onSpan(s)} className={`min-w-[28%] flex-1 rounded-lg px-1.5 py-1 text-[9.5px] font-semibold transition-all ${span === s ? "bg-surface text-brand-700 shadow-sm" : "text-ink-500 hover:text-ink-800"}`}>{s === 12 ? "Penuh" : s}</button>)}
       </div>
-      {hasVariant && <p className="mb-2.5 px-1 text-[9px] leading-4 text-ink-400">Tipe grafik bisa diganti langsung lewat tombol di dalam widget.</p>}
-      <p className="mb-1.5 px-1 text-[9px] font-semibold uppercase tracking-wide text-ink-300">Warna</p>
-      <div className="mb-2.5 flex flex-wrap gap-1.5 px-1">
-        {(Object.keys(WIDGET_COLOR_LABEL) as WidgetColorTone[]).map((tone) => <button key={tone} type="button" onClick={() => onColor(tone)} title={WIDGET_COLOR_LABEL[tone]} aria-label={WIDGET_COLOR_LABEL[tone]} className={`flex h-6 w-6 items-center justify-center rounded-full border-2 transition-all ${WIDGET_COLOR_CLASS[tone].bg} ${colorTone === tone ? "border-ink-700 scale-110" : "border-transparent hover:scale-105"}`}><span className={`h-2.5 w-2.5 rounded-full ${WIDGET_COLOR_CLASS[tone].text.replace("text-", "bg-")}`} /></button>)}
-      </div>
-      <div className="my-2 border-t border-border/60" />
-      <button type="button" onClick={() => { onTogglePin(); setOpen(false); }} className="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left text-[11px] font-medium text-ink-700 transition-colors hover:bg-surface-muted/80">
-        <Pin size={12} className={pinned ? "text-brand-600" : "text-ink-400"} /> {pinned ? "Lepas pin" : "Pin (kunci posisi)"}
+
+      <button type="button" onClick={() => setDetailOpen((v) => !v)} className="mt-2 flex w-full items-center justify-between rounded-lg py-1.5 text-left text-[9.5px] font-semibold text-ink-500 transition-colors hover:text-brand-600">
+        Lihat pengaturan lengkap
+        <ChevronDown size={13} className={`transition-transform duration-200 ${detailOpen ? "rotate-180" : ""}`} />
       </button>
-      <button type="button" onClick={() => { onReset(); setOpen(false); }} className="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left text-[11px] font-medium text-ink-700 transition-colors hover:bg-surface-muted/80">
-        <RotateCcw size={12} className="text-ink-400" /> Reset tampilan
-      </button>
-      <button type="button" onClick={() => { onToggleHidden(); setOpen(false); }} className="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left text-[11px] font-medium text-rose transition-colors hover:bg-rose-50/80">
-        <EyeOff size={12} /> Sembunyikan
-      </button>
+
+      {detailOpen && <div className="animate-[modalRise_200ms_cubic-bezier(0.16,0.8,0.24,1)]">
+        {hasVariant && <p className="mb-2 mt-1 px-1 text-[9px] leading-4 text-ink-400">Tipe grafik bisa diganti langsung lewat tombol di dalam widget.</p>}
+        <p className="mb-1.5 mt-1 px-1 text-[9px] font-semibold uppercase tracking-wide text-ink-300">Warna</p>
+        <div className="mb-2.5 flex flex-wrap gap-1.5 px-1">
+          {(Object.keys(WIDGET_COLOR_LABEL) as WidgetColorTone[]).map((tone) => <button key={tone} type="button" onClick={() => onColor(tone)} title={WIDGET_COLOR_LABEL[tone]} aria-label={WIDGET_COLOR_LABEL[tone]} className={`flex h-6 w-6 items-center justify-center rounded-full border-2 transition-all ${WIDGET_COLOR_CLASS[tone].bg} ${colorTone === tone ? "border-ink-700 scale-110" : "border-transparent hover:scale-105"}`}><span className={`h-2.5 w-2.5 rounded-full ${WIDGET_COLOR_CLASS[tone].text.replace("text-", "bg-")}`} /></button>)}
+        </div>
+        <div className="my-2 border-t border-border/60" />
+        <button type="button" onClick={() => { onTogglePin(); setOpen(false); }} className="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left text-[11px] font-medium text-ink-700 transition-colors hover:bg-surface-muted/80">
+          <Pin size={12} className={pinned ? "text-brand-600" : "text-ink-400"} /> {pinned ? "Lepas pin" : "Pin (kunci posisi)"}
+        </button>
+        <button type="button" onClick={() => { onReset(); setOpen(false); }} className="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left text-[11px] font-medium text-ink-700 transition-colors hover:bg-surface-muted/80">
+          <RotateCcw size={12} className="text-ink-400" /> Reset tampilan
+        </button>
+        <button type="button" onClick={() => { onToggleHidden(); setOpen(false); }} className="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left text-[11px] font-medium text-rose transition-colors hover:bg-rose-50/80">
+          <EyeOff size={12} /> Sembunyikan
+        </button>
+      </div>}
     </div>}
   </div>;
 }

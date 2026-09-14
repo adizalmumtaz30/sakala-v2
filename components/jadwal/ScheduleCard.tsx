@@ -155,7 +155,11 @@ export default function ScheduleCard({
           event.stopPropagation();
           setMenuOpen((value) => !value);
         }}
-        className="absolute right-1.5 top-1.5 z-20 rounded-lg p-1 text-ink-500 opacity-70 transition hover:bg-white/80 hover:text-ink-900 group-hover:opacity-100"
+        // §B3 (perluasan): trigger titik-tiga jadi benar-benar tersembunyi
+        // sampai kartu di-hover (bukan opacity-70 permanen) -- konsisten
+        // dengan tombol Kustomisasi global. Tetap kelihatan kalau menunya
+        // lagi terbuka, supaya tidak "menghilang" pas mouse bergeser.
+        className={`absolute right-1.5 top-1.5 z-20 rounded-lg p-1 text-ink-500 transition-opacity hover:bg-white/80 hover:text-ink-900 ${menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"}`}
       >
         <MoreVertical size={15} />
       </button>
