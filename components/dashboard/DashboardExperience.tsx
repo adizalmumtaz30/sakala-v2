@@ -504,8 +504,21 @@ function DashboardCustomizeBar({ open, onToggle, fontSize, fontFamily, onFontSiz
   // sekaligus begitu tombol Kustomisasi diklik.
   const [detailOpen, setDetailOpen] = useState(false);
   return <div className="relative">
-    <button type="button" onClick={onToggle} aria-expanded={open} className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[10.5px] font-semibold shadow-sm backdrop-blur-md transition-colors ${open ? "border-brand-600/30 text-brand-700" : "border-border/70 bg-surface/80 text-ink-700 hover:border-brand-600/25"}`} style={open ? { background: "linear-gradient(140deg, color-mix(in srgb, var(--color-brand) 12%, transparent), color-mix(in srgb, var(--color-violet) 12%, transparent))" } : undefined}>
-      <Settings2 size={13} /> {open ? "Selesai kustomisasi" : "Kustomisasi"}
+    {/* §B3: subtle-by-default trigger. Ikon-saja & nyaris tanpa border saat
+        tertutup (tidak "glaring"); label teks baru melebar masuk saat
+        di-hover atau saat panel terbuka -- bukan permanen tampil. */}
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      aria-label={open ? "Selesai kustomisasi tampilan" : "Kustomisasi tampilan dashboard"}
+      className={`group flex items-center gap-0 overflow-hidden rounded-full border px-2 py-2 text-[10.5px] font-semibold shadow-sm backdrop-blur-md transition-all duration-200 hover:gap-1.5 hover:px-3 ${open ? "gap-1.5 border-brand-600/30 px-3 text-brand-700" : "border-transparent text-ink-400 hover:border-brand-600/25 hover:text-brand-700"}`}
+      style={open ? { background: "linear-gradient(140deg, color-mix(in srgb, var(--color-brand) 12%, transparent), color-mix(in srgb, var(--color-violet) 12%, transparent))" } : undefined}
+    >
+      <Settings2 size={13} className="shrink-0" />
+      <span className={`max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-200 group-hover:max-w-[110px] group-hover:opacity-100 ${open ? "max-w-[140px] opacity-100" : ""}`}>
+        {open ? "Selesai kustomisasi" : "Kustomisasi"}
+      </span>
     </button>
     {open && (
       <div
