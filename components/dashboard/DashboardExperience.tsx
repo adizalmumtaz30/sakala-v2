@@ -417,19 +417,25 @@ function NotificationsPanel({ notifications }: { notifications: NotificationEntr
   </div>;
 }
 
-function Widget({ id, title, editing, span, pinned, dragOverId, onDragStart, onDragOver, onDrop, onDragEnd, onResize, menu, children }: {
-  id: DashboardWidgetId; title: string; editing: boolean; span: number; pinned: boolean; dragOverId: DashboardWidgetId | null;
+function Widget({ id, title, editing, span, pinned, dragOverId, draggedId, onDragStart, onDragOver, onDrop, onDragEnd, onResize, menu, children }: {
+  id: DashboardWidgetId; title: string; editing: boolean; span: number; pinned: boolean; dragOverId: DashboardWidgetId | null; draggedId: DashboardWidgetId | null;
   onDragStart: (id: DashboardWidgetId) => void; onDragOver: (id: DashboardWidgetId) => void; onDrop: (id: DashboardWidgetId) => void; onDragEnd: () => void;
   onResize: (id: DashboardWidgetId, dir: 1 | -1) => void; menu: ReactNode; children: ReactNode;
 }) {
   const isDragOver = dragOverId === id;
+  // §C1: sebelumnya cuma target drop yang dapat feedback (ring violet) --
+  // widget yang SEDANG ditarik sendiri tidak berubah sama sekali, jadi
+  // drag terasa "kaku" (tidak ada rasa mengangkat sesuatu). Sekarang widget
+  // sumber mengecil+meredup halus selama drag, memberi kesan fisik ala
+  // drag-and-drop macOS/Linear.
+  const isBeingDragged = draggedId === id;
   const cardRef = useRef<HTMLDivElement>(null);
   return <div
     ref={cardRef}
     style={{ gridColumn: `span ${span} / span ${span}`, ...(editing && isDragOver ? { background: "linear-gradient(160deg, color-mix(in srgb, var(--color-brand) 10%, transparent), color-mix(in srgb, var(--color-violet) 10%, transparent))" } : undefined) }}
     onDragOver={(e) => { if (editing) { e.preventDefault(); onDragOver(id); } }}
     onDrop={(e) => { e.preventDefault(); onDrop(id); }}
-    className={`relative min-w-0 rounded-[18px] transition-all duration-200 ${editing ? `p-1.5 ring-2 ring-dashed backdrop-blur-md ${isDragOver ? "ring-violet/60 shadow-[0_0_0_1px_rgba(255,255,255,.5)_inset]" : "ring-border/60"}` : ""}`}
+    className={`relative min-w-0 rounded-[18px] transition-all duration-200 ${editing ? `p-1.5 ring-2 ring-dashed backdrop-blur-md ${isDragOver ? "ring-violet/60 shadow-[0_0_0_1px_rgba(255,255,255,.5)_inset]" : "ring-border/60"}` : ""} ${isBeingDragged ? "scale-[0.96] opacity-50" : "scale-100 opacity-100"}`}
   >
     {pinned && <span title="Widget dipin — posisi terkunci" className="absolute left-2.5 top-2.5 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-brand-50 text-brand-600"><Pin size={10} /></span>}
     {editing && <div className="mb-1.5 flex items-center justify-between gap-2 rounded-full border border-white/40 px-2.5 py-1 shadow-sm backdrop-blur-md" style={{ background: "linear-gradient(140deg, color-mix(in srgb, var(--color-surface) 75%, transparent), color-mix(in srgb, var(--color-surface) 55%, transparent))" }}>
@@ -656,6 +662,7 @@ export default function DashboardExperience({ schoolName, adminName, context, me
           span={Math.min(prefs.spans[id] ?? 6, 12)}
           pinned={!!prefs.pinned[id]}
           dragOverId={dragOverId}
+          draggedId={draggedId}
           onDragStart={setDraggedId}
           onDragOver={setDragOverId}
           onDrop={(targetId) => { if (draggedId) reorder(draggedId, targetId); setDraggedId(null); setDragOverId(null); }}
