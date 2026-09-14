@@ -41,8 +41,14 @@ const config: Config = {
         rose: { DEFAULT: "var(--color-rose)", 50: "var(--color-rose-50)" },
       },
       borderRadius: {
-        xl2: "18px",
-        card: "16px",
+        // §A2: continuous-curve ("squircle-like") radius scale dipusatkan di
+        // sini -- Card, Modal, dan panel glassmorphism sudah pakai token ini,
+        // jadi menaikkan angkanya di satu tempat otomatis merata ke semua
+        // pemakainya (bukan literal squircle superellipse -- itu butuh
+        // clip-path/CSS corner-shape yang dukungan browsernya belum merata,
+        // jadi didekati lewat radius lebih besar + konsisten).
+        xl2: "22px", // Modal -- disamakan dgn panel kustomisasi/widget (rounded-[22px])
+        card: "20px", // Card dasar (dipakai ~15 tempat), naik dari 16px
         pill: "999px",
       },
       boxShadow: {
