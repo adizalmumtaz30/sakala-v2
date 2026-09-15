@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, GraduationCap, Target, BookOpen, School2, DoorOpen, Split, CalendarDays, BarChart3, History, Bell, Bot, Compass, ChevronLeft, ChevronRight, LifeBuoy, ArrowUpRight } from "lucide-react";
+import { LayoutDashboard, Users, GraduationCap, Target, BookOpen, School2, DoorOpen, Split, CalendarDays, History, Bell, Bot, Compass, ChevronLeft, ChevronRight, LifeBuoy, ArrowUpRight } from "lucide-react";
 
 type NavItem = { label: string; href: string; icon: typeof LayoutDashboard; match?: (path: string) => boolean };
 type NavSection = { section: string; items: NavItem[] };
@@ -44,10 +44,10 @@ const sections: NavSection[] = [
     ],
   },
   {
-    section: "Analitik",
-    items: [{ label: "Analitik", href: "/analitik", icon: BarChart3 }],
-  },
-  {
+    // §B2: menu "Analitik" dihapus dari sidebar utama (brief redesign 2026).
+    // Halaman /analitik SENGAJA tidak dihapus -- masih reachable langsung
+    // via URL dan dari link kontekstual di Dashboard/tempat lain, cuma
+    // tidak lagi dipromosikan sebagai destinasi navigasi utama.
     section: "Sistem",
     items: [
       { label: "Riwayat", href: "/riwayat", icon: History },
