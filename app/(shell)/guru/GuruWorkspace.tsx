@@ -21,6 +21,8 @@ export default function GuruWorkspace({ initialData, initialQuery }: { initialDa
   const searchParams = useSearchParams();
   const [data, setData] = useState<Guru[]>(initialData);
   const [query, setQuery] = useState(initialQuery ?? "");
+  // §E2: state buat auto-hide ikon Search saat input di-focus.
+  const [searchFocused, setSearchFocused] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState<Guru | null>(null);
@@ -117,7 +119,24 @@ export default function GuruWorkspace({ initialData, initialQuery }: { initialDa
         </div>
       )}
 
-      <div className="flex items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-ink-400 sm:max-w-xs"><Search size={16} aria-hidden="true" /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Cari guru..." aria-label="Cari guru" className="flex-1 bg-transparent text-[13px] text-ink-900 outline-none placeholder:text-ink-400" /></div>
+      {/* §E2: ikon Search auto-hide saat input di-focus (brief redesign 2026) --
+          lebar ikon di-animate ke 0 bukan cuma opacity, supaya teks input
+          ikut geser mengisi ruang yang kosong, bukan cuma ikonnya transparan
+          diam di tempat. */}
+      <div className="flex items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-2.5 text-ink-400 transition-colors focus-within:border-brand-600/30 sm:max-w-xs">
+        <span className={`grid shrink-0 place-items-center overflow-hidden transition-all duration-150 ${searchFocused ? "w-0 opacity-0" : "w-4 opacity-100"}`}>
+          <Search size={16} aria-hidden="true" />
+        </span>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onFocus={() => setSearchFocused(true)}
+          onBlur={() => setSearchFocused(false)}
+          placeholder="Cari guru..."
+          aria-label="Cari guru"
+          className="flex-1 bg-transparent text-[13px] text-ink-900 outline-none placeholder:text-ink-400"
+        />
+      </div>
 
       <Card className="p-0">
         {filtered.length === 0 ? <EmptyState title={data.length === 0 ? "Belum ada guru" : "Guru tidak ditemukan"} description={data.length === 0 ? "Tambahkan guru untuk mulai mengatur pembagian mengajar." : "Coba nama guru yang lain."} action={data.length === 0 ? <Button size="sm" onClick={openCreate}><Plus size={14} /> Tambah Guru</Button> : undefined} /> : (
